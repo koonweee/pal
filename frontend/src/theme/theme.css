@@ -1,0 +1,6 @@
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --pal-motion-quick: 0ms;
+    --pal-motion-standard: 0ms;
+  }
+}

@@ -1,0 +1,9 @@
+# iOS UI guidance
+
+These instructions apply to all work under `ios/`. Follow the repository guidelines, the [iOS README](README.md), the [native iOS plan](../plans/native-ios.md), and the [notifications plan](../plans/native-notifications.md).
+
+- Every UI addition or update must follow Apple's current [Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/). Consult the relevant guidance and official SwiftUI/UIKit documentation before choosing components or interaction patterns, accounting for the app's supported iOS versions.
+- Always aim to use native components and platform patterns. Prefer standard SwiftUI controls, navigation, presentations, menus, pickers and system interactions; use supported UIKit components when needed. Compose and configure native components before building custom replacements.
+- When a requested design implies custom controls or interactions, call out the mismatch before implementing it. Explain which native component or pattern could serve the same intent, propose a slight redesign where useful, and describe the concrete trade-offs in usability, accessibility, maintenance and platform compatibility. Recommend the native option when it better meets the user's goal; keep any agreed custom exception explicit.
+- Preserve native behavior and accessibility, including Dynamic Type, VoiceOver, system appearance, Reduce Motion, Reduce Transparency, safe areas, touch targets and keyboard interaction. Avoid visual overrides that undermine standard control behavior or platform conventions.
+- Reuse the app's shared UI components and `PalTheme` where appropriate. Validate changed UI and interactions in representative previews and the simulator, including relevant accessibility settings; distinguish simulator evidence from physical-device validation.

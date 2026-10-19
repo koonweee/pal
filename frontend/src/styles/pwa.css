@@ -1,0 +1,130 @@
+.pwa-safe-area {
+  display: none;
+  position: fixed;
+  inset: 0 0 auto;
+  height: var(--pal-pwa-header-height, env(safe-area-inset-top, 0px));
+  background: var(--pal-app);
+  pointer-events: none;
+  /* Keep the sampled edge above portaled drawers and settings. */
+  z-index: calc(var(--mantine-z-index-modal) + 1);
+}
+
+/* A fixed opaque shell keeps iOS scroll-edge effects off the app header. */
+:root.pal-standalone .shell {
+  position: fixed;
+}
+
+:root.pal-standalone .pwa-safe-area {
+  display: block;
+}
+
+@media (display-mode: standalone) {
+  .shell {
+    position: fixed;
+  }
+
+  .pwa-safe-area {
+    display: block;
+  }
+}
+
+/* WebKit samples inside the top edge and ignores very thin background boxes.
+   Keep a painted surface there even while iOS reports a zero safe-area inset. */
+@media (display-mode: standalone) and (any-pointer: coarse) {
+  :root {
+    --pal-pwa-header-height: max(12px, env(safe-area-inset-top, 0px));
+  }
+}
+
+@media (any-pointer: coarse) {
+  :root.pal-standalone {
+    --pal-pwa-header-height: max(12px, env(safe-area-inset-top, 0px));
+  }
+}
+
+.pal-pwa-lifecycle {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  left: max(12px, env(safe-area-inset-left));
+  z-index: 1200;
+  display: grid;
+  justify-items: center;
+  pointer-events: none;
+}
+.pal-pwa-lifecycle-notice {
+  box-sizing: border-box;
+  width: min(360px, 100%);
+  padding: 8px 10px;
+  border: 1px solid var(--pal-border-essential);
+  color: var(--pal-text);
+  box-shadow: var(--pal-shadow-overlay);
+  pointer-events: auto;
+}
+.pal-pwa-lifecycle-icon {
+  flex: 0 0 auto;
+  color: var(--pal-text-secondary);
+}
+.pal-pwa-lifecycle-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.pal-pwa-lifecycle-info {
+  --pal-icon-action-size: 30px;
+}
+.pal-animated-number {
+  display: inline-grid;
+  overflow: hidden;
+  vertical-align: bottom;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.pal-animated-number > span {
+  grid-area: 1 / 1;
+}
+.pal-animated-number-old {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pal-animated-number-new {
+    animation: pal-count-in 150ms ease-out both;
+  }
+  .pal-animated-number-old {
+    animation: pal-count-out 150ms ease-out both;
+  }
+}
+@keyframes pal-count-in {
+  from {
+    opacity: 0;
+    transform: translateY(45%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes pal-count-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-45%);
+  }
+}
+@media (pointer: coarse), (any-pointer: coarse) {
+  .pal-pwa-lifecycle .mantine-Button-root,
+  .pal-pwa-lifecycle .mantine-ActionIcon-root,
+  .pal-pwa-lifecycle .mantine-CloseButton-root {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+@media (max-width: 48em) {
+  .pal-pwa-lifecycle {
+    top: calc(8px + env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    left: max(8px, env(safe-area-inset-left));
+  }
+}

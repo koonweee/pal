@@ -1,0 +1,103 @@
+.footer {
+  --pal-footer-min-bottom: 16px;
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 1;
+  width: 100%;
+  max-width: var(--pal-conversation-width);
+  margin: 0 auto;
+  padding: 10px var(--pal-conversation-gutter)
+    max(var(--pal-footer-min-bottom), var(--pal-effective-safe-area-bottom));
+  overflow: hidden;
+  overscroll-behavior-y: none;
+}
+.composer-reply {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--pal-action);
+  border-radius: 8px;
+  background: var(--pal-panel);
+  font-size: 12px;
+}
+.composer-reply[hidden] {
+  display: none;
+}
+.composer-reply-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.composer-reply-content span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--pal-text-secondary);
+}
+.composer {
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  background: var(--pal-raised);
+  border: 1px solid var(--pal-border-essential);
+  border-radius: 28px;
+  padding: 0 6px 0 8px;
+  /* Keep a 44px row as the shared icon target size changes. */
+  padding-block: calc((44px - var(--pal-icon-action-size)) / 2);
+  box-shadow: 0 4px 15px var(--pal-shadow-raised);
+}
+.composer:focus-within {
+  border-color: var(--pal-action);
+}
+.composer-input {
+  flex: 1;
+  min-width: 0;
+}
+.composer-textarea {
+  background: none;
+  border: 0;
+  outline: none !important;
+  overscroll-behavior-y: contain;
+  resize: none;
+  line-height: 1.6;
+  font-size: 14px;
+  padding: 4px 0;
+  max-height: 180px;
+  color: var(--pal-text);
+}
+.composer .composer-textarea {
+  min-height: var(--pal-icon-action-size);
+  padding-block: calc((var(--pal-icon-action-size) - 1.6em) / 2);
+}
+.composer-textarea::placeholder {
+  color: var(--pal-text-muted);
+}
+.send-error {
+  margin-bottom: 12px;
+}
+.send-error .mantine-Alert-message {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.send {
+  display: grid;
+  place-items: center;
+  padding: calc((var(--pal-icon-action-size) - 32px) / 2);
+  background: var(--pal-action);
+  background-clip: content-box;
+  color: var(--pal-action-foreground);
+  border: 0;
+  border-radius: 50%;
+}
+@media (hover: hover) {
+  .send:hover:enabled {
+    background: var(--pal-action-hover);
+    background-clip: content-box;
+  }
+}

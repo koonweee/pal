@@ -1,0 +1,3 @@
+ALTER TABLE "messages" ADD COLUMN "notification_channels" jsonb DEFAULT '[]'::jsonb NOT NULL;--> statement-breakpoint
+UPDATE "messages" SET "notification_channels" = CASE WHEN "notify" THEN "delivery_channels" ELSE '[]'::jsonb END, "notify" = "notify" AND "delivery_channels" <> '[]'::jsonb;--> statement-breakpoint
+ALTER TABLE "messages" ADD CONSTRAINT "message_notification_channels" CHECK (jsonb_typeof("messages"."notification_channels") = 'array' and "messages"."notification_channels" <@ "messages"."delivery_channels" and "messages"."notify" = ("messages"."notification_channels" <> '[]'::jsonb));

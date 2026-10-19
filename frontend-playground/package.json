@@ -1,0 +1,28 @@
+{
+  "name": "pal-frontend-playground",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "check": "tsc --noEmit",
+    "build": "npm run check && vite build",
+    "preview": "vite preview",
+    "test": "playwright test",
+    "format": "prettier --write src/ test/ *.ts index.html"
+  },
+  "dependencies": {
+    "dompurify": "3.4.16",
+    "marked": "18.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "^24.0.0",
+    "prettier": "3.4.2",
+    "typescript": "6.0.2",
+    "vite": "8.3.2"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

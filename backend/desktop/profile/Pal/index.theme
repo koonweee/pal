@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=Pal
+Comment=Warm coral desktop
+[X-GNOME-Metatheme]
+GtkTheme=Pal
+MetacityTheme=Pal
+IconTheme=Papirus

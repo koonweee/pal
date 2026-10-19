@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/knip/schema.json",
+  "entry": [
+    "src/main.tsx!",
+    "src/pwa/sw.ts!",
+    "test-unit/**/*.{test,spec}.{ts,tsx}",
+    "test/**/*.ts",
+    "test-pwa/**/*.ts",
+    "playwright.config.ts",
+    "playwright.pwa.config.ts",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "scripts/**/*.mjs"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}!",
+    "test-unit/**/*.{ts,tsx}",
+    "test/**/*.ts",
+    "test-pwa/**/*.ts",
+    "scripts/**/*.mjs"
+  ],
+  "ignoreIssues": {
+    "src/api/generated.ts": ["exports", "types"]
+  }
+}

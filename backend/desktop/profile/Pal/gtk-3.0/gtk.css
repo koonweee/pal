@@ -1,0 +1,37 @@
+@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained.css");
+@define-color theme_selected_bg_color #ef806c;
+@define-color theme_selected_fg_color #ffffff;
+@define-color selected_bg_color #ef806c;
+@define-color selected_fg_color #ffffff;
+@define-color theme_bg_color #faf7f4;
+@define-color theme_fg_color #343b3e;
+@define-color theme_base_color #ffffff;
+@define-color theme_text_color #343b3e;
+@define-color theme_unfocused_selected_bg_color #e5a091;
+@define-color theme_unfocused_selected_fg_color #ffffff;
+headerbar, .titlebar { background-image: none; background-color: #ff987f; color: #343b3e; }
+headerbar:backdrop, .titlebar:backdrop { background-color: #f3b29f; }
+.titlebar button { background-image: none; background-color: transparent; box-shadow: none; }
+.view:selected, row:selected, selection { background-color: #ef806c; color: white; }
+/* Chromium's GTK integration samples these style classes. */
+window.background.chromium { background-color: #ff987f; }
+window.background.chromium:backdrop { background-color: #f3b29f; }
+window.background.chromium .toolbar { background-color: #ffddd2; }
+.xfce4-panel.background { background-image: none; background-color: rgba(255, 229, 215, 0.22); border: 1px solid rgba(255,255,255,0.48); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.35); border-radius: 14px; }
+.xfce4-panel button { background-image: none; background-color: transparent; border: none; box-shadow: none; border-radius: 10px; padding: 3px; margin: 2px; }
+.xfce4-panel button:hover { background-color: rgba(255,255,255,0.24); }
+
+/* Chromium paints GTK decoration assets around its restored custom frame.
+   Picom owns the outer shadow and corner clipping. */
+window.background.chromium decoration {
+  background-color: transparent;
+  background-image: none;
+  border: 1px solid #ed8c76;
+  box-shadow: none;
+  margin: 0;
+  padding: 0;
+}
+window.background.chromium headerbar {
+  border: none;
+  box-shadow: none;
+}

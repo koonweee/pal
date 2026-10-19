@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Pal" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <script>
+      if (
+        matchMedia('(display-mode: standalone)').matches ||
+        navigator.standalone === true
+      )
+        document.documentElement.classList.add('pal-standalone');
+      try {
+        const theme = localStorage.getItem('pal-theme');
+        if (theme === 'light' || theme === 'dark')
+          document.documentElement.style.colorScheme = theme;
+      } catch {}
+      const scheme = document.documentElement.style.colorScheme;
+      const dark =
+        scheme === 'dark' ||
+        (!scheme && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.querySelector('meta[name="theme-color"]').content = dark
+        ? '#000000'
+        : '#ffffff';
+    </script>
+    <title>Pal</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

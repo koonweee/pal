@@ -1,0 +1,301 @@
+/* Preferences owns layout; Mantine owns control chrome and interaction states. */
+.preferences-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: min(85dvh, calc(var(--pal-viewport-height, 100dvh) - 32px));
+  overflow: hidden;
+}
+.preferences-dialog-inner {
+  top: var(--pal-viewport-top, 0px);
+  bottom: auto;
+  height: var(--pal-viewport-height, 100dvh);
+}
+.preferences-dialog-header {
+  flex: none;
+  padding: 18px 20px 14px;
+}
+.preferences-dialog-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+.preferences-dialog-body {
+  display: flex;
+  min-height: 0;
+  padding: 0;
+}
+.preferences-dialog-scroll {
+  --border: var(--pal-border-essential);
+  width: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 20px 20px;
+  color: var(--pal-text);
+  touch-action: pan-y;
+}
+.preferences-dialog .mantine-Tabs-list {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  flex-wrap: nowrap;
+  background: var(--pal-raised);
+}
+.preferences-dialog .mantine-Tabs-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: center;
+  padding-inline: 6px;
+}
+.preferences-dialog .mantine-Tabs-panel {
+  padding-top: 20px;
+}
+.theme-preferences,
+.pwa-preferences {
+  display: grid;
+  gap: 16px;
+}
+.theme-preferences h3,
+.pwa-preferences h3,
+.preferences-dialog-scroll h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.pwa-preferences small,
+.preferences-dialog-scroll small {
+  display: block;
+  color: var(--pal-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.preferences-dialog-scroll p {
+  margin-block: 5px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+#preferences-result,
+#mcp-result {
+  margin: 0 0 12px;
+}
+.preferences-toolbar {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto auto auto auto;
+  gap: 8px;
+  align-items: end;
+}
+#preferences-list {
+  display: grid;
+  gap: 10px;
+  margin-block: 18px 12px;
+}
+.preference-card,
+.preference-source {
+  display: grid;
+  width: 100%;
+  gap: 5px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--pal-radius-control);
+  background: var(--pal-raised);
+  color: var(--pal-text);
+  text-align: left;
+}
+@media (hover: hover) {
+  .preference-card:hover,
+  .preference-source:hover {
+    background: var(--pal-panel);
+  }
+}
+.preference-card strong {
+  line-height: 1.4;
+}
+.preferences-topic {
+  color: var(--pal-action);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.preferences-empty,
+.preferences-meta {
+  color: var(--pal-text-secondary);
+}
+.preferences-detail-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+#preference-form,
+#mcp-form,
+#mcp-form fieldset {
+  display: grid;
+  gap: 16px;
+}
+#mcp-form fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+#preference-statement {
+  margin-top: 7px;
+  font-size: 20px;
+  line-height: 1.35;
+}
+#preference-sources,
+#preference-history {
+  display: grid;
+  gap: 8px;
+}
+.preference-source span {
+  line-height: 1.4;
+}
+.preference-revision {
+  display: grid;
+  gap: 6px;
+  padding-block: 12px;
+  border-top: 1px solid var(--border);
+}
+.preference-revision > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.preference-revision p {
+  margin: 0;
+}
+.preference-revision > button {
+  justify-self: start;
+  margin-top: 4px;
+}
+#preference-conflict .mantine-Alert-message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.settings-form-actions {
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.mcp-toolbar,
+.mcp-apply-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+  color: var(--pal-text-secondary);
+  font-size: 12px;
+}
+.mcp-apply-bar {
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.mcp-server {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.mcp-server > div:first-child {
+  min-width: 0;
+}
+.mcp-server > .settings-actions {
+  flex-shrink: 0;
+  align-items: flex-start;
+}
+.mcp-server .mcp-url {
+  overflow-wrap: anywhere;
+  color: var(--pal-text-secondary);
+  font-size: 12px;
+}
+.mcp-server .mcp-server-status {
+  margin-top: 10px;
+  font-weight: 500;
+}
+.mcp-server-status[data-connected='true'] {
+  color: var(--pal-success-foreground);
+}
+.mcp-header-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+#mcp-add-header {
+  justify-self: start;
+}
+#mcp-signin-link {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--pal-action);
+}
+
+@media (max-width: 700px) {
+  .preferences-toolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .preferences-query {
+    grid-column: 1 / -1;
+  }
+  .preferences-detail-heading,
+  .preference-revision > div,
+  #preference-conflict .mantine-Alert-message {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 600px) {
+  .pwa-safe-area[data-preferences-open] {
+    background: var(--mantine-color-body);
+  }
+  .preferences-dialog-inner {
+    padding: 0;
+  }
+  .preferences-dialog {
+    width: 100vw;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+  .preferences-dialog-header {
+    padding-top: calc(18px + env(safe-area-inset-top, 0px));
+  }
+  .preferences-dialog-body {
+    flex: 1;
+  }
+  .preferences-dialog-scroll {
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-bottom: max(20px, var(--pal-effective-safe-area-bottom));
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+  }
+  .preferences-dialog .mantine-Tabs-tab {
+    padding-inline: 3px;
+    font-size: 13px;
+  }
+  .mcp-toolbar,
+  .mcp-apply-bar {
+    flex-wrap: wrap;
+  }
+  .mcp-server {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .mcp-header-row {
+    grid-template-columns: 1fr;
+  }
+  .mcp-header-row > button {
+    justify-self: start;
+  }
+  .settings-form-actions > button {
+    flex: 1;
+  }
+}

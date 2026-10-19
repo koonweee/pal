@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>PalAPNSEnvironment</key><string>$(PAL_APNS_REGISTRATION_ENVIRONMENT)</string><key>PalDefaultServerURL</key><string>$(PAL_DEFAULT_SERVER_URL)</string><key>UIBackgroundModes</key><array><string>remote-notification</string></array></dict></plist>

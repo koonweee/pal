@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="stylesheet" href="/src/style.css" />
+    <script>
+      try {
+        const theme = localStorage.getItem('pal-theme');
+        if (theme === 'light' || theme === 'dark') {
+          document.documentElement.style.colorScheme = theme;
+        }
+      } catch {}
+      const scheme = document.documentElement.style.colorScheme;
+      const dark =
+        scheme === 'dark' ||
+        (!scheme && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.querySelector('meta[name="theme-color"]').content = dark
+        ? '#000000'
+        : '#ffffff';
+    </script>
+    <title>Pal · Playground</title>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="header">
+        <div class="brand">
+          <div><strong>pal</strong><span class="eyebrow">playground</span></div>
+        </div>
+        <div class="header-status">
+          <button
+            id="preferences-open"
+            class="header-icon-button"
+            type="button"
+            aria-label="Preferences"
+            title="Preferences"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path
+                d="M12 3a4 4 0 0 0-4 4v1a3 3 0 0 0-3 3v2a3 3 0 0 0 3 3v1a4 4 0 0 0 8 0v-1a3 3 0 0 0 3-3v-2a3 3 0 0 0-3-3V7a4 4 0 0 0-4-4Z"
+              />
+              <path d="M8 8h8M8 16h8M12 3v18" />
+            </svg>
+          </button>
+          <button
+            id="mcp-open"
+            class="header-icon-button"
+            type="button"
+            aria-label="MCP settings"
+            title="MCP settings"
+          >
+            <!--
+              Lucide settings icon — ISC License
+              Copyright (c) 2026 Lucide Icons and Contributors
+              Permission to use, copy, modify, and/or distribute this software for any
+              purpose with or without fee is hereby granted, provided that the above
+              copyright notice and this permission notice appear in all copies.
+              THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+              WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+              MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+              ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+              WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+              ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+              OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+            -->
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path
+                d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"
+              />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          </button>
+          <span id="connection" class="connection" role="status"
+            >Connecting…</span
+          >
+          <button
+            id="theme-toggle"
+            class="header-icon-button"
+            type="button"
+            aria-label="Theme: auto. Switch to light"
+            title="Theme: auto. Switch to light"
+          ></button>
+        </div>
+      </header>
+      <button
+        id="thread-open"
+        class="thread-open"
+        type="button"
+        aria-label="Select thread: Main"
+        aria-haspopup="dialog"
+        aria-controls="thread-sidebar"
+        aria-expanded="false"
+      >
+        <span id="selected-thread">Main</span>
+        <svg
+          viewBox="0 0 24 24"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          aria-hidden="true"
+        >
+          <path d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+      <div class="workspace">
+        <div id="thread-nav-slot" class="thread-nav-slot">
+          <nav id="thread-nav" class="task-nav" aria-label="Chats">
+            <button
+              id="main-chat"
+              class="task-link"
+              type="button"
+              aria-current="true"
+            >
+              Main
+            </button>
+            <div class="task-nav-heading">
+              <h2>Tasks</h2>
+              <label
+                ><input id="archived-tasks" type="checkbox" /> Archived</label
+              >
+            </div>
+            <div id="tasks-error" class="notice" role="alert" hidden></div>
+            <div id="task-list"></div>
+            <p id="task-list-empty">No tasks yet.</p>
+            <button id="more-tasks" class="text-button" type="button" hidden>
+              Load more tasks
+            </button>
+          </nav>
+        </div>
+        <div class="chat-pane">
+          <main class="conversation">
+            <div class="conversation-heading">
+              <div>
+                <h1 id="chat-title">Main</h1>
+                <p id="chat-description">Your conversation with Pal.</p>
+                <div class="task-controls">
+                  <span id="task-status" hidden></span>
+                  <button
+                    id="archive-task"
+                    class="text-button"
+                    type="button"
+                    hidden
+                  >
+                    Archive
+                  </button>
+                </div>
+              </div>
+              <span id="activity" class="activity" role="status"
+                >Waiting for connection</span
+              >
+            </div>
+            <p id="task-description" hidden></p>
+            <div id="history-error" class="notice" role="alert" hidden></div>
+            <div id="history" class="history" aria-label="Conversation">
+              <div class="history-top">
+                <button id="older" class="text-button" type="button" hidden>
+                  Load older messages
+                </button>
+              </div>
+              <div id="messages"></div>
+              <div id="empty" class="empty">
+                <span class="empty-mark" aria-hidden="true">p</span>
+                <h2>A little space to think.</h2>
+                <p id="empty-detail">Connecting to your conversation…</p>
+              </div>
+            </div>
+            <button id="latest" class="latest" type="button" hidden>
+              Jump to latest ↓
+            </button>
+          </main>
+          <footer class="footer">
+            <div id="send-error" class="notice" role="alert" hidden>
+              <span id="send-error-text"></span
+              ><button id="restore" class="text-button" type="button" hidden>
+                Restore message</button
+              ><button
+                id="dismiss"
+                class="text-button"
+                type="button"
+                aria-label="Dismiss send error"
+              >
+                Dismiss
+              </button>
+            </div>
+            <div id="composer-reply" class="composer-reply" hidden>
+              <div class="composer-reply-content">
+                <strong id="composer-reply-role"></strong>
+                <span id="composer-reply-text"></span>
+              </div>
+              <button
+                id="cancel-reply"
+                type="button"
+                aria-label="Cancel reply"
+                title="Cancel reply"
+              >
+                ×
+              </button>
+            </div>
+            <div id="pending-files" class="pending-files" hidden></div>
+            <div class="composer-row">
+              <button
+                id="desktop-open"
+                class="desktop-toggle"
+                type="button"
+                aria-label="Open desktop"
+                title="Open desktop"
+                aria-haspopup="dialog"
+                aria-controls="desktop-sheet"
+                aria-expanded="false"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="20"
+                  height="20"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  aria-hidden="true"
+                >
+                  <rect x="3" y="4" width="18" height="12" rx="2" />
+                  <path d="M12 16v4M8 20h8" />
+                </svg>
+              </button>
+              <form id="composer" class="composer">
+                <input id="file-input" type="file" multiple hidden />
+                <button
+                  id="attach-files"
+                  class="attach-files"
+                  type="button"
+                  aria-label="Attach files"
+                  title="Attach files"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="20"
+                    height="20"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.41 17.4a2 2 0 0 1-2.83-2.83l8.48-8.48"
+                    />
+                  </svg>
+                </button>
+                <label class="sr-only" for="draft">Message Pal</label>
+                <textarea
+                  id="draft"
+                  rows="1"
+                  maxlength="100000"
+                  placeholder="Message Pal…"
+                ></textarea>
+                <button
+                  id="send"
+                  class="send"
+                  type="submit"
+                  disabled
+                  aria-label="Send message"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="20"
+                    height="20"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m5 12 7-7 7 7M12 5v14" />
+                  </svg>
+                </button>
+              </form>
+            </div>
+            <div class="composer-meta">
+              <span id="composer-status" role="status">Connecting…</span
+              ><span>Enter to send · Shift+Enter for a new line</span>
+            </div>
+          </footer>
+        </div>
+      </div>
+    </div>
+    <dialog
+      id="thread-sidebar"
+      class="thread-sidebar"
+      aria-labelledby="thread-sidebar-title"
+    >
+      <div class="thread-sidebar-heading">
+        <h2 id="thread-sidebar-title">Conversations</h2>
+        <button
+          id="thread-close"
+          class="thread-close"
+          type="button"
+          aria-label="Close thread sidebar"
+        >
+          ×
+        </button>
+      </div>
+      <div id="mobile-thread-nav"></div>
+    </dialog>
+    <dialog
+      id="preferences-dialog"
+      class="settings-dialog preferences-dialog"
+      aria-labelledby="preferences-title"
+    >
+      <div class="thread-sidebar-heading">
+        <h2 id="preferences-title">Preferences</h2>
+        <button
+          id="preferences-close"
+          class="thread-close"
+          type="button"
+          aria-label="Close preferences"
+        >
+          ×
+        </button>
+      </div>
+      <p id="preferences-result" role="status"></p>
+      <section id="preferences-overview">
+        <form id="preferences-search" class="preferences-toolbar">
+          <label class="sr-only" for="preferences-query"
+            >Search preferences</label
+          >
+          <input
+            id="preferences-query"
+            name="query"
+            type="search"
+            maxlength="200"
+            placeholder="Search preferences"
+          />
+          <label class="sr-only" for="preferences-status">Status</label>
+          <select id="preferences-status" name="status">
+            <option value="active">Active</option>
+            <option value="retired">Retired</option>
+          </select>
+          <button type="submit">Search</button>
+          <button id="preferences-refresh" type="button">Refresh</button>
+          <button id="preferences-new" class="settings-primary" type="button">
+            Add preference
+          </button>
+        </form>
+        <div id="preferences-list"></div>
+        <p id="preferences-empty" class="preferences-empty" hidden>
+          No matching preferences.
+        </p>
+        <button id="preferences-more" type="button" hidden>Load more</button>
+      </section>
+      <form id="preference-form" hidden>
+        <h3 id="preference-form-title">Add preference</h3>
+        <label
+          >Topic<input
+            name="topic"
+            required
+            maxlength="80"
+            placeholder="travel.flights"
+        /></label>
+        <label
+          >Preference<textarea
+            name="statement"
+            required
+            maxlength="1000"
+            rows="3"
+          ></textarea>
+        </label>
+        <label
+          >Applies when<textarea
+            name="appliesWhen"
+            maxlength="1000"
+            rows="2"
+            placeholder="Optional scope or exception"
+          ></textarea>
+        </label>
+        <label
+          >Reason for change<input
+            name="reason"
+            required
+            maxlength="500"
+            placeholder="Corrected by the user"
+        /></label>
+        <div id="preference-conflict" class="notice" hidden>
+          <span id="preference-conflict-text"></span>
+          <button id="preference-conflict-retry" type="button">
+            Use current version
+          </button>
+        </div>
+        <div class="settings-actions settings-form-actions">
+          <button id="preference-form-cancel" type="button">Cancel</button>
+          <button class="settings-primary" type="submit">
+            Save preference
+          </button>
+        </div>
+      </form>
+      <section id="preference-detail" hidden>
+        <div class="preferences-detail-heading">
+          <button id="preference-back" type="button">Back</button>
+          <div class="settings-actions">
+            <button id="preference-edit" type="button">Edit</button>
+            <button id="preference-status-action" type="button"></button>
+          </div>
+        </div>
+        <p id="preference-topic" class="preferences-topic"></p>
+        <h3 id="preference-statement"></h3>
+        <p id="preference-applies"></p>
+        <p id="preference-meta" class="preferences-meta"></p>
+        <h3>Evidence</h3>
+        <div id="preference-sources"></div>
+        <h3>Revision history</h3>
+        <div id="preference-history"></div>
+        <button id="preference-history-more" type="button" hidden>
+          Load older revisions
+        </button>
+      </section>
+    </dialog>
+    <dialog
+      id="mcp-settings"
+      class="settings-dialog mcp-settings"
+      aria-labelledby="mcp-title"
+    >
+      <div class="thread-sidebar-heading">
+        <h2 id="mcp-title">Connected services</h2>
+        <button
+          id="mcp-close"
+          class="thread-close"
+          type="button"
+          aria-label="Close MCP settings"
+        >
+          ×
+        </button>
+      </div>
+      <p id="mcp-result" role="status"></p>
+      <section id="mcp-overview">
+        <div class="mcp-toolbar">
+          <span id="mcp-changes">Loading…</span>
+          <div class="settings-actions">
+            <button id="mcp-refresh" type="button">Refresh</button>
+            <button id="mcp-new" type="button">Add server</button>
+          </div>
+        </div>
+        <div id="mcp-servers"></div>
+        <div id="mcp-apply-bar" class="mcp-apply-bar" hidden>
+          <span>Apply refreshes all connections when Pal is idle.</span>
+          <button id="mcp-apply" class="settings-primary" type="button">
+            Apply changes
+          </button>
+        </div>
+      </section>
+      <form id="mcp-form" hidden>
+        <h3 id="mcp-form-title">Add server</h3>
+        <label
+          >Name<input
+            name="name"
+            required
+            pattern="[a-z][a-z0-9_]{0,47}"
+            maxlength="48"
+            placeholder="research"
+        /></label>
+        <label
+          >Server URL<input
+            name="url"
+            type="url"
+            required
+            placeholder="https://example.com/mcp"
+        /></label>
+        <label class="mcp-check"
+          ><input name="enabled" type="checkbox" checked />Enabled</label
+        >
+        <label
+          >Authentication<select name="authType" aria-label="Authentication">
+            <option value="none">No authentication</option>
+            <option value="oauth">OAuth</option>
+            <option value="bearer">Bearer token</option>
+            <option value="headers">Custom headers</option>
+          </select></label
+        >
+        <fieldset id="mcp-oauth" hidden>
+          <label
+            >Client identity<select name="oauthIdentity">
+              <option value="id">Client ID</option>
+              <option value="metadata">Client metadata URL</option>
+            </select></label
+          >
+          <label id="mcp-client-id"
+            >Client ID<input name="clientId" autocomplete="off"
+          /></label>
+          <label id="mcp-client-metadata" hidden
+            >Client metadata URL<input
+              name="clientMetadataUrl"
+              type="url"
+              autocomplete="off"
+          /></label>
+          <label
+            >Client secret<input
+              name="clientSecret"
+              type="password"
+              autocomplete="new-password"
+              placeholder="Optional"
+          /></label>
+          <label id="mcp-clear-secret" class="mcp-check" hidden>
+            <input name="clearSecret" type="checkbox" />Remove saved client
+            secret
+          </label>
+          <label
+            >Scopes<input
+              name="scope"
+              placeholder="service:read service:write offline_access"
+          /></label>
+          <small
+            >Register your Pal API’s /mcp/oauth/callback URL with the
+            provider.</small
+          >
+        </fieldset>
+        <fieldset id="mcp-bearer" hidden>
+          <label
+            >Bearer token<input
+              name="bearer"
+              type="password"
+              autocomplete="new-password"
+          /></label>
+        </fieldset>
+        <fieldset id="mcp-headers" hidden>
+          <div id="mcp-header-rows"></div>
+          <button id="mcp-add-header" type="button">Add header</button>
+          <small id="mcp-header-help"
+            >Header values are stored privately.</small
+          >
+        </fieldset>
+        <div class="settings-actions settings-form-actions">
+          <button id="mcp-cancel" type="button">Cancel</button>
+          <button class="settings-primary" type="submit">Save server</button>
+        </div>
+      </form>
+      <section id="mcp-signin" hidden>
+        <h3 id="mcp-signin-title">Sign in</h3>
+        <p>
+          Finish signing in in the new tab. This window updates automatically.
+        </p>
+        <a id="mcp-signin-link" target="_blank" rel="noopener noreferrer"
+          >Open sign-in page</a
+        >
+        <div class="settings-actions settings-form-actions">
+          <button id="mcp-signin-back" type="button">Back to services</button>
+        </div>
+      </section>
+      <section id="mcp-confirm" hidden>
+        <h3 id="mcp-confirm-title"></h3>
+        <p id="mcp-confirm-description"></p>
+        <div class="settings-actions settings-form-actions">
+          <button id="mcp-confirm-cancel" type="button">Cancel</button>
+          <button
+            id="mcp-confirm-submit"
+            class="settings-danger"
+            type="button"
+          ></button>
+        </div>
+      </section>
+    </dialog>
+    <button
+      id="desktop-backdrop"
+      class="desktop-backdrop"
+      type="button"
+      aria-label="Close desktop"
+      tabindex="-1"
+      hidden
+    ></button>
+    <section
+      id="desktop-sheet"
+      class="desktop-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="desktop-title"
+      aria-hidden="true"
+      data-open="false"
+      inert
+    >
+      <div class="desktop-heading">
+        <h2 id="desktop-title">Desktop</h2>
+        <div class="desktop-actions">
+          <button
+            id="desktop-retry"
+            class="text-button"
+            type="button"
+            aria-label="Reconnect desktop"
+            hidden
+          >
+            Reconnect
+          </button>
+          <button
+            id="desktop-paste"
+            class="desktop-toggle"
+            type="button"
+            aria-label="Paste clipboard into desktop"
+            title="Paste clipboard into desktop"
+            disabled
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              aria-hidden="true"
+            >
+              <path
+                d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3"
+              />
+              <rect x="9" y="3" width="6" height="4" rx="1" />
+              <path d="M8 12h8m-8 4h5" />
+            </svg>
+          </button>
+          <button
+            id="desktop-keyboard"
+            class="desktop-toggle"
+            type="button"
+            aria-label="Toggle desktop keyboard"
+            title="Show keyboard"
+            aria-pressed="false"
+            disabled
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              aria-hidden="true"
+            >
+              <rect x="2" y="5" width="20" height="14" rx="2" />
+              <path
+                d="M6 9h2m2 0h2m2 0h2m2 0h1M6 12h2m2 0h2m2 0h2m2 0h1M7 16h10"
+              />
+            </svg>
+          </button>
+          <button
+            id="desktop-fullscreen"
+            class="desktop-toggle"
+            type="button"
+            aria-label="Enter desktop fullscreen"
+            title="Enter fullscreen"
+            aria-pressed="false"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              aria-hidden="true"
+            >
+              <path
+                class="fullscreen-enter"
+                d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"
+              />
+              <path
+                class="fullscreen-exit"
+                d="M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5"
+              />
+            </svg>
+          </button>
+          <button
+            id="desktop-close"
+            class="desktop-toggle"
+            type="button"
+            aria-label="Close desktop"
+            title="Close desktop"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              aria-hidden="true"
+            >
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <p id="desktop-status" role="status">Connecting to desktop…</p>
+      <iframe
+        id="desktop-viewer"
+        title="PAL desktop"
+        allow="clipboard-read; clipboard-write"
+        hidden
+      ></iframe>
+    </section>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

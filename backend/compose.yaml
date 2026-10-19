@@ -1,0 +1,54 @@
+name: pal-rewrite
+services:
+  pal:
+    build:
+      context: .
+      target: runtime
+    image: pal-local
+    hostname: pal
+    env_file: ${PAL_ENV_FILE:-.env}
+    environment:
+      DATABASE_URL: postgresql://pal:pal@postgres:5432/pal
+      HOST: 0.0.0.0
+      PORT: 3000
+      PAL_UPLOAD_DIR: /data/uploads
+      PAL_AGENT_AUTH_PATH: /data/agent/auth.json
+      PAL_AGENT_WORKING_DIR: /data/workspace
+      PAL_DESKTOP_ENABLED: "true"
+      PAL_RELEASE_ID: ${PAL_RELEASE_ID:-development}
+    ports:
+      - "127.0.0.1:${PORT:-3000}:3000"
+      - "127.0.0.1:${PAL_DESKTOP_PORT:-6080}:6080"
+    volumes:
+      - pal_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    security_opt:
+      - seccomp:./desktop/seccomp.json
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: pal
+      POSTGRES_PASSWORD: pal
+      POSTGRES_DB: pal
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pal -d pal"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+volumes:
+  pal_data:
+  postgres_data:

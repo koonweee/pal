@@ -1,0 +1,102 @@
+.shell {
+  --pal-conversation-width: 900px;
+  --pal-conversation-gutter: clamp(8px, 2.5vw, 24px);
+  --pal-safe-area-top: var(
+    --pal-pwa-header-height,
+    env(safe-area-inset-top, 0px)
+  );
+  --pal-header-overlay-height: 78px;
+  position: relative;
+  top: var(--pal-viewport-top, 0px);
+  height: var(--pal-viewport-height, 100dvh);
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--pal-app);
+}
+.header {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  flex-shrink: 0;
+  min-height: 78px;
+  padding: max(8px, var(--pal-safe-area-top))
+    max(12px, env(safe-area-inset-right)) 8px
+    max(12px, env(safe-area-inset-left));
+  pointer-events: none;
+}
+.header > :is(.pal-icon-action, .agent-info) {
+  pointer-events: auto;
+}
+.header > :first-child {
+  justify-self: start;
+}
+.header > .agent-info {
+  padding-inline-start: 8px;
+}
+.header > :last-child {
+  justify-self: end;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: auto;
+}
+.agent-info {
+  --pal-agent-avatar-size: 36px;
+  display: flex;
+  align-items: center;
+  /* Keep the speech tail clear of the avatar hit target. */
+  gap: calc(
+    10px - (var(--pal-icon-action-size) - var(--pal-agent-avatar-size)) / 2
+  );
+  min-width: 0;
+  max-width: 100%;
+}
+.agent-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--pal-text);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.agent-avatar {
+  display: block;
+  flex: none;
+  width: var(--pal-agent-avatar-size);
+  height: var(--pal-agent-avatar-size);
+  border: calc(var(--pal-agent-avatar-size) * 0.32) solid var(--pal-action);
+  border-radius: 50%;
+}
+.agent-avatar[data-image] {
+  border: 0;
+  border-radius: 0;
+}
+.instance-profile-preview {
+  gap: 10px;
+}
+.agent-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.pal-overlay-backdrop {
+  background: var(--pal-overlay);
+  -webkit-backdrop-filter: blur(1px);
+  backdrop-filter: blur(1px);
+}
+.panel-surface {
+  background: var(--pal-raised);
+  border-color: var(--pal-border-essential);
+  box-shadow: var(--pal-shadow-overlay);
+}

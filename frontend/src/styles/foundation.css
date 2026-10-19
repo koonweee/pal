@@ -1,0 +1,102 @@
+:root {
+  --pal-icon-action-size: 36px;
+  --pal-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --pal-effective-safe-area-bottom: var(--pal-safe-area-bottom);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: var(--pal-text);
+  background: var(--pal-app);
+  font-synthesis: none;
+  color-scheme: light dark;
+}
+:root[data-keyboard-open] {
+  --pal-effective-safe-area-bottom: 0px;
+}
+html,
+body,
+#root {
+  height: 100%;
+  overscroll-behavior: none;
+}
+* {
+  box-sizing: border-box;
+}
+::selection {
+  background: var(--pal-selection);
+  color: var(--pal-selection-foreground);
+}
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--pal-app);
+}
+a:focus-visible {
+  outline: 2px solid var(--pal-focus);
+  outline-offset: 4px;
+}
+.pal-icon-action {
+  -webkit-tap-highlight-color: transparent;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--pal-icon-action-size);
+  min-width: var(--pal-icon-action-size);
+  height: var(--pal-icon-action-size);
+  min-height: var(--pal-icon-action-size);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--pal-text-secondary);
+}
+.pal-raised-glass,
+.pal-raised-backdrop {
+  -webkit-backdrop-filter: var(--pal-effect-raised-backdrop);
+  backdrop-filter: var(--pal-effect-raised-backdrop);
+}
+.pal-raised-glass {
+  background: var(--pal-raised);
+}
+.mantine-active:active {
+  transform: none;
+}
+@media (hover: hover) {
+  .pal-icon-action:hover:enabled {
+    background: var(--pal-panel);
+    color: var(--pal-action);
+  }
+}
+[hidden] {
+  display: none !important;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .pal-raised-glass.pal-raised-glass {
+    background: var(--pal-panel);
+  }
+  .pal-raised-glass.pal-raised-glass,
+  .pal-raised-backdrop.pal-raised-backdrop {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

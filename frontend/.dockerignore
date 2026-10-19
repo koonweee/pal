@@ -1,0 +1,9 @@
+node_modules
+dist
+test
+test-pwa
+test-unit
+test-results
+playwright-report
+.env
+.env.*

@@ -1,0 +1,2750 @@
+{
+  "components": {
+    "schemas": {
+      "ActivityCommentaryResponseDto": {
+        "properties": {
+          "messageId": {
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1,
+            "type": "number"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "messageId",
+          "sequence",
+          "text"
+        ],
+        "type": "object"
+      },
+      "ActivityCompletionResponseDto": {
+        "properties": {
+          "cueId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "cueId",
+          "occurredAt"
+        ],
+        "type": "object"
+      },
+      "ActivityTaskResponseDto": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "type": "object"
+      },
+      "AgentActivityEventResponseDto": {
+        "properties": {
+          "event": {
+            "enum": [
+              "agent.activity"
+            ],
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AgentActivityResponseDto"
+          }
+        },
+        "required": [
+          "event",
+          "state"
+        ],
+        "type": "object"
+      },
+      "AgentActivityResponseDto": {
+        "properties": {
+          "latestCompletion": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ActivityCompletionResponseDto"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          },
+          "mainWorking": {
+            "type": "boolean"
+          },
+          "needsInputTasks": {
+            "items": {
+              "$ref": "#/components/schemas/ActivityTaskResponseDto"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "runningTasks": {
+            "items": {
+              "$ref": "#/components/schemas/RunningTaskResponseDto"
+            },
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "idle",
+              "working"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "mainWorking",
+          "runningTasks",
+          "needsInputTasks",
+          "latestCompletion",
+          "status"
+        ],
+        "type": "object"
+      },
+      "ApplicationErrorResponseDto": {
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/PreferenceResponseDto"
+          },
+          "message": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "statusCode": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "statusCode",
+          "message"
+        ],
+        "type": "object"
+      },
+      "ArchiveTaskDto": {
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "archived"
+        ],
+        "type": "object"
+      },
+      "AttachmentResponseDto": {
+        "properties": {
+          "contentType": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "sizeBytes": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "createdAt",
+          "filename",
+          "contentType",
+          "sizeBytes"
+        ],
+        "type": "object"
+      },
+      "AuthorizationUrlResponseDto": {
+        "properties": {
+          "authorizationUrl": {
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorizationUrl"
+        ],
+        "type": "object"
+      },
+      "CreatePreferenceDto": {
+        "properties": {
+          "appliesWhen": {
+            "maxLength": 1000,
+            "nullable": true,
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "type": "string"
+          },
+          "sourceMessageIds": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "statement": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "topic": {
+            "maxLength": 80,
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic",
+          "statement",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "FrontendUpdatedEventResponseDto": {
+        "properties": {
+          "contractVersion": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "event": {
+            "enum": [
+              "frontend.updated"
+            ],
+            "type": "string"
+          },
+          "releaseId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "releaseId",
+          "contractVersion"
+        ],
+        "type": "object"
+      },
+      "FrontendUpdateRequestDto": {
+        "properties": {
+          "revision": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "type": "object"
+      },
+      "HeartbeatEventResponseDto": {
+        "properties": {
+          "event": {
+            "enum": [
+              "heartbeat"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "event"
+        ],
+        "type": "object"
+      },
+      "HistoryPageResponseDto": {
+        "properties": {
+          "before": {
+            "minimum": 1,
+            "nullable": true,
+            "type": "number"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/MessageResponseDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "messages",
+          "before"
+        ],
+        "type": "object"
+      },
+      "IdResponseDto": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "InstanceSettingsResponseDto": {
+        "properties": {
+          "accentColor": {
+            "pattern": "^#[0-9a-f]{6}$",
+            "type": "string"
+          },
+          "agentAvatarAttachmentId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "agentName": {
+            "maxLength": 60,
+            "type": "string"
+          },
+          "version": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "agentName",
+          "agentAvatarAttachmentId",
+          "accentColor",
+          "version"
+        ],
+        "type": "object"
+      },
+      "InstanceSettingsUpdatedEventResponseDto": {
+        "properties": {
+          "event": {
+            "enum": [
+              "instance.settings.updated"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "event"
+        ],
+        "type": "object"
+      },
+      "McpAuthDto": {
+        "properties": {
+          "clientId": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "clientMetadataUrl": {
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "clientSecret": {
+            "maxLength": 10000,
+            "nullable": true,
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "object"
+          },
+          "scope": {
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "none",
+              "headers",
+              "oauth"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "McpAuthResponseDto": {
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "clientMetadataUrl": {
+            "type": "string"
+          },
+          "hasClientSecret": {
+            "type": "boolean"
+          },
+          "headerNames": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "none",
+              "oauth",
+              "headers"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "McpServerResponseDto": {
+        "properties": {
+          "applyNeeded": {
+            "type": "boolean"
+          },
+          "auth": {
+            "$ref": "#/components/schemas/McpAuthResponseDto"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "hasLogin": {
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "loginError": {
+            "type": "string"
+          },
+          "loginPending": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/McpStatusResponseDto"
+          },
+          "url": {
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "url",
+          "enabled",
+          "auth",
+          "hasLogin",
+          "loginPending",
+          "applyNeeded",
+          "status"
+        ],
+        "type": "object"
+      },
+      "McpSnapshotResponseDto": {
+        "properties": {
+          "applyNeeded": {
+            "type": "boolean"
+          },
+          "servers": {
+            "items": {
+              "$ref": "#/components/schemas/McpServerResponseDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "applyNeeded",
+          "servers"
+        ],
+        "type": "object"
+      },
+      "McpStatusResponseDto": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "disabled",
+              "not-applied",
+              "connected",
+              "needs-auth",
+              "error"
+            ],
+            "type": "string"
+          },
+          "toolCount": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "state",
+          "toolCount"
+        ],
+        "type": "object"
+      },
+      "MessageAcceptedResponseDto": {
+        "properties": {
+          "messageId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "messageId"
+        ],
+        "type": "object"
+      },
+      "MessageActionResponseDto": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "type": "object"
+      },
+      "MessageActionsResponseDto": {
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/MessageActionResponseDto"
+            },
+            "type": "array"
+          },
+          "selectedActionId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "available",
+              "selected",
+              "disabled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "actions",
+          "state",
+          "selectedActionId"
+        ],
+        "type": "object"
+      },
+      "MessageEventResponseDto": {
+        "properties": {
+          "event": {
+            "enum": [
+              "message.added",
+              "message.updated"
+            ],
+            "type": "string"
+          },
+          "message": {
+            "$ref": "#/components/schemas/MessageResponseDto"
+          }
+        },
+        "required": [
+          "event",
+          "message"
+        ],
+        "type": "object"
+      },
+      "MessageMetadataDto": {
+        "properties": {
+          "timezone": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MessageMetadataResponseDto": {
+        "properties": {
+          "timezone": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MessageReplySummaryResponseDto": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "mainVisible": {
+            "type": "boolean"
+          },
+          "phase": {
+            "enum": [
+              "commentary",
+              "final_answer"
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1,
+            "type": "number"
+          },
+          "taskId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "textPreview": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sequence",
+          "role",
+          "textPreview",
+          "taskId",
+          "phase",
+          "mainVisible"
+        ],
+        "type": "object"
+      },
+      "MessageResponseDto": {
+        "properties": {
+          "actions": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageActionsResponseDto"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/AttachmentResponseDto"
+            },
+            "type": "array"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "deliveryDestinationIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "nullable": true,
+            "type": "string"
+          },
+          "mainVisible": {
+            "type": "boolean"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/MessageMetadataResponseDto"
+          },
+          "notificationDestinationIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "notify": {
+            "type": "boolean"
+          },
+          "originDestinationId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "commentary",
+              "final_answer"
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "reaction": {
+            "nullable": true,
+            "type": "string"
+          },
+          "replyTo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageReplySummaryResponseDto"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          },
+          "replyToMessageId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1,
+            "type": "number"
+          },
+          "source": {
+            "nullable": true,
+            "type": "string"
+          },
+          "taskId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "createdAt",
+          "updatedAt",
+          "version",
+          "sequence",
+          "source",
+          "originDestinationId",
+          "mainVisible",
+          "reaction",
+          "deliveryDestinationIds",
+          "notificationDestinationIds",
+          "notify",
+          "idempotencyKey",
+          "replyToMessageId",
+          "replyTo",
+          "role",
+          "text",
+          "metadata",
+          "attachments",
+          "actions",
+          "taskId",
+          "phase"
+        ],
+        "type": "object"
+      },
+      "PreferencePageResponseDto": {
+        "properties": {
+          "after": {
+            "nullable": true,
+            "type": "string"
+          },
+          "preferences": {
+            "items": {
+              "$ref": "#/components/schemas/PreferenceSnapshotResponseDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "preferences",
+          "after"
+        ],
+        "type": "object"
+      },
+      "PreferenceResponseDto": {
+        "properties": {
+          "appliesWhen": {
+            "nullable": true,
+            "type": "string"
+          },
+          "basis": {
+            "enum": [
+              "user-stated",
+              "model-inferred"
+            ],
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "sourceMessageIds": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/PreferenceSourceResponseDto"
+            },
+            "type": "array"
+          },
+          "statement": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "retired"
+            ],
+            "type": "string"
+          },
+          "topic": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "createdAt",
+          "updatedAt",
+          "version",
+          "topic",
+          "statement",
+          "appliesWhen",
+          "basis",
+          "sourceMessageIds",
+          "status",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "PreferenceRevisionPageResponseDto": {
+        "properties": {
+          "after": {
+            "nullable": true,
+            "type": "string"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/PreferenceRevisionResponseDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "revisions",
+          "after"
+        ],
+        "type": "object"
+      },
+      "PreferenceRevisionResponseDto": {
+        "properties": {
+          "actor": {
+            "enum": [
+              "human",
+              "main",
+              "task"
+            ],
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "preferenceId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/PreferenceSnapshotResponseDto"
+          },
+          "taskId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "number"
+          }
+        },
+        "required": [
+          "preferenceId",
+          "version",
+          "snapshot",
+          "actor",
+          "taskId",
+          "reason",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "PreferenceSnapshotResponseDto": {
+        "properties": {
+          "appliesWhen": {
+            "nullable": true,
+            "type": "string"
+          },
+          "basis": {
+            "enum": [
+              "user-stated",
+              "model-inferred"
+            ],
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "sourceMessageIds": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "statement": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "retired"
+            ],
+            "type": "string"
+          },
+          "topic": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "createdAt",
+          "updatedAt",
+          "version",
+          "topic",
+          "statement",
+          "appliesWhen",
+          "basis",
+          "sourceMessageIds",
+          "status"
+        ],
+        "type": "object"
+      },
+      "PreferenceSourceResponseDto": {
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1,
+            "type": "number"
+          },
+          "taskId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "textPreview": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sequence",
+          "taskId",
+          "createdAt",
+          "textPreview"
+        ],
+        "type": "object"
+      },
+      "RegisterWebPushDto": {
+        "properties": {
+          "endpoint": {
+            "maxLength": 4096,
+            "type": "string"
+          },
+          "keys": {
+            "$ref": "#/components/schemas/WebPushKeysDto"
+          }
+        },
+        "required": [
+          "endpoint",
+          "keys"
+        ],
+        "type": "object"
+      },
+      "RunningTaskResponseDto": {
+        "properties": {
+          "commentary": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ActivityCommentaryResponseDto"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "commentary"
+        ],
+        "type": "object"
+      },
+      "SaveMcpServerDto": {
+        "properties": {
+          "auth": {
+            "$ref": "#/components/schemas/McpAuthDto"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9_]{0,47}$",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SelectActionDto": {
+        "properties": {
+          "actionId": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "messageId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "idempotencyKey",
+          "messageId",
+          "actionId"
+        ],
+        "type": "object"
+      },
+      "SendMessageDto": {
+        "properties": {
+          "attachmentIds": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "destinationId": {
+            "maxLength": 100,
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/MessageMetadataDto"
+          },
+          "replyToMessageId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "taskId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 100000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "idempotencyKey",
+          "text",
+          "attachmentIds"
+        ],
+        "type": "object"
+      },
+      "TaskDetailsEnvelopeResponseDto": {
+        "properties": {
+          "task": {
+            "$ref": "#/components/schemas/TaskDetailsResponseDto"
+          }
+        },
+        "required": [
+          "task"
+        ],
+        "type": "object"
+      },
+      "TaskDetailsResponseDto": {
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "lastActivityAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "in-progress",
+              "needs-input",
+              "completed"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "createdAt",
+          "updatedAt",
+          "lastActivityAt",
+          "version",
+          "title",
+          "goal",
+          "status",
+          "archived",
+          "description"
+        ],
+        "type": "object"
+      },
+      "TaskEventResponseDto": {
+        "properties": {
+          "event": {
+            "enum": [
+              "task.added",
+              "task.updated"
+            ],
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/components/schemas/TaskResponseDto"
+          }
+        },
+        "required": [
+          "event",
+          "task"
+        ],
+        "type": "object"
+      },
+      "TaskPageResponseDto": {
+        "properties": {
+          "after": {
+            "nullable": true,
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskResponseDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "tasks",
+          "after"
+        ],
+        "type": "object"
+      },
+      "TaskResponseDto": {
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "lastActivityAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "in-progress",
+              "needs-input",
+              "completed"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "createdAt",
+          "updatedAt",
+          "lastActivityAt",
+          "version",
+          "title",
+          "goal",
+          "status",
+          "archived"
+        ],
+        "type": "object"
+      },
+      "UpdateInstanceSettingsDto": {
+        "properties": {
+          "accentColor": {
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "type": "string"
+          },
+          "agentAvatarAttachmentId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "agentName": {
+            "maxLength": 60,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "UpdatePreferenceDto": {
+        "properties": {
+          "appliesWhen": {
+            "maxLength": 1000,
+            "nullable": true,
+            "type": "string"
+          },
+          "expectedVersion": {
+            "minimum": 1,
+            "type": "number"
+          },
+          "reason": {
+            "maxLength": 500,
+            "type": "string"
+          },
+          "sourceMessageIds": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "statement": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "retired"
+            ],
+            "type": "string"
+          },
+          "topic": {
+            "maxLength": 80,
+            "type": "string"
+          }
+        },
+        "required": [
+          "expectedVersion",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "WebPushConfigDto": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "publicKey": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "available",
+          "publicKey"
+        ],
+        "type": "object"
+      },
+      "WebPushKeysDto": {
+        "properties": {
+          "auth": {
+            "type": "string"
+          },
+          "p256dh": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "p256dh",
+          "auth"
+        ],
+        "type": "object"
+      },
+      "WebPushRegistrationDto": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "contact": {},
+    "description": "Private single-owner HTTP and SSE contract for canonical Pal clients.",
+    "title": "Pal First-party API",
+    "version": "3"
+  },
+  "openapi": "3.0.0",
+  "paths": {
+    "/chat/actions": {
+      "post": {
+        "operationId": "selectMessageAction",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectActionDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageAcceptedResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/chat/history": {
+      "get": {
+        "operationId": "getChatHistory",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "taskId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryPageResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/chat/messages": {
+      "post": {
+        "operationId": "sendChatMessage",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageAcceptedResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/files": {
+      "post": {
+        "operationId": "uploadFile",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "attachment": {
+                      "$ref": "#/components/schemas/AttachmentResponseDto"
+                    }
+                  },
+                  "required": [
+                    "attachment"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/files/{id}/content": {
+      "get": {
+        "operationId": "getFileContent",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/files/{id}/download": {
+      "get": {
+        "operationId": "downloadFile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/frontend-updates": {
+      "post": {
+        "operationId": "publishFrontendUpdate",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrontendUpdateRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Frontend update marker published."
+          }
+        },
+        "summary": "",
+        "tags": [
+          "events"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "ok"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/instance-settings": {
+      "get": {
+        "operationId": "getInstanceSettings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceSettingsResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "instance settings"
+        ]
+      },
+      "patch": {
+        "operationId": "updateInstanceSettings",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateInstanceSettingsDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceSettingsResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "instance settings"
+        ]
+      }
+    },
+    "/mcp/apply": {
+      "post": {
+        "operationId": "applyMcpServers",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpSnapshotResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "connected-services"
+        ]
+      }
+    },
+    "/mcp/oauth/callback": {
+      "get": {
+        "operationId": "completeMcpOauth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "connected-services"
+        ]
+      }
+    },
+    "/mcp/servers": {
+      "get": {
+        "operationId": "getMcpServers",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpSnapshotResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "connected-services"
+        ]
+      },
+      "post": {
+        "operationId": "createMcpServer",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveMcpServerDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "connected-services"
+        ]
+      }
+    },
+    "/mcp/servers/{id}": {
+      "delete": {
+        "operationId": "removeMcpServer",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Server removed."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "connected-services"
+        ]
+      },
+      "patch": {
+        "operationId": "updateMcpServer",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveMcpServerDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "connected-services"
+        ]
+      }
+    },
+    "/mcp/servers/{id}/login": {
+      "delete": {
+        "operationId": "forgetMcpLogin",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved login removed."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "connected-services"
+        ]
+      },
+      "post": {
+        "operationId": "startMcpLogin",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorizationUrlResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "connected-services"
+        ]
+      }
+    },
+    "/notifications/web/config": {
+      "get": {
+        "operationId": "getWebPushConfig",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebPushConfigDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/notifications/web/installations": {
+      "post": {
+        "operationId": "registerWebPush",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterWebPushDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebPushRegistrationDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/notifications/web/installations/{id}": {
+      "delete": {
+        "operationId": "disableWebPush",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/preferences": {
+      "get": {
+        "operationId": "getPreferences",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 20,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "queries",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "maxLength": 200,
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "topic",
+            "required": false,
+            "schema": {
+              "maxLength": 80,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "active",
+                "retired"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "maxLength": 1024,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencePageResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "preferences"
+        ]
+      },
+      "post": {
+        "operationId": "createPreference",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePreferenceDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "preferences"
+        ]
+      }
+    },
+    "/preferences/{id}": {
+      "get": {
+        "operationId": "getPreference",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "preferences"
+        ]
+      },
+      "patch": {
+        "operationId": "updatePreference",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePreferenceDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "preferences"
+        ]
+      }
+    },
+    "/preferences/{id}/history": {
+      "get": {
+        "operationId": "getPreferenceHistory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 20,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "maxLength": 1024,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferenceRevisionPageResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "preferences"
+        ]
+      }
+    },
+    "/stream": {
+      "get": {
+        "operationId": "streamEvents",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/MessageEventResponseDto"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TaskEventResponseDto"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AgentActivityEventResponseDto"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FrontendUpdatedEventResponseDto"
+                    },
+                    {
+                      "$ref": "#/components/schemas/HeartbeatEventResponseDto"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InstanceSettingsUpdatedEventResponseDto"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Named SSE events carrying one Pal event envelope."
+          }
+        },
+        "summary": "",
+        "tags": [
+          "events"
+        ]
+      }
+    },
+    "/tasks": {
+      "get": {
+        "operationId": "getTasks",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "archived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "maxLength": 1024,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskPageResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/tasks/{id}/archive": {
+      "post": {
+        "operationId": "setTaskArchived",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveTaskDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Archive state updated."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/tasks/details/{id}": {
+      "get": {
+        "operationId": "getTaskDetails",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskDetailsEnvelopeResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "tasks"
+        ]
+      }
+    }
+  },
+  "servers": [],
+  "tags": []
+}

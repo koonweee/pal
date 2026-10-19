@@ -1,0 +1,4 @@
+{
+  "extensions": {"theme": {"system_theme": 1}},
+  "browser": {"custom_chrome_frame": true}
+}
