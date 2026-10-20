@@ -3,7 +3,7 @@ import { useAgentActivity } from '../src/activity/use-agent-activity';
 import { describe, expect, it } from 'vitest';
 import type { AgentActivity } from '../src/api/client';
 import { selectBubble, selectCompletion } from '../src/activity/select-bubble';
-const online = { online: true, connected: true, opened: true };
+const online = { online: true, connected: true };
 const empty: AgentActivity = {
   revision: 1,
   status: 'idle',
@@ -15,7 +15,7 @@ const empty: AgentActivity = {
 const task = { id: 'task', title: 'Lunch with Sam', commentary: null };
 
 describe('activity selection', () => {
-  it('prioritizes connection, input, distinct running tasks, Main, completion, then idle', () => {
+  it('hides activity until the connection is fresh', () => {
     const busy = {
       ...empty,
       status: 'working' as const,
@@ -23,13 +23,20 @@ describe('activity selection', () => {
       runningTasks: [task, { ...task, id: 'two' }],
       needsInputTasks: [task],
     };
-    expect(selectBubble(busy, { ...online, online: false }, 0)?.text).toBe(
-      'offline',
-    );
-    expect(selectBubble(busy, { ...online, connected: false }, 0)?.text).toBe(
-      'reconnecting…',
-    );
+    expect(selectBubble(busy, { ...online, online: false }, 0)).toBeUndefined();
+    expect(
+      selectBubble(busy, { ...online, connected: false }, 0),
+    ).toBeUndefined();
     expect(selectBubble(undefined, online, 0)?.dots).toBe(true);
+  });
+  it('prioritizes input, distinct running tasks, Main, completion, then idle', () => {
+    const busy = {
+      ...empty,
+      status: 'working' as const,
+      mainWorking: true,
+      runningTasks: [task, { ...task, id: 'two' }],
+      needsInputTasks: [task],
+    };
     expect(selectBubble(busy, online, 0)).toMatchObject({
       text: 'need your input',
       taskId: 'task',

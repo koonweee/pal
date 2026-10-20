@@ -15,7 +15,7 @@ Show the configured agent name beside the profile icon while idle, and replace t
 - Tasks have titles, goals, and objective statuses: in-progress, needs-input, completed. Recurring tasks remain in-progress between runs.
 - Public Task messages carry taskId and optional commentary/final_answer phase. Publication occurs at text-end. A final answer can be an outcome, question, or blocker.
 - `frontend/src/chat/use-chat.ts` owns the current activity boolean. Its message cache is scoped to the selected conversation; task lists are paginated.
-- `frontend/src/shell/AppHeader.tsx` renders the profile icon, name, connection dot, desktop button, and preferences button.
+- `frontend/src/shell/AppHeader.tsx` renders the profile icon, name or activity bubble, desktop button, preferences button, and screen-reader connection status.
 
 ## Display Policy
 
@@ -23,7 +23,8 @@ The header summarizes global activity independently of the selected conversation
 
 | Condition | Bubble | Interaction |
 | --- | --- | --- |
-| Browser offline or stream unavailable | `offline` / `connecting…` / `reconnecting…` | No task navigation; suppress stale activity |
+| Browser offline | Configured agent name; avatar at 50% opacity | No task navigation; suppress stale activity |
+| Stream unavailable while browser is online | Configured agent name; avatar pulses between 50% and 100% opacity | No task navigation; suppress stale activity |
 | Stream connected, first activity snapshot pending | … | No stale task content |
 | One unarchived task needs input | `need your input` | Open that task |
 | Several unarchived tasks need input | `need your input on {n} tasks` | Open a compact task list |
@@ -86,7 +87,7 @@ Implementation tasks:
 
 - Add `frontend/src/activity/` with an activity state owner/hook, pure `select-bubble` policy, and bubble component/styles.
 - Route activity events through the existing SSE connection. Move the activity boolean out of useChat as consumers migrate; retain one activity owner and one stream connection.
-- Gate presentation on connection freshness and the initial snapshot. Use revisions to ignore obsolete snapshots within a connection and timestamps for completion expiry. Reset revision acceptance on reconnect so a restarted backend can establish a fresh snapshot.
+- Gate activity presentation on connection freshness and the initial snapshot. Disconnected states keep the configured name visible and use avatar opacity for connection feedback. Use revisions to ignore obsolete snapshots within a connection and timestamps for completion expiry. Reset revision acceptance on reconnect so a restarted backend can establish a fresh snapshot.
 - Implement the priority table with explicit navigation targets. Keep task/message navigation in existing application callbacks.
 - Add a compact accessible list for multiple running or needs-input tasks, using the supplied activity snapshot rather than task-list pagination. Reuse existing dialog/popover primitives.
 

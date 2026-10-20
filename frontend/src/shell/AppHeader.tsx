@@ -52,11 +52,20 @@ export function AppHeader({
       : chat.opened
         ? 'Reconnecting…'
         : 'Connecting…';
+  const avatarConnection = !chat.online
+    ? 'offline'
+    : !chat.connected
+      ? 'connecting'
+      : undefined;
   const title =
     chat.selectedTask?.title ?? (chat.selectedTaskId ? 'Task' : 'Main');
   return (
     <header ref={header} className="header">
-      <div className="agent-info" aria-label={settings.agentName}>
+      <div
+        className="agent-info"
+        aria-label={settings.agentName}
+        data-connection={avatarConnection}
+      >
         <IconAction
           id="thread-open"
           className="thread-open"

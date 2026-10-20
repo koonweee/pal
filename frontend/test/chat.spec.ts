@@ -166,6 +166,16 @@ test('reconciles snapshots, live follow-ups, older history, reconnect, and reloa
   backend.rows.push(backend.message('Reply while disconnected'));
   backend.holdNextHistory = true;
   await expect(page.locator('#connection')).toHaveText('Reconnecting…');
+  await expect(page.locator('.activity-bubble')).toHaveCount(0);
+  await expect(page.locator('.agent-label')).toHaveText('pal');
+  await expect(page.locator('.agent-info')).toHaveAttribute(
+    'data-connection',
+    'connecting',
+  );
+  await expect(page.locator('.agent-avatar')).toHaveCSS(
+    'animation-name',
+    'agent-connection-pulse',
+  );
   await expect.poll(() => Boolean(backend.releaseHistory)).toBe(true);
   backend.releaseHistory!();
   await expect(page.locator('#connection')).toHaveText('Connected');

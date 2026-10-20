@@ -3,7 +3,7 @@ import type { AgentActivity } from '../api/client';
 export const completionDuration = 5000;
 type ActivityTask = AgentActivity['needsInputTasks'][number];
 export interface Bubble {
-  kind: 'connection' | 'working' | 'multiple' | 'input' | 'completion';
+  kind: 'working' | 'multiple' | 'input' | 'completion';
   text: string;
   dots?: boolean;
   taskId?: string;
@@ -14,7 +14,6 @@ export interface Bubble {
 export interface ActivityConnection {
   online: boolean;
   connected: boolean;
-  opened: boolean;
 }
 const compact = (text: string) => text.replace(/\s+/g, ' ').trim();
 
@@ -34,12 +33,7 @@ export function selectBubble(
   connection: ActivityConnection,
   now: number,
 ): Bubble | undefined {
-  if (!connection.online) return { kind: 'connection', text: 'offline' };
-  if (!connection.connected)
-    return {
-      kind: 'connection',
-      text: connection.opened ? 'reconnecting…' : 'connecting…',
-    };
+  if (!connection.online || !connection.connected) return undefined;
   if (!activity) return { kind: 'working', text: '…', dots: true };
   const pending = activity.needsInputTasks;
   if (pending.length === 1)

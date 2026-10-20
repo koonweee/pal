@@ -27,6 +27,13 @@ test('installs the shell and keeps private routes network-only', async ({
   ).toBe(true);
   await expect(page.getByRole('banner')).toBeVisible();
   await expect(page.locator('#connection')).toHaveText('Offline');
+  await expect(page.locator('.activity-bubble')).toHaveCount(0);
+  await expect(page.locator('.agent-label')).toBeVisible();
+  await expect(page.locator('.agent-info')).toHaveAttribute(
+    'data-connection',
+    'offline',
+  );
+  await expect(page.locator('.agent-avatar')).toHaveCSS('opacity', '0.5');
   const dynamicRoutes = [
     '/api/chat/history',
     '/stream',

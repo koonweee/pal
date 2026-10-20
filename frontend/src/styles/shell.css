@@ -90,6 +90,18 @@
   height: 100%;
   object-fit: contain;
 }
+.agent-info[data-connection='offline'] .agent-avatar {
+  opacity: 0.5;
+}
+.agent-info[data-connection='connecting'] .agent-avatar {
+  opacity: 0.5;
+  animation: agent-connection-pulse 1.2s ease-in-out infinite alternate;
+}
+@keyframes agent-connection-pulse {
+  to {
+    opacity: 1;
+  }
+}
 .pal-overlay-backdrop {
   background: var(--pal-overlay);
   -webkit-backdrop-filter: blur(1px);
