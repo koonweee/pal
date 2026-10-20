@@ -29,10 +29,36 @@ interface LayoutRow {
   top: number;
 }
 
-const layoutMotion = {
+const layoutShiftMotion = {
+  duration: 960,
+  easing: 'cubic-bezier(0.22, 0.78, 0.24, 1)',
+} satisfies KeyframeAnimationOptions;
+
+const messageEntranceMotion = {
+  delay: 105,
+  duration: 840,
+  easing: 'cubic-bezier(0.2, 0.78, 0.25, 1)',
+  fill: 'both',
+} satisfies KeyframeAnimationOptions;
+
+const typingEntranceMotion = {
   duration: 180,
   easing: 'cubic-bezier(0.22, 0.8, 0.28, 1)',
-};
+} satisfies KeyframeAnimationOptions;
+
+function animateEntrance(key: string, content: HTMLElement) {
+  if (key === 'typing') {
+    content.animate([{ opacity: 0.35 }, { opacity: 1 }], typingEntranceMotion);
+    return;
+  }
+  content.animate(
+    [
+      { opacity: 0, transform: 'translateY(18px) scale(0.965)' },
+      { opacity: 1, transform: 'translateY(0) scale(1)' },
+    ],
+    messageEntranceMotion,
+  );
+}
 
 function readLayoutRows(node: HTMLElement): Map<string, LayoutRow> {
   const rows = new Map<string, LayoutRow>();
@@ -254,11 +280,7 @@ export function Conversation({ chat }: { chat: ChatController }) {
       if (chat.loaded && historyPositioned) {
         for (const [key, row] of readLayoutRows(node)) {
           if (!pendingEntrances.current.delete(key)) continue;
-          if (!reducedMotionRef.current)
-            row.content.animate(
-              [{ opacity: 0.35 }, { opacity: 1 }],
-              layoutMotion,
-            );
+          if (!reducedMotionRef.current) animateEntrance(key, row.content);
         }
       }
       captureLayoutPositions();
@@ -311,10 +333,7 @@ export function Conversation({ chat }: { chat: ChatController }) {
         const previousTop = layoutPositions.current.get(key);
         if (previousTop === undefined || !previousKeySet.has(key)) {
           if (pendingEntrances.current.delete(key))
-            row.content.animate(
-              [{ opacity: 0.35 }, { opacity: 1 }],
-              layoutMotion,
-            );
+            animateEntrance(key, row.content);
           continue;
         }
         const delta = previousTop + (visualOffsets.get(key) ?? 0) - row.top;
@@ -324,7 +343,7 @@ export function Conversation({ chat }: { chat: ChatController }) {
             { transform: `translateY(${delta}px)` },
             { transform: 'translateY(0)' },
           ],
-          layoutMotion,
+          layoutShiftMotion,
         );
       }
     }

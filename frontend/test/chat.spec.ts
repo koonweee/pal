@@ -980,9 +980,22 @@ test('shows an ephemeral typing bubble after an accepted message', async ({
           .join(',');
         if (frames.some((frame) => frame.transform !== undefined))
           root.dataset.layoutEntranceMoved = 'true';
+        if (key.startsWith('message:') && typeof options === 'object') {
+          root.dataset.messageEntranceDuration = String(options.duration);
+          root.dataset.messageEntranceDelay = String(options.delay ?? 0);
+        }
       }
-      if (key && frames.some((frame) => frame.transform !== undefined))
+      if (
+        key &&
+        frames.every((frame) => frame.opacity === undefined) &&
+        frames.some((frame) => frame.transform !== undefined)
+      ) {
         document.documentElement.dataset.layoutShifted = 'true';
+        if (typeof options === 'object')
+          document.documentElement.dataset.layoutShiftDuration = String(
+            options.duration,
+          );
+      }
       return animate.call(this, keyframes, options);
     };
   });
@@ -999,19 +1012,15 @@ test('shows an ephemeral typing bubble after an accepted message', async ({
   await expect(typing).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute(
     'data-layout-entrances',
-    /message:/,
-  );
-  await expect(page.locator('html')).toHaveAttribute(
-    'data-layout-entrances',
     /typing/,
   );
   await expect(page.locator('html')).toHaveAttribute(
     'data-layout-shifted',
     'true',
   );
-  await expect(page.locator('html')).not.toHaveAttribute(
-    'data-layout-entrance-moved',
-    'true',
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-layout-shift-duration',
+    '960',
   );
   await expect(page.locator('.typing-dot')).toHaveCount(3);
   await expect(
@@ -1044,6 +1053,18 @@ test('shows an ephemeral typing bubble after an accepted message', async ({
   await expect(page.locator('html')).toHaveAttribute(
     'data-layout-entrances',
     new RegExp(`message:${reply.id}`),
+  );
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-layout-entrance-moved',
+    'true',
+  );
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-message-entrance-duration',
+    '840',
+  );
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-message-entrance-delay',
+    '105',
   );
 
   await composer.fill('One more thing');
