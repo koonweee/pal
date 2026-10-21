@@ -633,18 +633,23 @@ export function Conversation({ chat }: { chat: ChatController }) {
             />
           </div>
           {chat.typing && <TypingIndicator />}
-          {!chat.messages.length && (
+          {!chat.messages.length && !chat.loaded && (
+            <div className="conversation-loading" role="status">
+              {!chat.online
+                ? 'Conversation unavailable offline.'
+                : chat.connected
+                  ? 'Loading conversation…'
+                  : 'Connecting…'}
+            </div>
+          )}
+          {!chat.messages.length && chat.loaded && (
             <div id="empty" className="empty">
               <span className="empty-mark" aria-hidden="true">
                 p
               </span>
               <h2>A little space to think.</h2>
               <p id="empty-detail">
-                {chat.loaded
-                  ? 'Ask a question, share an idea, or pick up where you left off.'
-                  : chat.connected
-                    ? 'Loading your conversation…'
-                    : 'Connecting to your conversation…'}
+                Ask a question, share an idea, or pick up where you left off.
               </p>
             </div>
           )}

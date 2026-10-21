@@ -19,8 +19,41 @@
         document.documentElement.classList.add('pal-standalone');
       try {
         const theme = localStorage.getItem('pal-theme');
-        if (theme === 'light' || theme === 'dark')
-          document.documentElement.style.colorScheme = theme;
+        const dark =
+          theme === 'dark' ||
+          (theme !== 'light' &&
+            matchMedia('(prefers-color-scheme: dark)').matches);
+        const resolved = dark ? 'dark' : 'light';
+        document.documentElement.dataset.theme = resolved;
+        document.documentElement.style.colorScheme = resolved;
+        document.documentElement.style.setProperty(
+          '--pal-app',
+          dark ? '#000000' : '#ffffff',
+        );
+        const appearance = JSON.parse(
+          localStorage.getItem('pal-instance-appearance-v1') ?? 'null',
+        );
+        if (
+          appearance?.schema === 1 &&
+          /^#[0-9a-f]{6}$/i.test(appearance.accentColor)
+        ) {
+          document.documentElement.style.setProperty(
+            '--pal-accent',
+            appearance.accentColor,
+          );
+          document.documentElement.style.setProperty(
+            '--pal-action',
+            appearance.accentColor,
+          );
+          document.documentElement.style.setProperty(
+            '--pal-focus',
+            appearance.accentColor,
+          );
+          document.documentElement.style.setProperty(
+            '--pal-user-message',
+            appearance.accentColor,
+          );
+        }
       } catch {}
       const scheme = document.documentElement.style.colorScheme;
       const dark =

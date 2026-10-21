@@ -81,6 +81,7 @@ const MessageRow = memo(
                 type="button"
                 className="message-quote"
                 aria-label="View quoted message"
+                disabled={!persisted}
                 onClick={() => onNavigate(message.replyTo!.id)}
               >
                 <strong>

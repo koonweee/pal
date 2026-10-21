@@ -26,7 +26,7 @@
 
 ## PWA
 
-- Cache the versioned static shell only. API, SSE, files, uploads, OAuth, notifications, and noVNC stay network-only and outside navigation fallback.
+- Cache only the versioned static shell in the service worker. A bounded app-owned appearance and Main-history snapshot may restore presentation before synchronization. API, SSE, files, uploads, OAuth, notifications, and noVNC stay network-only and outside navigation fallback.
 - One lifecycle owner manages registration, waiting workers, release discovery, activation, and retryable failures.
 - A reload requires the explicit React-owned safety snapshot. Do not infer blockers from DOM state or create a general blocker registry.
 - Automatic updates run only when the current tab is safe. Tabs with active work retain it and present the waiting update.

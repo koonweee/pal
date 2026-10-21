@@ -41,7 +41,7 @@ The web app uses generated OpenAPI path/types through one small client adapter t
 
 SSE remains a dedicated transport because generated OpenAPI clients do not implement its lifecycle. Its payload types come from schemas corresponding to the backend `PalEvent` variants. The adapter parses input as `unknown`, accepts the known event/envelope combinations, and triggers authoritative snapshot recovery after malformed data or a connection gap. It does not invent event replay.
 
-The PWA stores only versioned static application-shell assets. `/api`, `/stream`, `/desktop`, file responses, OAuth callbacks, and native root API routes are never cached by the service worker. Reloading while offline shows the shell and a clear disconnected state; history, queued writes, and background synchronization are not persisted for offline use.
+The service worker stores only versioned static application-shell assets. `/api`, `/stream`, `/desktop`, file responses, OAuth callbacks, and native root API routes are never cached by the service worker. A bounded app-owned appearance and latest-Main snapshot restores presentation before synchronization. Cached messages remain read-only; queued writes and background synchronization are not persisted for offline use.
 
 ## Milestones
 
@@ -184,7 +184,7 @@ Use targeted tests while migrating each vertical slice. Run the full backend and
 - The React PWA replaces the playground with complete behavioral parity and the conversation-first web shell, while retaining strict TypeScript and the existing backend/deployment architecture.
 - Backend-authored OpenAPI and generated TypeScript types/client form the sole HTTP contract boundary for the web app; SSE has one explicit typed adapter and authoritative snapshot recovery.
 - The production iOS name/icon identify the installed PWA, and installability/standalone behavior pass on the target platform matrix.
-- Static shell caching cannot expose stale or private server data. Offline writes, cached conversations, Web Push, and background synchronization are absent.
+- Static shell caching retains no server response. The bounded app-owned Main snapshot is visibly non-authoritative until synchronization. Offline writes and background synchronization are absent.
 - Existing HTTP/SSE/noVNC behavior, private single-owner access, and the native iOS client remain compatible throughout migration and cutover.
 - Relevant automated checks, device checks, live private-backend smoke tests, documentation, deployment evidence, and rollback evidence are complete.
 
@@ -192,7 +192,7 @@ Use targeted tests while migrating each vertical slice. Run the full backend and
 
 - Further visual feature work beyond the conversation-first shell remains deferred.
 - Web Push, notification permission/subscription management, background delivery, and notification tap routing. Native APNs remains available during the PWA experiment.
-- Offline conversation/task storage, offline composition, queued writes, background synchronization, and conflict resolution.
+- Full offline conversation/task storage, offline composition, queued writes, background synchronization, and conflict resolution.
 - Public access, application authentication, authorization, multi-user tenancy, and public-internet threat modeling.
 - Generated Swift client/model adoption and removal of the iOS client's handwritten contract types.
 - Deep-link routing, assistant action-selection UI, a general client-state/query library, and a published external SDK until product requirements justify them.

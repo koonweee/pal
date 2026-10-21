@@ -394,6 +394,12 @@ textarea::-webkit-scrollbar-thumb,
   text-align: center;
   padding: min(12vh, 90px) 20px 30px;
 }
+.conversation-loading {
+  padding: min(16vh, 120px) 20px 30px;
+  color: var(--pal-text-muted);
+  font-size: 13px;
+  text-align: center;
+}
 .empty-mark {
   display: inline-grid;
   place-items: center;

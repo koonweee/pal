@@ -15,6 +15,7 @@ import {
   type SaveInstanceSettings,
 } from '../api/client';
 import { lightTheme } from '../theme/tokens';
+import { readAppearanceCache, writeAppearanceCache } from './appearance-cache';
 
 export const defaultInstanceSettings: InstanceSettings = {
   agentName: 'pal',
@@ -37,7 +38,10 @@ export function InstanceSettingsProvider({
   children,
   preview = false,
 }: PropsWithChildren<{ preview?: boolean }>) {
-  const [settings, setSettings] = useState(defaultInstanceSettings);
+  const [settings, setSettings] = useState<InstanceSettings>(() => ({
+    ...defaultInstanceSettings,
+    ...(preview ? undefined : readAppearanceCache()),
+  }));
   const [ready, setReady] = useState(preview);
   const [error, setError] = useState<string>();
   const read = useRef<AbortController | undefined>(undefined);
@@ -82,6 +86,9 @@ export function InstanceSettingsProvider({
     void refresh();
     return () => read.current?.abort();
   }, [refresh]);
+  useEffect(() => {
+    if (ready && !preview) writeAppearanceCache(settings);
+  }, [preview, ready, settings]);
   const value = useMemo(
     () => ({ settings, ready, error, refresh, save }),
     [settings, ready, error, refresh, save],

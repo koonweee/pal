@@ -4,6 +4,85 @@ import { backend, usePalBackend } from './support/pal-backend';
 
 usePalBackend(test);
 
+test('shows cached Main history and appearance until authoritative snapshots arrive', async ({
+  page,
+}) => {
+  const cached = backend.message('Cached conversation');
+  const authoritative = backend.message('Authoritative conversation');
+  backend.rows.push(authoritative);
+  backend.holdNextHistory = true;
+  await page.addInitScript(
+    ({ message }) => {
+      localStorage.setItem(
+        'pal-instance-appearance-v1',
+        JSON.stringify({
+          schema: 1,
+          agentName: 'Juniper',
+          agentAvatarAttachmentId: null,
+          accentColor: '#7a5cff',
+        }),
+      );
+      localStorage.setItem(
+        'pal-main-history-v1',
+        JSON.stringify({
+          schema: 1,
+          savedAt: '2026-10-21T12:00:00.000Z',
+          messages: [message],
+        }),
+      );
+    },
+    { message: cached },
+  );
+  let releaseSettings!: () => void;
+  const settingsBlocked = new Promise<void>((resolve) => {
+    releaseSettings = resolve;
+  });
+  await page.route('**/api/instance-settings', async (route) => {
+    await settingsBlocked;
+    await route.continue();
+  });
+
+  await page.goto('/');
+  await expect(
+    page.getByText('Cached conversation', { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('.agent-label')).toHaveText('Juniper');
+  await expect
+    .poll(() =>
+      page
+        .locator('html')
+        .evaluate((node) => node.style.getPropertyValue('--pal-action')),
+    )
+    .toBe('#7a5cff');
+  await expect(page.locator('.reply-action')).toBeDisabled();
+  await page.getByRole('textbox', { name: 'Message Juniper' }).fill('Wait');
+  await expect(
+    page.getByRole('button', { name: 'Send message' }),
+  ).toBeDisabled();
+  await expect.poll(() => Boolean(backend.releaseHistory)).toBe(true);
+
+  const live = backend.message('Live during refresh');
+  backend.publish(live);
+  backend.releaseHistory!();
+  releaseSettings();
+
+  await expect(
+    page.getByText('Authoritative conversation', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Live during refresh', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Cached conversation', { exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator('.agent-label')).toHaveText('pal');
+  await expect
+    .poll(() =>
+      page.evaluate(() => localStorage.getItem('pal-main-history-v1')),
+    )
+    .toContain('Live during refresh');
+});
+
 test('segments messages by date with compact local labels', async ({
   page,
 }) => {

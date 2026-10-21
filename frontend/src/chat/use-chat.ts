@@ -24,6 +24,7 @@ import {
   visibleMessages,
 } from './sync';
 import { useConversationPacing } from './use-conversation-pacing';
+import { readMainHistoryCache, writeMainHistoryCache } from './history-cache';
 
 export interface MessageView {
   message: Message;
@@ -68,25 +69,29 @@ interface ChatState {
   taskSyncing: boolean;
 }
 
-const initialState: ChatState = {
-  before: null,
-  connected: false,
-  draft: '',
-  loaded: false,
-  loadingOlder: false,
-  opened: false,
-  online: navigator.onLine,
-  outgoing: new Map(),
-  stored: new Map(),
-  submitting: false,
-  syncing: false,
-  taskAfter: null,
-  taskArchived: false,
-  taskLoadingMore: false,
-  taskPages: 1,
-  taskRows: new Map(),
-  taskSyncing: false,
-};
+function createInitialState(): ChatState {
+  return {
+    before: null,
+    connected: false,
+    draft: '',
+    loaded: false,
+    loadingOlder: false,
+    opened: false,
+    online: navigator.onLine,
+    outgoing: new Map(),
+    stored: new Map(
+      readMainHistoryCache().map((message) => [message.id, message]),
+    ),
+    submitting: false,
+    syncing: false,
+    taskAfter: null,
+    taskArchived: false,
+    taskLoadingMore: false,
+    taskPages: 1,
+    taskRows: new Map(),
+    taskSyncing: false,
+  };
+}
 
 function retryController(read: () => void) {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -135,7 +140,7 @@ export function useChat() {
     reset: resetPacing,
     typingVisible,
   } = useConversationPacing();
-  const [state, setState] = useState(initialState);
+  const [state, setState] = useState(createInitialState);
   const current = useRef(state);
   const generation = useRef(0);
   const taskGeneration = useRef(0);
@@ -729,6 +734,11 @@ export function useChat() {
     );
   }, [assistantArrived, messagesPersisted, state.selectedTaskId, state.stored]);
 
+  useEffect(() => {
+    if (state.loaded && state.selectedTaskId === undefined)
+      writeMainHistoryCache(state.stored.values());
+  }, [state.loaded, state.selectedTaskId, state.stored]);
+
   const tasks = useMemo(
     () =>
       Array.from(state.taskRows.values())
@@ -748,7 +758,7 @@ export function useChat() {
     );
     const latestUser = visible.findLast((message) => message.role === 'user');
     return visible.map<MessageView>((message) => {
-      const persisted = state.stored.has(message.id);
+      const persisted = state.loaded && state.stored.has(message.id);
       const messageKey = message.idempotencyKey ?? message.id;
       const receiptSlot = message.id === latestUser?.id;
       return {
@@ -768,6 +778,7 @@ export function useChat() {
     activeMessageKey,
     receiptMessageKey,
     state.outgoing,
+    state.loaded,
     state.selectedTaskId,
     state.stored,
   ]);
@@ -806,6 +817,7 @@ export function useChat() {
     },
     selectReply(message?: Message) {
       if (
+        current.current.loaded &&
         !current.current.submitting &&
         (!message || current.current.stored.has(message.id))
       )
