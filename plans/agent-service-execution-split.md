@@ -59,6 +59,7 @@ Validation:
 - Matching service/execution UID is required because native runner directories are owner-only. Docker init reaps terminated children so native termination checks complete.
 - Provider 0.12.0 fails at import against core 1.76.0 despite its peer range (missing FactorySandbox). Pin 0.8.0; no core upgrade or custom transport.
 - Backend build/lint and harness syntax checks pass. Existing Pal containers and data were untouched.
+- Attach-only execution supplies the configured cwd for native spawns. Provider 0.8 attaches stdin unconditionally; the adapter closes it for core's ignore mode using the native handle. The harness verifies cwd, immediate EOF, and release of completed internal process output. Core retains abort/process-group handling.
 
 ### 2. Split Images, Deployment, and Lifecycle
 

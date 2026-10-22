@@ -267,6 +267,11 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
     } catch {
       if (result.success && args.includes('--help'))
         return { success: true, data: { help: result.stdout }, error: null };
+      if (result.timedOut) throw new Error('Browser command timed out');
+      if (!result.success)
+        throw new Error(
+          'Browser command failed with exit code ' + result.exitCode,
+        );
       throw new Error('Browser command returned invalid JSON');
     }
   }

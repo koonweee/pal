@@ -38,6 +38,11 @@ const command = async (text) => {
   return result.stdout.trim();
 };
 assert.equal(await command('id -u'), '1000');
+assert.equal(await command('pwd'), '/home/pal');
+assert.equal((await execution.output('pwd')).toString().trim(), '/home/pal');
+const retainedBefore = (await sandbox.processes.list()).length;
+await execution.output('true');
+assert.equal((await sandbox.processes.list()).length, retainedBefore);
 assert.equal(
   await command('printf "%s" "${PAL_SERVICE_SENTINEL-unavailable}"'),
   'unavailable',
@@ -54,6 +59,8 @@ assert.equal(
   'isolated',
 );
 assert.equal(await command('printf hello; printf error >&2'), 'hello');
+assert.equal((await sandbox.executeCommand('cat', [], {timeout: 1000})).exitCode, 0);
+assert.equal(await execution.output('cat').then(bytes => bytes.length), 0);
 
 let streamed = '';
 const echo = await sandbox.processes.spawn('read text; printf "%s" "$text"', {

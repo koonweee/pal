@@ -26,6 +26,17 @@ export class ComposeSandbox extends DockerSandbox {
         'Commands run in the shared persistent Debian desktop. Agent home is /home/pal. HTTP(S) internet access uses the configured proxy; private service networks are unavailable.',
     });
     this.computer = computer;
+    // Attach-only execution needs the configured cwd and core's stdin EOF contract.
+    const spawn = this.processes.spawn.bind(this.processes);
+    this.processes.spawn = async (command, options) => {
+      const handle = await spawn(command, {
+        cwd: this.workingDirectory,
+        ...options,
+      });
+      if (options?.stdinMode === 'ignore' && handle.exitCode === undefined)
+        await handle.closeStdin();
+      return handle;
+    };
   }
 
   override get container() {

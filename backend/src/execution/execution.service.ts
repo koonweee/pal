@@ -34,6 +34,7 @@ export class ExecutionService {
       maxBytes?: number;
     } = {},
   ) {
+    options.signal?.throwIfAborted();
     await this.sandbox._start();
     const handle = await this.sandbox.processes.spawn(
       [command, ...args]
@@ -46,14 +47,19 @@ export class ExecutionService {
         stdinMode: options.input === undefined ? 'ignore' : 'pipe',
       },
     );
-    if (options.input !== undefined) {
-      await handle.sendStdin(options.input);
-      await handle.closeStdin();
+    try {
+      if (options.input !== undefined) {
+        await handle.sendStdin(options.input);
+        await handle.closeStdin();
+      }
+      const result = await handle.wait();
+      options.signal?.throwIfAborted();
+      if (result.stdoutTruncated || result.stderrTruncated)
+        throw new Error('Execution output exceeds the operation limit');
+      return result;
+    } finally {
+      this.sandbox.processes.release(handle.pid);
     }
-    const result = await handle.wait();
-    if (result.stdoutTruncated || result.stderrTruncated)
-      throw new Error('Execution output exceeds the operation limit');
-    return result;
   }
 
   async output(
