@@ -204,7 +204,7 @@ def prepare(args):
         if password:
             statement = "alter role pal password '" + password.replace("'", "''") + "';\n"
             docker("exec", "-i", db, "psql", "-U", "pal", "-d", "pal", "-v", "ON_ERROR_STOP=1",
-                   input=statement.encode(), stdout=subprocess.DEVNULL)
+                   input=statement.encode(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     finally:
         docker("rm", "-f", db, stdout=subprocess.DEVNULL)
     manifest = {
