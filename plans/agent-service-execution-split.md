@@ -55,11 +55,11 @@ Exit criteria:
 
 Validation:
 
-- `npm run runtime:smoke` passes with published @mastra/docker 0.8.0 and core 1.76.0: streamed shell/stdin, failure status, timeout/abort, private file/environment isolation, parallel native code-mode RPC with task context, a forged forbidden-tool frame, runner cleanup, reconnection, and a user process surviving a replacement service process.
+- `npm run runtime:smoke` passes with published @mastra/docker 0.10.0 and core 1.76.0: streamed shell/stdin, failure status, timeout/abort, private file/environment isolation, parallel native code-mode RPC with task context, a forged forbidden-tool frame, runner cleanup, reconnection, and a user process surviving a replacement service process.
 - Matching service/execution UID is required because native runner directories are owner-only. Docker init reaps terminated children so native termination checks complete.
-- Provider 0.12.0 fails at import against core 1.76.0 despite its peer range (missing FactorySandbox). Pin 0.8.0; no core upgrade or custom transport.
+- Provider 0.12.0 fails at import against core 1.76.0 despite its peer range (missing FactorySandbox). Pin 0.10.0; no core upgrade or custom transport.
 - Backend build/lint and harness syntax checks pass. Existing Pal containers and data were untouched.
-- Attach-only execution supplies the configured cwd for native spawns. Provider 0.8 attaches stdin unconditionally; the adapter closes it for core's ignore mode using the native handle. The harness verifies cwd, immediate EOF, and release of completed internal process output. Core retains abort/process-group handling.
+- Attach-only execution supplies the configured cwd for native spawns. Provider 0.10 handles stdin ignore mode and streaming UTF-8 decoding. The harness verifies cwd, immediate EOF, and release of completed internal process output. Core retains abort/process-group handling.
 
 ### 2. Split Images, Deployment, and Lifecycle
 
@@ -172,6 +172,14 @@ Tool/guidance report:
 | Workspace file tools | Resolve in execution; canonical files stay private | Main/Task | Always on |
 | Shell/code mode/browser/computer | Use the persistent execution container | Task | Always on |
 | Execution guidance | Shared home and public HTTP(S) proxy boundary | Task | Guidance only |
+
+### Review fixes
+
+- [x] Reuse one running adapter across execution-container replacement; reject absent execution and reconnect when it returns.
+- [x] Serialize buffered attachment reads/copies across concurrent manifests, retain order, and recover after a failed copy.
+- [x] Use the published provider UTF-8 fix with the existing core and remove the superseded EOF workaround.
+
+Validation: backend build/lint, two execution regressions, four file HTTP checks, runtime:smoke, and runtime:stack:smoke pass with the unmodified published provider 0.10.0 and core 1.76.0. Execution replacement and concurrent-copy regressions reproduce their failures before the fixes.
 
 ## Tests
 

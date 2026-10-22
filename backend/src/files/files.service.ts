@@ -24,6 +24,7 @@ export class FilesService implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(FilesService.name);
   private timer?: NodeJS.Timeout;
   private cleanupRun?: Promise<void>;
+  private materialization: Promise<void> = Promise.resolve();
   constructor(
     @Inject(FilesRepository) private readonly repository: FilesRepository,
     @Inject(ApplicationFileStorage)
@@ -128,15 +129,17 @@ export class FilesService implements OnModuleInit, OnApplicationShutdown {
       throw new ApplicationError('invalid_input', 'Invalid attachment ID');
     const rows = await this.repository.getMany(ids);
     const byId = new Map(rows.map((row) => [row.id, row]));
-    return Promise.all(
-      ids.map(async (id) => {
-        const row = byId.get(id);
-        if (!row)
-          throw new ApplicationError(
-            'invalid_input',
-            'One or more attachments do not exist',
-          );
-        const path = this.execution.home + '/incoming/' + row.storageFilename;
+    const files: AgentFile[] = [];
+    for (const id of ids) {
+      const row = byId.get(id);
+      if (!row)
+        throw new ApplicationError(
+          'invalid_input',
+          'One or more attachments do not exist',
+        );
+      const path = this.execution.home + '/incoming/' + row.storageFilename;
+      // Keep one buffered read/copy across all concurrent manifest requests.
+      const pending = this.materialization.then(async () => {
         const handle = await this.storage.open(row.storageFilename);
         try {
           await this.execution.sandbox._start();
@@ -146,9 +149,12 @@ export class FilesService implements OnModuleInit, OnApplicationShutdown {
         } finally {
           await handle.close();
         }
-        return { ...attachmentView(row), path };
-      }),
-    );
+      });
+      this.materialization = pending.catch(() => {});
+      await pending;
+      files.push({ ...attachmentView(row), path });
+    }
+    return files;
   }
   async get(id: string) {
     const file = await this.repository.get(id);

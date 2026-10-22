@@ -21,7 +21,7 @@ Mastra's Docker provider supplies command execution and process streams. Compose
 
 Agent-service alone accesses Docker's socket. On Linux, set `PAL_DOCKER_GID` to the socket's group ID; Docker Desktop uses the default 0. Execution retains passwordless sudo inside its container, with no Docker socket or host administrative mounts.
 
-Native filesystem operations delegate to LocalFilesystem inside execution through Docker process stdin/stdout. This isolates path resolution from service-private files, including shared-home symlink races. File tools operate within the agent home; shell commands can access the execution container's other paths. Upload manifests point to copies in `/home/pal/incoming`. Publication reads files inside execution and stores immutable canonical copies in private service storage.
+Native filesystem operations delegate to LocalFilesystem inside execution through Docker process stdin/stdout. This isolates path resolution from service-private files, including shared-home symlink races. File tools operate within the agent home; shell commands can access the execution container's other paths. Upload manifests point to copies in `/home/pal/incoming`. Inspection-copy materialization runs one file at a time across concurrent requests. Publication reads files inside execution and stores immutable canonical copies in private service storage.
 
 ## Network Boundaries
 

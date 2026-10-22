@@ -13,6 +13,7 @@ import request from 'supertest';
 import { sql } from 'drizzle-orm';
 import { startTestApp, openStream, until } from './helpers.js';
 import { ExecutionService } from '../dist/execution/execution.service.js';
+import { ApplicationFileStorage } from '../dist/files/application-file-storage.js';
 import { FilesService } from '../dist/files/files.service.js';
 import { TasksService } from '../dist/tasks/tasks.service.js';
 import { ChatService } from '../dist/chat/chat.service.js';
@@ -53,6 +54,41 @@ it('uploads six files separately and preserves their order in history and downlo
     ),
   );
   const ids: string[] = uploads.map((response) => response.body.attachment.id);
+  const files = fixture.app.get(FilesService);
+  const storage = fixture.app.get(ApplicationFileStorage);
+  const sandbox = fixture.app.get(ExecutionService).sandbox;
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const originalWrite = sandbox.writeFiles.bind(sandbox);
+  const open = vi.spyOn(storage, 'open');
+  const write = vi
+    .spyOn(sandbox, 'writeFiles')
+    .mockImplementationOnce(async (...args) => {
+      entered.resolve();
+      await release.promise;
+      return originalWrite(...args);
+    });
+  const pending = Promise.all([
+    files.manifest(ids.slice(0, 3)),
+    files.manifest(ids.slice(3)),
+  ]);
+  try {
+    await entered.promise;
+    expect(open).toHaveBeenCalledTimes(1);
+    release.resolve();
+    const materialized = (await pending).flat();
+    expect(materialized.map((file) => file.id)).toEqual(ids);
+    expect(await readFile(materialized[0].path)).toEqual(bytes);
+
+    write.mockRejectedValueOnce(new Error('Copy interrupted'));
+    await expect(files.manifest([ids[0]])).rejects.toThrow('Copy interrupted');
+    expect((await files.manifest([ids[0]]))[0].id).toBe(ids[0]);
+  } finally {
+    release.resolve();
+    await pending.catch(() => {});
+    open.mockRestore();
+    write.mockRestore();
+  }
   const input = { idempotencyKey: randomUUID(), text: '', attachmentIds: ids };
   const sent = (
     await request(fixture.url).post('/chat/messages').send(input).expect(201)

@@ -26,17 +26,10 @@ export class ComposeSandbox extends DockerSandbox {
         'Commands run in the shared persistent Debian desktop. Agent home is /home/pal. HTTP(S) internet access uses the configured proxy; private service networks are unavailable.',
     });
     this.computer = computer;
-    // Attach-only execution needs the configured cwd and core's stdin EOF contract.
+    // Compose-attached containers use the configured cwd for native spawns.
     const spawn = this.processes.spawn.bind(this.processes);
-    this.processes.spawn = async (command, options) => {
-      const handle = await spawn(command, {
-        cwd: this.workingDirectory,
-        ...options,
-      });
-      if (options?.stdinMode === 'ignore' && handle.exitCode === undefined)
-        await handle.closeStdin();
-      return handle;
-    };
+    this.processes.spawn = (command, options) =>
+      spawn(command, { cwd: this.workingDirectory, ...options });
   }
 
   override get container() {
@@ -45,19 +38,26 @@ export class ComposeSandbox extends DockerSandbox {
   }
 
   override async start() {
+    await this.attach();
+  }
+
+  private async attach() {
     const matches = await this.client.listContainers({
       filters: { label: [`mastra.sandbox.id=${this.id}`] },
     });
-    if (matches.length !== 1)
+    if (matches.length !== 1) {
+      this.attached = undefined;
+      this.status = 'error';
       throw new Error('Expected one running Compose execution container');
+    }
     this.attached = this.client.getContainer(matches[0].Id);
     this.processes.setContainer(this.attached);
   }
 
   override async ensureRunning() {
-    // A replaced Compose container has a new ID; resolve the stable label per operation.
-    await this.start();
-    this.status = 'running';
+    // Mastra wraps start() and caches running state; resolve replacement IDs directly.
+    if (this.status === 'running') await this.attach();
+    else await super.ensureRunning();
   }
 
   override async writeFiles(
