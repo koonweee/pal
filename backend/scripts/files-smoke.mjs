@@ -155,17 +155,24 @@ async function upload(filename, bytes, type) {
 async function finalFor(taskId, after = 0) {
   const end = Date.now() + 210000;
   while (Date.now() < end) {
-    const { messages } = await json('/chat/history?limit=100');
-    const output = messages.find(
-      (message) =>
-        (taskId === null
-          ? !message.taskId
-          : message.taskId && (!taskId || message.taskId === taskId)) &&
-        message.role === 'assistant' &&
-        message.phase === 'final_answer' &&
-        message.sequence > after,
-    );
-    if (output) return output;
+    const ids =
+      taskId === null
+        ? [null]
+        : taskId
+          ? [taskId]
+          : (await json('/tasks?limit=100')).tasks.map((task) => task.id);
+    for (const id of ids) {
+      const { messages } = await json(
+        '/chat/history?limit=100' + (id ? '&taskId=' + id : ''),
+      );
+      const output = messages.find(
+        (message) =>
+          message.role === 'assistant' &&
+          (id === null || message.phase === 'final_answer') &&
+          message.sequence > after,
+      );
+      if (output) return output;
+    }
     await delay(500);
   }
   throw new Error(taskId === null ? 'No Main final' : 'No task final');
@@ -174,7 +181,7 @@ try {
   await readFile(config.PAL_AGENT_AUTH_PATH); // Check availability without printing credentials.
   await admin.query('CREATE DATABASE "' + databaseName + '"');
   databaseCreated = true;
-  // ConfigModule validates process values while the test overrides all providers.
+  // ConfigModule validates the isolated test database and private upload paths.
   process.env.DATABASE_URL = databaseUrl.toString();
   process.env.PAL_UPLOAD_DIR = config.PAL_UPLOAD_DIR;
   process.env.PAL_DESKTOP_ENABLED = 'false';
@@ -301,7 +308,7 @@ try {
     observation: { messageTokens: 30000 },
   });
   console.log(
-    'PASS: real HTTP upload, Main read-only document/image inspection, native worker reading, structured file delivery, shared final, and download',
+    'PASS: real HTTP upload, Main read-only document/image inspection, native worker reading, structured Task file delivery and download',
   );
   await memory.settled();
   await storage.close();

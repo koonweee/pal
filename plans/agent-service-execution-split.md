@@ -2,7 +2,7 @@
 
 ## Status
 
-Blocked — awaiting the independent device login for live-model verification.
+Done
 
 ## Goal
 
@@ -107,7 +107,7 @@ Validation for milestones 2–3:
 - Backend build/lint, focused browser/discovery tests, 12 affected agent/MCP integration tests, four file HTTP tests, and frontend check/check:ui/trim pass.
 - Native LocalFilesystem operations execute in the execution namespace to avoid backend symlink/path races. Docker stdin/stdout supplies the transport; there is no execution server. The adapter uses the exported Docker process manager's container-binding seam because the provider lacks an attach-only lifecycle.
 - Execution internet access uses Squid in the existing web container. Proxy-aware public HTTP(S) works; software that ignores proxy settings has no direct route.
-- Existing Pal containers and volumes remain untouched. Migration and legacy smoke-script work remain below.
+- Existing Pal containers and volumes remain untouched.
 
 ### 4. Preserve Files and Migrate Existing State
 
@@ -142,7 +142,7 @@ Validation for milestone 4:
 Implementation tasks:
 
 - [x] Run the focused split-runtime harness and existing relevant browser, worker, file, MCP/code-mode, and desktop smoke checks.
-- [ ] Verify the retained live-model file and MCP probes with the fresh independent test login.
+- [x] Verify the retained live-model file and MCP probes with the fresh independent test login.
 - [x] Verify PWA upload -> agent inspection -> generated deliverable -> download, plus VNC login/session persistence and backend restart.
 - [x] Remove superseded local-execution branches and duplicate configuration. Keep host builds/tests supported.
 - [x] Update architecture/backend.md, architecture/deployment.md, .env.example, scripts, and relevant plan status after validation.
@@ -159,7 +159,8 @@ Validation for milestone 5:
 - Native runtime, full split stack, and native MCP acceptance pass. Coverage includes real HTTP MCP requests through remote code mode, file upload/native read_file/publication/download, PWA SSE, noVNC HTTP/WebSocket, browser/worker ownership, every computer method, desktop persistence, and backend/gateway restart during execution outage.
 - Thirteen affected controlled-model/browser/MCP service tests and four file HTTP regressions pass. Backend build/lint and frontend check/check:ui/trim pass.
 - The actual dev-local config/up/status/rebuild/down commands pass on isolated ports and volumes, preserving the execution container and an unrelated process.
-- Default smoke commands use deterministic fixtures and actual tools/protocols. Retained live-model probes run with --agent and PAL_SMOKE_AUTH_PATH; the available copied test login was rejected with 401, so live-model verification awaits the fresh independent test login.
+- Default smoke commands use deterministic fixtures and actual tools/protocols. Live-model files:smoke -- --agent passes PDF/image inspection, native worker reading, Task file delivery/download, memory compression, and reopening the original attachment after restart. Live-model mcp:smoke -- --agent passes Main acknowledgment, Task discovery, service calls, task reuse, and parallel native remote code mode using an independent private test login.
+- The retained model fixtures follow current Main sendToUser and Task-history contracts. The MCP fixture explicitly requests acknowledgment before delegation and reports tool failures.
 - Production contains no LocalSandbox/X11Sandbox fallback. Host builds and controlled tests remain supported. Existing user containers and volumes remain unchanged.
 
 Tool/guidance report:

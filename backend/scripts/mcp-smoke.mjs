@@ -20,6 +20,7 @@ import {
   MAIN_RESOURCE_ID,
 } from '../dist/agent/main-session.js';
 import { chatgptModel } from '../dist/agent/chatgpt-model.js';
+import { sendToUserTool } from '../dist/agent/send-to-user.tool.js';
 import { mainTaskTools } from '../dist/agent/task-tools.js';
 import { toolsOnlyFetch } from '../dist/mcp/tools-only-fetch.js';
 import { TaskToolDiscoveryProcessor } from '../dist/agent/task-tool-discovery.processor.js';
@@ -52,6 +53,7 @@ const threadId = 'pal-task:' + taskId;
 const runs = [];
 const taskPublications = [];
 const mainPublications = [];
+const mainEvents = [];
 const taskToolCalls = [];
 let main;
 let failed = false;
@@ -113,19 +115,27 @@ try {
       semanticRecall: false,
       workingMemory: { enabled: false },
     },
-    tools: mainTaskTools(
-      { search: async () => ({ tasks: [], after: null }) },
-      {},
-      async (input) => {
-        await dispatch(input.message);
-        return { taskId };
-      },
-    ),
-    publish: async (output) => {
-      if (output.text) {
-        acknowledgedAt ??= Date.now();
-        mainPublications.push(output.text);
-      }
+    mainContext: async () =>
+      'Enabled additional channels: []. Connected service: fixture.',
+    tools: {
+      ...mainTaskTools(
+        { search: async () => ({ tasks: [], after: null }) },
+        {},
+        async (input) => {
+          await dispatch(input.message);
+          return { taskId };
+        },
+      ),
+      sendToUser: sendToUserTool(
+        async (output) => {
+          acknowledgedAt ??= Date.now();
+          mainPublications.push(output.text);
+          return { sequence: mainPublications.length };
+        },
+        async () => {
+          throw new Error('Fixture expects a message acknowledgment');
+        },
+      ),
     },
     task: {
       instructions:
@@ -178,14 +188,24 @@ try {
     },
     onEvent: (event) => {
       if (event.type === 'error') failed = true;
+      if (event.type === 'tool_start')
+        mainEvents.push({ type: event.type, tool: event.toolName });
+      if (event.type === 'tool_end' && event.isError)
+        mainEvents.push({ type: event.type, error: event.result });
+      if (event.type === 'agent_end')
+        mainEvents.push({ type: event.type, reason: event.reason });
     },
   });
   await main.session.sendMessage({
-    content: 'Please check my balance in the connected fixture service.',
+    content:
+      'Please acknowledge briefly, then have a task check my balance in the connected fixture service.',
   });
   await Promise.all(runs);
   assert.equal(failed, false);
-  assert.ok(acknowledgedAt, 'Main did not acknowledge');
+  assert.ok(
+    acknowledgedAt,
+    'Main did not acknowledge: ' + JSON.stringify(mainEvents),
+  );
   assert.ok(remote.toolCalls >= 1, 'Task did not call MCP');
   assert.ok(
     taskPublications.some(
