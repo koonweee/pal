@@ -195,7 +195,12 @@ try {
   if (process.argv.includes('--agent')) {
     const { default: pg } = await import('pg');
     const { Pool } = pg;
-    const { createMainSession } = await import('../dist/agent/main-session.js');
+    const { createMainSession, MAIN_RESOURCE_ID } =
+      await import('../dist/agent/main-session.js');
+    const { RequestContext, MASTRA_THREAD_ID_KEY, MASTRA_RESOURCE_ID_KEY } =
+      await import('@mastra/core/request-context');
+    const { loadAgentInstructions } =
+      await import('../dist/agent/agent-instructions.js');
     const { chatgptModel } = await import('../dist/agent/chatgpt-model.js');
     const url = new URL(process.env.TEST_DATABASE_URL);
     pool = new Pool({ connectionString: url.toString() });
@@ -219,18 +224,34 @@ try {
         semanticRecall: false,
         workingMemory: { enabled: false },
       },
-      publish: async (text) => {
-        publications.push(text);
-      },
-      onEvent: (event) => {
-        if (event.type === 'tool_start') toolNames.push(event.toolName);
+      onEvent: () => {},
+      task: {
+        instructions: await loadAgentInstructions('task'),
+        tools: {},
+        publish: async (output) => {
+          publications.push(output.text);
+        },
       },
     });
     const before = events.length;
-    await main.session.sendMessage({
-      content:
-        'Use only computer tools for this validation. Take a screenshot of the open Chromium page, read the visible code, type that exact code into the Message text box, click Confirm, then report the code. Do not read files, run shell commands, or inspect page source.',
-    });
+    const threadId = 'pal-task:' + randomUUID();
+    const requestContext = new RequestContext([
+      [MASTRA_THREAD_ID_KEY, threadId],
+      [MASTRA_RESOURCE_ID_KEY, MAIN_RESOURCE_ID],
+    ]);
+    const accepted = await main.taskAgent.sendMessage(
+      'Use only computer tools for this validation. Take a screenshot of the open Chromium page, read the visible code, type that exact code into the Message text box, click Confirm, then report the code. Do not read files, run shell commands, or inspect page source.',
+      {
+        resourceId: MAIN_RESOURCE_ID,
+        threadId,
+        ifIdle: { streamOptions: { requestContext, maxSteps: 15 } },
+      },
+    ).accepted;
+    assert.equal(accepted.action, 'wake');
+    for await (const chunk of accepted.output.fullStream) {
+      if (chunk.type === 'tool-call') toolNames.push(chunk.payload.toolName);
+      assert.notEqual(chunk.type, 'error', 'Task generation failed');
+    }
     assert.ok(
       events
         .slice(before)

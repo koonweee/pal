@@ -435,7 +435,6 @@ try {
         semanticRecall: false,
         workingMemory: { enabled: false },
       },
-      publish: async () => {},
       onEvent: () => {},
       task: {
         instructions:

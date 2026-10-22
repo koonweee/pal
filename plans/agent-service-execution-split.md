@@ -143,6 +143,7 @@ Implementation tasks:
 
 - [x] Run the focused split-runtime harness and existing relevant browser, worker, file, MCP/code-mode, and desktop smoke checks.
 - [x] Verify the retained live-model file and MCP probes with the fresh independent test login.
+- [x] Verify the optional desktop model probe against the current Task publication contract.
 - [x] Verify PWA upload -> agent inspection -> generated deliverable -> download, plus VNC login/session persistence and backend restart.
 - [x] Remove superseded local-execution branches and duplicate configuration. Keep host builds/tests supported.
 - [x] Update architecture/backend.md, architecture/deployment.md, .env.example, scripts, and relevant plan status after validation.
@@ -160,6 +161,7 @@ Validation for milestone 5:
 - Thirteen affected controlled-model/browser/MCP service tests and four file HTTP regressions pass. Backend build/lint and frontend check/check:ui/trim pass.
 - The actual dev-local config/up/status/rebuild/down commands pass on isolated ports and volumes, preserving the execution container and an unrelated process.
 - Default smoke commands use deterministic fixtures and actual tools/protocols. Live-model files:smoke -- --agent passes PDF/image inspection, native worker reading, Task file delivery/download, memory compression, and reopening the original attachment after restart. Live-model mcp:smoke -- --agent passes Main acknowledgment, Task discovery, service calls, task reuse, and parallel native remote code mode using an independent private test login.
+- Live-model desktop:smoke -- --agent passes a Task reading a random screen-only code and submitting it through native computer tools, with no shell/file tool calls.
 - The retained model fixtures follow current Main sendToUser and Task-history contracts. The MCP fixture explicitly requests acknowledgment before delegation and reports tool failures.
 - Production contains no LocalSandbox/X11Sandbox fallback. Host builds and controlled tests remain supported. Existing user containers and volumes remain unchanged.
 
