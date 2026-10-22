@@ -3,10 +3,6 @@ services:
     environment:
       PAL_PUBLIC_URL: ${PAL_DEV_PUBLIC_URL:-http://localhost:5173}
       PAL_DESKTOP_VIEWER_URL: ${PAL_DEV_PUBLIC_URL:-http://localhost:5173}/desktop/v2/vnc.html
-      PAL_EXECUTION_ID: pal-dev-execution
-  execution:
-    labels:
-      mastra.sandbox.id: pal-dev-execution
   web:
     build:
       args:
@@ -27,7 +23,7 @@ services:
       PAL_DEV_ALLOWED_HOST: ${PAL_DEV_ALLOWED_HOST:-}
       CHOKIDAR_USEPOLLING: 'true'
     ports:
-      - '127.0.0.1:5173:5173'
+      - '127.0.0.1:${PAL_DEV_FRONTEND_PORT:-5173}:5173'
     volumes:
       - ../frontend:/opt/pal-web
       - frontend_node_modules:/opt/pal-web/node_modules

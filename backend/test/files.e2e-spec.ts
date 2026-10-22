@@ -5,12 +5,14 @@ import {
   writeFile,
   truncate,
   symlink,
+  utimes,
 } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { UserVisibleMessage } from '../dist/chat/chat.types.js';
 import request from 'supertest';
 import { sql } from 'drizzle-orm';
 import { startTestApp, openStream, until } from './helpers.js';
+import { ExecutionService } from '../dist/execution/execution.service.js';
 import { FilesService } from '../dist/files/files.service.js';
 import { TasksService } from '../dist/tasks/tasks.service.js';
 import { ChatService } from '../dist/chat/chat.service.js';
@@ -93,7 +95,9 @@ it('uploads six files separately and preserves their order in history and downlo
 });
 
 it('rejects oversized or malformed uploads and removes abandoned attachments', async () => {
-  const before = (await readdir(fixture.uploads)).length;
+  const before = (await readdir(fixture.uploads)).filter(
+    (name) => name !== 'incoming',
+  ).length;
   await request(fixture.url)
     .post('/files')
     .attach('file', Buffer.alloc(25_000_001), 'large.bin')
@@ -107,19 +111,40 @@ it('rejects oversized or malformed uploads and removes abandoned attachments', a
     .post('/files')
     .field('unexpected', 'field')
     .expect(400);
-  expect((await readdir(fixture.uploads)).length).toBe(before);
+  expect(
+    (await readdir(fixture.uploads)).filter((name) => name !== 'incoming')
+      .length,
+  ).toBe(before);
   const uploaded = await request(fixture.url)
     .post('/files')
     .attach('file', Buffer.from('orphan'), 'orphan.txt')
     .expect(201);
+  const files = fixture.app.get(FilesService);
+  const [copy] = await files.manifest([uploaded.body.attachment.id]);
+  const old = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+  await utimes(copy.path, old, old);
+  const unrelated = join(copy.path, '..', 'user-notes.txt');
+  await writeFile(unrelated, 'Keep user files');
+  await utimes(unrelated, old, old);
   await fixture.database.db.execute(
     sql`update attachments set created_at = now() - interval '2 days' where id = ${uploaded.body.attachment.id}`,
   );
+  const unavailable = vi
+    .spyOn(fixture.app.get(ExecutionService).filesystem, 'readdir')
+    .mockRejectedValueOnce(new Error('Execution is stopped'));
+  await files.cleanup();
+  expect(await readFile(copy.path, 'utf8')).toBe('orphan');
+  unavailable.mockRestore();
   await fixture.app.get(FilesService).cleanup();
   await request(fixture.url)
     .get(`/files/${uploaded.body.attachment.id}/download`)
     .expect(404);
-  expect((await readdir(fixture.uploads)).length).toBe(before);
+  expect(
+    (await readdir(fixture.uploads)).filter((name) => name !== 'incoming')
+      .length,
+  ).toBe(before);
+  await expect(readFile(copy.path)).rejects.toThrow();
+  expect(await readFile(unrelated, 'utf8')).toBe('Keep user files');
 });
 
 it('imports immutable outputs, retains delivered files through messages, and expires unsent outputs', async () => {

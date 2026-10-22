@@ -31,13 +31,14 @@
     "agent:login": "npm run build && node dist/agent/login.js",
     "agent:smoke": "npm run build && node scripts/agent-smoke.mjs",
     "preferences:smoke": "npm run build && node scripts/preferences-smoke.mjs",
-    "mcp:smoke": "npm run build && node scripts/mcp-smoke.mjs",
-    "desktop:smoke": "node scripts/desktop-smoke.mjs",
-    "browser:smoke": "node scripts/browser-smoke.mjs",
-    "workers:smoke": "node scripts/browser-smoke.mjs --workers",
-    "files:smoke": "npm run build && node scripts/files-smoke.mjs",
+    "mcp:smoke": "sh scripts/split-stack-smoke.sh mcp",
+    "desktop:smoke": "sh scripts/split-stack-smoke.sh desktop",
+    "browser:smoke": "sh scripts/split-stack-smoke.sh browser",
+    "workers:smoke": "sh scripts/split-stack-smoke.sh workers",
+    "files:smoke": "sh scripts/split-stack-smoke.sh files",
     "runtime:smoke": "sh scripts/split-runtime-smoke.sh",
-    "runtime:stack:smoke": "sh scripts/split-stack-smoke.sh"
+    "runtime:stack:smoke": "sh scripts/split-stack-smoke.sh",
+    "runtime:migration:smoke": "bash scripts/migration-smoke.sh"
   },
   "dependencies": {
     "@ai-sdk/openai": "3.0.124",

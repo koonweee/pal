@@ -18,6 +18,7 @@ const methods = new Set([
   'stat',
   'realpath',
 ]);
+process.stdin.setEncoding('utf8');
 let input = '';
 for await (const chunk of process.stdin) {
   input += chunk;

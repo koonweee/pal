@@ -34,8 +34,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      execution:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 2s
@@ -51,8 +49,10 @@ services:
     build:
       context: .
       target: execution
+      args:
+        PAL_EXECUTION_BASE: ${PAL_EXECUTION_BASE:-base}
     image: ${PAL_EXECUTION_IMAGE:-pal-execution-local}
-    hostname: pal
+    hostname: ${PAL_EXECUTION_HOSTNAME:-pal}
     labels:
       mastra.sandbox.id: ${PAL_EXECUTION_ID:-pal-execution}
     environment:
@@ -90,8 +90,6 @@ services:
       - "127.0.0.1:${PAL_WEB_PORT:-8080}:8080"
     networks: [service, execution]
     depends_on:
-      execution:
-        condition: service_healthy
       agent-service:
         condition: service_healthy
     healthcheck:

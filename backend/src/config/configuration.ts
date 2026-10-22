@@ -1,3 +1,4 @@
+import { AGENT_HOME } from '../execution/paths.js';
 import { resolve } from 'node:path';
 import { createPrivateKey, createECDH } from 'node:crypto';
 export function validateEnvironment(env: Record<string, unknown>) {
@@ -15,7 +16,8 @@ export function validateEnvironment(env: Record<string, unknown>) {
   const host = env.HOST ?? '127.0.0.1';
   if (typeof host !== 'string' || !host.trim())
     throw new Error('HOST must be a nonempty hostname or address');
-  const workingDirectory = env.PAL_AGENT_WORKING_DIR ?? './data/workspace';
+  const workingDirectory =
+    env.PAL_AGENT_WORKING_DIR ?? AGENT_HOME + '/workspace';
   if (typeof workingDirectory !== 'string' || !workingDirectory.trim())
     throw new Error('PAL_AGENT_WORKING_DIR must be a nonempty path');
   const desktopEnabled = env.PAL_DESKTOP_ENABLED ?? 'false';

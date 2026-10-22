@@ -16,7 +16,7 @@ Separate Pal's backend and agent orchestration from model-controlled execution u
 - Browser CLI and X11 operations run inside execution. Private CDP forwarding connects the service to Chromium.
 - Canonical attachments stay private; manifests materialize inspection copies in agent home and publication reads files through execution.
 - The full-stack smoke suite verifies browser/desktop actions, real PWA file exchange/SSE, network isolation, restart persistence, and API availability during execution outage.
-- Legacy-state migration and remaining legacy smoke-script adaptation are outstanding.
+- Offline migration prepares copied volumes and a sanitized execution base, retaining original state and protected backups for rollback. Browser, desktop, file, and native MCP smoke checks run in disposable Compose projects.
 
 ## Decisions and Scope
 
@@ -114,13 +114,13 @@ Validation for milestones 2–3:
 Implementation tasks:
 
 - [x] Keep canonical uploads and published files private. Materialize input copies in shared home before forwarding readable paths; recreate missing copies from canonical storage when needed.
-- [ ] Snapshot generated files into private storage on publication. Preserve file IDs, names, limits, delivery associations, and cleanup rules. Snapshots/IDs/limits/delivery pass; managed inspection-copy expiry cleanup remains.
+- [x] Snapshot generated files into private storage on publication. Preserve file IDs, names, limits, delivery associations, and cleanup rules. Managed inspection copies are reconciled on startup/hourly and retried after execution outages.
 - [x] Harden file imports and shared-home reads against path traversal, symlinks, ancestor replacement, special files, and concurrent modification. Prefer copying through execution-side file access where host-side resolution could expose service-private paths.
-- [ ] Inventory legacy absolute paths in application records, manifests, private conversation memory, browser configuration, and installed utilities. Define a one-time rewrite or execution-local compatibility mapping without mounting old service secrets into execution.
-- [ ] Back up PostgreSQL and persistent volumes; stop writers for migration. Preserve the old runtime image and container writable-layer changes so user-installed packages and configuration are recoverable.
-- [ ] Migrate agent home/workspace to the shared home; move provider authentication and canonical uploads to private service storage. Preserve ownership, browser encryption/keyring state, hostname-sensitive profile behavior, and installed tools.
-- [ ] Verify the migrated execution image/state contains no copied backend credentials, database environment, or service authentication files.
-- [ ] Retain old container/volumes and document an offline rollback that restores matching application/database/file state. Do not delete old state during acceptance.
+- [x] Inventory legacy absolute paths in application records, manifests, private conversation memory, browser configuration, and installed utilities. Define a one-time rewrite or execution-local compatibility mapping without mounting old service secrets into execution.
+- [x] Back up PostgreSQL and persistent volumes; stop writers for migration. Preserve the old runtime image and container writable-layer changes so user-installed packages and configuration are recoverable.
+- [x] Migrate agent home/workspace to the shared home; move provider authentication and canonical uploads to private service storage. Preserve ownership, browser encryption/keyring state, hostname-sensitive profile behavior, and installed tools.
+- [x] Verify the migrated execution image/state contains no copied backend credentials, database environment, or service authentication files.
+- [x] Retain old container/volumes and document an offline rollback that restores matching application/database/file state. Do not delete old state during acceptance.
 
 Exit criteria:
 
@@ -130,22 +130,45 @@ Exit criteria:
 - A malicious shared-home path cannot publish/read a private service sentinel.
 - Migration and rollback are rehearsed against disposable copies before changing the user's running stack.
 
+Validation for milestone 4:
+
+- npm run runtime:migration:smoke passes a complete offline copy and rollback with synthetic conversations, native memory and schedules, historical attachments, Chromium account state, keyring files, home/workspace data, jq, and an executable installed outside home.
+- The execution image and environment exclude backend application/authentication state. Target-only writes remain isolated from the original rollback state. Protected rehearsal archives remain under .local/migration-rehearsal-*.
+- Four file HTTP regressions pass, including deferred inspection-copy expiry, retry after execution returns, and preservation of user files. Native runtime checks reject concurrent publication reads and private-path symlink escapes.
+- Migration waits for PostgreSQL's final TCP listener. The rehearsal waits for Chromium profile shutdown and X11 readiness before restarting the browser.
 
 ### 5. Validate Parity and Remove Superseded Runtime Paths
 
 Implementation tasks:
 
-- [ ] Run the focused split-runtime harness and existing relevant browser, worker, file, MCP/code-mode, and desktop smoke checks.
-- [ ] Verify PWA upload -> agent inspection -> generated deliverable -> download, plus VNC login/session persistence and backend restart.
-- [ ] Remove superseded local-execution branches and duplicate configuration. Keep host builds/tests supported.
-- [ ] Update architecture/backend.md, architecture/deployment.md, .env.example, scripts, and relevant plan status after validation.
-- [ ] Record any tool/guidance changes in the completion report using the repository-required table.
+- [x] Run the focused split-runtime harness and existing relevant browser, worker, file, MCP/code-mode, and desktop smoke checks.
+- [ ] Verify the retained live-model file and MCP probes with the fresh independent test login.
+- [x] Verify PWA upload -> agent inspection -> generated deliverable -> download, plus VNC login/session persistence and backend restart.
+- [x] Remove superseded local-execution branches and duplicate configuration. Keep host builds/tests supported.
+- [x] Update architecture/backend.md, architecture/deployment.md, .env.example, scripts, and relevant plan status after validation.
+- [x] Record any tool/guidance changes in the completion report using the repository-required table.
 - [ ] Commit coherent validated changes. Deployment to an existing running stack remains a separately requested action.
 
 Exit criteria:
 
 - Required checks pass, current architecture documentation matches implementation, and all preserved workflows work on the split stack.
 - Migration backups remain available; no destructive cleanup is required for completion.
+
+Validation for milestone 5:
+
+- Native runtime, full split stack, and native MCP acceptance pass. Coverage includes real HTTP MCP requests through remote code mode, file upload/native read_file/publication/download, PWA SSE, noVNC HTTP/WebSocket, browser/worker ownership, every computer method, desktop persistence, and backend/gateway restart during execution outage.
+- Thirteen affected controlled-model/browser/MCP service tests and four file HTTP regressions pass. Backend build/lint and frontend check/check:ui/trim pass.
+- The actual dev-local config/up/status/rebuild/down commands pass on isolated ports and volumes, preserving the execution container and an unrelated process.
+- Default smoke commands use deterministic fixtures and actual tools/protocols. Retained live-model probes run with --agent and PAL_SMOKE_AUTH_PATH; the available copied test login was rejected with 401, so live-model verification awaits the fresh independent test login.
+- Production contains no LocalSandbox/X11Sandbox fallback. Host builds and controlled tests remain supported. Existing user containers and volumes remain unchanged.
+
+Tool/guidance report:
+
+| Tool/guidance | Change | Agent | Availability |
+| --- | --- | --- | --- |
+| Workspace file tools | Resolve in execution; canonical files stay private | Main/Task | Always on |
+| Shell/code mode/browser/computer | Use the persistent execution container | Task | Always on |
+| Execution guidance | Shared home and public HTTP(S) proxy boundary | Task | Guidance only |
 
 ## Tests
 
@@ -165,6 +188,7 @@ npm run build
 npm run lint
 npm run runtime:smoke
 npm run runtime:stack:smoke
+npm run runtime:migration:smoke
 npm run files:smoke
 npm run browser:smoke
 npm run workers:smoke

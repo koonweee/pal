@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import { randomUUID, randomInt } from 'node:crypto';
 import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
 import { deflateSync } from 'node:zlib';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
@@ -13,8 +12,7 @@ import { PostgresStore } from '@mastra/pg';
 import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import { AgentActivityService } from '../dist/agent/agent-activity.service.js';
 import { chatgptModel } from '../dist/agent/chatgpt-model.js';
-import { Test } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
+import { NestFactory } from '@nestjs/core';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { DatabaseService } from '../dist/database/database.service.js';
 import { configureApp } from '../dist/config/configure-app.js';
@@ -31,7 +29,7 @@ const databaseName = 'pal_files_' + randomUUID().replaceAll('-', '') + '_test';
 const databaseUrl = new URL(baseUrl);
 databaseUrl.pathname = '/' + databaseName;
 const admin = new Pool({ connectionString: baseUrl });
-const directory = await mkdtemp(join(tmpdir(), 'pal-files-smoke-'));
+const directory = await mkdtemp('/data/private/pal-files-smoke-');
 const code = 'FILE-' + randomUUID().slice(0, 8).toUpperCase();
 const palette = [
   ['red', [235, 35, 35]],
@@ -111,7 +109,7 @@ const config = validateEnvironment({
   ...process.env,
   DATABASE_URL: databaseUrl.toString(),
   PAL_UPLOAD_DIR: join(directory, 'uploads'),
-  PAL_AGENT_WORKING_DIR: join(directory, 'workspace'),
+  PAL_AGENT_WORKING_DIR: '/home/pal/workspace',
   PAL_AGENT_AUTH_PATH: resolve(
     process.env.PAL_AGENT_AUTH_PATH ?? './data/agent/auth.json',
   ),
@@ -121,13 +119,12 @@ const config = validateEnvironment({
 });
 async function start() {
   const { AppModule } = await import('../dist/app.module.js');
-  const module = await Test.createTestingModule({ imports: [AppModule] })
-    .overrideProvider(ConfigService)
-    .useValue(new ConfigService(config))
-    .compile();
-  const database = module.get(DatabaseService);
+  app = await NestFactory.create(AppModule, {
+    forceCloseConnections: true,
+    logger: ['error', 'warn'],
+  });
+  const database = app.get(DatabaseService);
   await migrate(database.db, { migrationsFolder: './migrations' });
-  app = module.createNestApplication({ forceCloseConnections: true });
   app.useLogger(['error', 'warn']);
   configureApp(app);
   await app.listen(0, '127.0.0.1');
@@ -180,6 +177,7 @@ try {
   // ConfigModule validates process values while the test overrides all providers.
   process.env.DATABASE_URL = databaseUrl.toString();
   process.env.PAL_UPLOAD_DIR = config.PAL_UPLOAD_DIR;
+  process.env.PAL_DESKTOP_ENABLED = 'false';
   await start();
   const document = await upload('input.pdf', pdf, 'application/pdf');
   const image = await upload('visual.png', png, 'image/png');

@@ -3,12 +3,15 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 backend_dir="$repo_root/backend"
-config_file="$backend_dir/.env.development"
+config_file="${PAL_DEV_ENV_FILE:-$backend_dir/.env.development}"
+compose_project="${PAL_DEV_PROJECT:-pal-dev-split}"
+frontend_port="${PAL_DEV_FRONTEND_PORT:-5173}"
 config_example="$backend_dir/.env.development.example"
 compose_files=(-f "$backend_dir/compose.yaml" -f "$backend_dir/compose.dev.yaml")
 state_dir="$repo_root/.local/dev-local"
+if [[ "$compose_project" != pal-dev-split ]]; then state_dir="$repo_root/.local/dev-local-$compose_project"; fi
 serve_state_file="$state_dir/serve"
-local_url="http://localhost:5173"
+local_url="http://localhost:$frontend_port"
 pwa_local_port="${PAL_DEV_PWA_PORT:-14173}"
 pwa_local_url="http://localhost:$pwa_local_port"
 command_name="${1:-up}"
@@ -101,7 +104,9 @@ compose() {
   PAL_DEV_PUBLIC_URL="$public_url" \
   PAL_DEV_ALLOWED_HOST="$allowed_host" \
   PAL_DEV_PWA_PORT="$pwa_local_port" \
-    docker compose --project-name pal-dev "${compose_files[@]}" "$@"
+  PAL_DEV_FRONTEND_PORT="$frontend_port" \
+  PAL_EXECUTION_ID="$compose_project-execution" \
+    docker compose --env-file "$config_file" --project-name "$compose_project" "${compose_files[@]}" "$@"
 }
 
 start_pwa_stage() {

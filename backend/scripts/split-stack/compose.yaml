@@ -1,6 +1,9 @@
 services:
   agent-service:
     env_file: !reset []
+    volumes:
+      - ./scripts:/opt/pal/scripts:ro
+      - ./test/mcp-fixture.ts:/opt/pal/test/mcp-fixture.ts:ro
     environment:
       DATABASE_URL: postgresql://pal:pal@postgres:5432/pal_split_test
       PAL_PUBLIC_URL: http://localhost:14080

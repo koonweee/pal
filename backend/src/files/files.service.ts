@@ -170,9 +170,26 @@ export class FilesService implements OnModuleInit, OnApplicationShutdown {
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const expired = await this.repository.removeExpired(cutoff);
     for (const file of expired) await this.storage.remove(file.storageFilename);
-    await this.storage.cleanupOrphans(
-      await this.repository.storageNames(),
-      cutoff,
-    );
+    const known = await this.repository.storageNames();
+    await this.storage.cleanupOrphans(known, cutoff);
+    // Reconcile the directory each time so execution outages never lose cleanup work.
+    // Native contained operations run inside execution; never follow agent paths on the host.
+    try {
+      for (const file of await this.execution.filesystem.readdir('incoming')) {
+        if (
+          file.type === 'file' &&
+          /^[0-9a-f-]{36}(\.[a-z0-9]{1,16})?$/.test(file.name) &&
+          !known.has(file.name)
+        ) {
+          const path = 'incoming/' + file.name;
+          if ((await this.execution.filesystem.stat(path)).modifiedAt < cutoff)
+            await this.execution.filesystem.deleteFile(path);
+        }
+      }
+    } catch {
+      this.logger.warn(
+        'Inspection-copy cleanup deferred until execution is available',
+      );
+    }
   }
 }

@@ -57,8 +57,32 @@ try {
   );
   assert.equal(desktop.status(), 200);
   assert.match(await desktop.text(), /noVNC/);
+  const banner = await page.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        const socket = new WebSocket(
+          'ws://127.0.0.1:14080/desktop/v2/websockify',
+        );
+        socket.binaryType = 'arraybuffer';
+        const timer = setTimeout(() => {
+          socket.close();
+          reject(new Error('noVNC WebSocket timed out'));
+        }, 5000);
+        socket.onerror = () => {
+          clearTimeout(timer);
+          reject(new Error('noVNC WebSocket failed'));
+        };
+        socket.onmessage = (event) => {
+          clearTimeout(timer);
+          const text = new TextDecoder().decode(event.data);
+          socket.close();
+          resolve(text);
+        };
+      }),
+  );
+  assert.match(banner, /^RFB /);
   console.log(
-    'PASS: real PWA history/SSE, immutable file download, upload UI, and desktop viewer routing',
+    'PASS: real PWA history/SSE, immutable file download, upload UI, and desktop viewer HTTP/WebSocket routing',
   );
 } finally {
   await browser.close();

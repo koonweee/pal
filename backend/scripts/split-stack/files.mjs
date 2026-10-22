@@ -1,9 +1,16 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
+import {
+  Workspace,
+  createWorkspaceTools,
+  WORKSPACE_TOOLS,
+} from '@mastra/core/workspace';
+import { noopObserve } from '@mastra/core/tools';
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { DatabaseModule } from './dist/database/database.module.js';
 import { EventsModule } from './dist/events/events.module.js';
 import { FilesModule } from './dist/files/files.module.js';
@@ -28,6 +35,10 @@ const app = await NestFactory.createApplicationContext(FileCheckModule, {
 });
 const files = app.get(FilesService);
 const execution = app.get(ExecutionService);
+const workspace = new Workspace({
+  filesystem: execution.filesystem,
+  sandbox: execution.sandbox,
+});
 try {
   const input = new FormData();
   input.append('file', new Blob(['Original split-stack input']), 'input.txt');
@@ -38,6 +49,13 @@ try {
   assert.equal(response.status, 201);
   const uploaded = await response.json();
   const [manifest] = await files.manifest([uploaded.attachment.id]);
+  await workspace.init();
+  const native = await createWorkspaceTools(workspace);
+  const read = await native[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+    { path: manifest.path },
+    { workspace, observe: noopObserve },
+  );
+  assert.match(JSON.stringify(read), /Original split-stack input/);
   assert.equal(
     await execution.filesystem.readFile(manifest.path, { encoding: 'utf8' }),
     'Original split-stack input',
@@ -74,10 +92,16 @@ try {
     /not readable/,
   );
   await assert.rejects(execution.filesystem.readFile('/home/pal/private-link'));
+  const orphan = 'incoming/' + randomUUID() + '.txt';
+  await execution.filesystem.writeFile(orphan, 'Expired');
+  await execution.output('touch', ['-d', '2 days ago', '/home/pal/' + orphan]);
+  await files.cleanup();
+  assert.equal(await execution.filesystem.exists(orphan), false);
   console.log(
     'PASS: HTTP upload, execution inspection, immutable publication/download, and private-path rejection',
   );
 } finally {
   await app.close();
+  await workspace.destroy();
   await execution.sandbox._stop();
 }

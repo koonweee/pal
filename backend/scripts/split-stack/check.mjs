@@ -50,10 +50,16 @@ try {
   ]);
   await computer.type('Split café');
   await computer.press('End');
-  const typed = await browser.command('split-check', [
-    'eval',
-    'document.getElementById("fixture").value',
-  ]);
+  let typed;
+  const deadline = Date.now() + 5000;
+  do {
+    typed = await browser.command('split-check', [
+      'eval',
+      'document.getElementById("fixture").value',
+    ]);
+    if (JSON.stringify(typed.data).includes('Split café')) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  } while (Date.now() < deadline);
   assert.match(JSON.stringify(typed.data), /Split café/);
   const desktop = await computer.screenshot();
   assert.equal(desktop.data.subarray(1, 4).toString(), 'PNG');

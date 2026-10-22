@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+ARG PAL_EXECUTION_BASE=base
 FROM node:24.15.0-trixie-slim@sha256:291be77873bc04731968cacf82f0fcef17cee8cf200c6b6951e2bcab41560eb7 AS base
 
 FROM base AS build
@@ -22,15 +23,16 @@ USER node
 EXPOSE 3000
 CMD ["node", "dist/main.js"]
 
-FROM base AS execution
-RUN apt-get update && apt-get install -y --no-install-recommends \
+FROM ${PAL_EXECUTION_BASE} AS execution
+RUN mkdir -p /tmp /run /root /home && chmod 1777 /tmp \
+    && apt-get update && apt-get install -y --no-install-recommends \
     bash ca-certificates curl git python3 python3-venv ripgrep sudo socat \
     xfce4-session xfwm4 xfce4-panel xfdesktop4 xfce4-settings xfce4-terminal thunar devilspie2 picom papirus-icon-theme librsvg2-common \
     dbus-x11 tigervnc-standalone-server novnc websockify supervisor xdotool x11-utils x11-xserver-utils x11-xkb-utils \
     chromium chromium-sandbox fonts-dejavu fonts-liberation fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji python3-pil \
     && rm -rf /var/lib/apt/lists/* \
-    && groupmod -n pal node \
-    && usermod -l pal -d /home/pal node \
+    && if ! id pal >/dev/null 2>&1; then groupmod -n pal node; usermod -l pal node; fi \
+    && usermod -d /home/pal pal \
     && printf 'pal ALL=(ALL) NOPASSWD: ALL\n' > /etc/sudoers.d/pal \
     && chmod 0440 /etc/sudoers.d/pal \
     && mkdir -p /home/pal/tmp /home/pal/workspace /home/pal/incoming \
@@ -42,9 +44,13 @@ COPY --from=build /opt/pal/node_modules/ node_modules/
 COPY desktop/ desktop/
 COPY browser-extension/ browser-extension/
 COPY execution/ execution/
-RUN git apply --unsafe-paths --directory=/usr/share/novnc desktop/novnc-trackpad.patch \
+RUN (git apply --reverse --check --unsafe-paths --directory=/usr/share/novnc desktop/novnc-trackpad.patch 2>/dev/null || git apply --unsafe-paths --directory=/usr/share/novnc desktop/novnc-trackpad.patch) \
     && desktop/profile/install.sh \
-    && desktop/browser-install.sh
+    && desktop/browser-install.sh \
+    && mkdir -p /data \
+    && ln -s /home/pal /data/home \
+    && ln -s /home/pal/workspace /data/workspace \
+    && ln -s /home/pal/incoming /data/uploads
 ENV DISPLAY=:1 XDG_RUNTIME_DIR=/tmp/pal-runtime \
     DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/pal-runtime/bus \
     XDG_CURRENT_DESKTOP=XFCE XDG_SESSION_TYPE=x11 LANG=C.UTF-8

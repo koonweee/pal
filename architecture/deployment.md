@@ -55,6 +55,11 @@ TigerVNC supplies a shared 1200×900 X11 display. Supervisor owns D-Bus, Xfce, n
 
 Chromium uses `/home/pal/.config/chromium` by default and the stable `pal` hostname. The bundled launcher loads the task-groups extension and retains Chromium's sandbox through the repository's seccomp profile. Raw CDP listens on execution loopback; private forwarding connects BrowserService through web. Chromium starts on demand. Browser/group cleanup preserves unrelated tabs. Cookies and profile state persist; browser restart begins fresh runtime groups.
 
+## Existing state
+
+[Offline migration](../backend/MIGRATION.md) prepares a new project from a stopped legacy runtime. Protected backups retain PostgreSQL, the legacy data volume, image identity, container configuration, and exported writable filesystem. A sanitized import supplies the execution image base; provider authentication and canonical files go to private service storage. Historical /data/home, /data/workspace, and /data/uploads paths resolve inside execution. The original containers and volumes remain available for rollback.
+
+Managed incoming copies are reconciled against canonical attachment names on startup and hourly. Missing execution defers that reconciliation without blocking the API.
 
 ## Web Push
 

@@ -1,10 +1,10 @@
+import { ConfigService } from '@nestjs/config';
+import { ExecutionService } from '../dist/execution/execution.service.js';
 import { loadAgentInstructions } from '../dist/agent/agent-instructions.js';
 import 'dotenv/config';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { MCPClient } from '@mastra/mcp';
 import { createCodeModeInstructions, generateStubs } from '@mastra/core/tools';
@@ -32,7 +32,9 @@ const connectionString =
 if (!new URL(connectionString).pathname.endsWith('_test'))
   throw new Error('Smoke database name must end in _test');
 const schemaName = 'mcp_smoke_' + randomUUID().replaceAll('-', '');
-const workingDirectory = await mkdtemp(join(tmpdir(), 'pal-mcp-smoke-'));
+const execution = new ExecutionService(new ConfigService(process.env));
+const workingDirectory = '/home/pal/tmp/' + schemaName;
+await execution.filesystem.mkdir(workingDirectory, { recursive: true });
 const remote = await startMcpFixture();
 const client = new MCPClient({
   id: schemaName,
@@ -99,6 +101,8 @@ try {
     connectionString,
     schemaName,
     workingDirectory,
+    sandbox: execution.sandbox,
+    filesystem: execution.filesystem,
     model: chatgptModel(
       process.env.PAL_AGENT_MODEL ?? 'gpt-6.1-sol',
       resolve(process.env.PAL_AGENT_AUTH_PATH ?? './data/agent/auth.json'),
@@ -227,7 +231,8 @@ try {
   await main?.close();
   await client.disconnect();
   await remote.close();
-  await rm(workingDirectory, { recursive: true, force: true });
+  await execution.filesystem.rmdir(workingDirectory, { recursive: true });
+  await execution.sandbox._stop();
   const pool = new Pool({ connectionString });
   await pool.query(`DROP SCHEMA IF EXISTS ${schemaName} CASCADE`);
   await pool.end();
