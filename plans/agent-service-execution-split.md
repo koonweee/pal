@@ -181,6 +181,29 @@ Tool/guidance report:
 
 Validation: backend build/lint, two execution regressions, four file HTTP checks, runtime:smoke, and runtime:stack:smoke pass with the unmodified published provider 0.10.0 and core 1.76.0. Execution replacement and concurrent-copy regressions reproduce their failures before the fixes.
 
+## Post-Migration Cleanup (Deferred)
+
+The refactor is complete. This follow-up starts after dev and production migrations are accepted and their rollback windows close. Fresh installations use the normal image and paths. Keep migration tooling separate, path translation centralized in execution/paths.ts, and Docker compatibility symlinks in one explicit block; no additional runtime mode or abstraction is needed.
+
+Removal checklist:
+
+| Seam | Removal condition and scope |
+| --- | --- |
+| Migration tooling | Delete scripts/migrate-runtime.py, backend/scripts/migration/, backend/scripts/migration-smoke.sh, and runtime:migration:smoke after both cutovers are accepted. |
+| Migration documentation | Remove backend/MIGRATION.md and obsolete README, deployment, environment-example, and validation-command references with the tooling. |
+| Historical path translation | Inventory persisted records, schedules, conversation/memory references, browser configuration, and installed scripts for /data/home, /data/workspace, and /data/uploads. Apply targeted rewrites; remove executionPath and its call sites once retained workflows no longer require those paths. Preserve AGENT_HOME. |
+| Execution symlinks | Remove the Dockerfile's /data compatibility symlinks after the same path audit and workflow verification. |
+| Preserved execution base | Capture required packages, utilities, and configuration in the normal execution image before removing PAL_EXECUTION_BASE and its build wiring. |
+| Preserved identity | Verify browser sessions with the final hostname before removing PAL_EXECUTION_HOSTNAME. Remove cutover-only PAL_EXECUTION_IMAGE overrides and related configuration when no installation needs them. |
+
+- [ ] Record acceptance and rollback closure for dev and production. Retain protected backups under the deployment retention policy; code cleanup does not delete them.
+- [ ] Complete the seam inventory and targeted rewrites. Avoid blanket replacement in arbitrary historical text or file contents; verify any remaining old references have no operational dependency.
+- [ ] Remove obsolete compatibility code, fixtures, commands, and configuration in one focused cleanup commit. Keep ordinary SQL migrations and the permanent execution/filesystem adapters.
+- [ ] Verify a fresh setup and disposable copies of migrated state using the final image/configuration: conversations, scheduled task execution, historical attachment inspection/download, installed utilities, browser sessions through noVNC, and desktop persistence across backend restart.
+- [ ] Run backend build/lint, native runtime and split-stack smoke checks, and affected file checks. Search for removed paths/settings/tooling references and account for any retained historical documentation.
+
+Exit criteria: fresh and migrated setups pass with the final image/configuration, no runtime dependency on legacy paths or cutover settings remains, and migration-only tooling and references are removed.
+
 ## Tests
 
 - One two-container runtime suite: native shell/process control, parallel code-mode RPC/context, forbidden tool, timeout/abort, private sentinel isolation, and backend restart persistence.
