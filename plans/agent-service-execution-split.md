@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Done
 
 ## Goal
 
@@ -16,7 +16,7 @@ Separate Pal's backend and agent orchestration from model-controlled execution u
 - Browser CLI and X11 operations run inside execution. Private CDP forwarding connects the service to Chromium.
 - Canonical attachments stay private; manifests materialize inspection copies in agent home and publication reads files through execution.
 - The full-stack smoke suite verifies browser/desktop actions, real PWA file exchange/SSE, network isolation, restart persistence, and API availability during execution outage.
-- Offline migration prepares copied volumes and a sanitized execution base, retaining original state and protected backups for rollback. Browser, desktop, file, and native MCP smoke checks run in disposable Compose projects.
+- Existing state lives in the shared home, private service volume, and PostgreSQL. Protected paired recovery sources remain retained.
 
 ## Decisions and Scope
 
@@ -183,13 +183,13 @@ Validation: backend build/lint, two execution regressions, four file HTTP checks
 
 ## Deployment and Cleanup
 
-Implementation and isolated verification are complete. Dev is the migration acceptance run; no additional disposable migration rehearsals are required. Migrate production after dev acceptance, then remove migration compatibility. Retain original state and protected backups through acceptance and cleanup.
+Dev and production run the final normal images and canonical paths. Both migrations and compatibility cleanup are accepted. Original state and protected paired backups remain retained; temporary operator delivery files are removed.
 
 - [x] Back up and prepare copied dev state. All 56 database table counts and 794 copied regular files match the stopped source before application startup. The preserved-image build creates apt log directories and retains existing package configuration during upgrades. Migration accepts bind-mounted source data and preserves the PostgreSQL role password.
 - [x] Accept dev: API/PWA and Tailnet routes, seven byte-identical historical downloads, browser/desktop operations, live Main-to-Task shell execution, private service isolation, and browser/process persistence across backend restart pass. Browser credential databases were copied byte-for-byte; no credential values were inspected.
 - [x] Migrate production through Komodo. All 62 database table counts and 59,775 copied files match; original paired state and deployment definitions remain protected. The credential scan checks Mastra access/refresh/API-key fields without treating account labels or email metadata as secrets.
 - [x] Accept production: private API/PWA/SSE/noVNC, history/tasks/MCP connections, historical downloads, live Main-to-Task browser/file delivery, native desktop capture, and private filesystem/network boundaries pass. Chromium and an unrelated process keep their exact identities across an agent-service-only restart. The backup Action uses the split state directories.
-- [ ] Complete the post-migration cleanup checklist and verify both deployments using the final image/configuration.
+- [x] Complete the post-migration cleanup checklist and verify both deployments using the final image/configuration.
 
 ## Post-Migration Cleanup
 
@@ -207,10 +207,10 @@ Removal checklist:
 | Preserved identity | Verify browser sessions with the final hostname before removing PAL_EXECUTION_HOSTNAME. Remove cutover-only PAL_EXECUTION_IMAGE overrides and related configuration when no installation needs them. |
 
 - [x] Record acceptance for dev and production. Recovery stops all writers and restores the retained paired database/home/private files with their matching image and configuration. Preserve and reconcile later target writes before restoring an older snapshot. Code cleanup retains protected backups.
-- [ ] Complete targeted state rewrites in both installations. Dev has four configuration files and four conversation/memory records rewritten, with three browser credential databases unchanged. Production rewrites are prepared for the inventoried application/memory/schedule fields, operational configuration, workspace scripts/JSON, and six recovered temporary files. Historical logs, crash dumps, saved desktop rollback files, and unrelated host/URL paths remain untouched.
+- [x] Complete targeted state rewrites in both installations. Dev has four configuration files and four conversation/memory records rewritten, with three browser credential databases unchanged. Production rewrites cover 6,220 agent messages and targeted memory, thread state, schedules, application records, and operational home references. All 62 production table counts and three browser credential database hashes match the pre-cleanup backup. Frozen retry-request bodies, historical logs, crash dumps, saved desktop rollback files, and unrelated host/URL paths remain untouched.
 - [x] Remove obsolete compatibility code, fixtures, commands, and configuration in one focused cleanup commit. Ordinary SQL migrations and the permanent execution/filesystem adapters remain.
-- [ ] Verify the final image/configuration in dev and production. The fresh isolated stack passes browser/worker grouping, desktop, file/PWA/MCP transport, network isolation, restart persistence, and execution outage checks. Migrated dev runs normal images without cutover overrides; six historical downloads remain byte-identical and a live model/browser task delivers a file through the canonical paths. Final production state cleanup and image deployment remain.
-- [x] Backend build/lint, native runtime and full split-stack smoke checks pass. Targeted path-rewrite checks cover nested JSON, newlines, file/NSS URLs, exact temporary paths, key collisions, and preservation of unrelated host/URL/suffix paths. Removed-tooling references remain only in this historical plan; runtime code and deployment guidance use current paths.
+- [x] Verify the final image/configuration in dev and production. The fresh isolated stack passes browser/worker grouping, desktop, file/PWA/MCP transport, network isolation, restart persistence, and execution outage checks. Migrated dev runs normal images without cutover overrides; six historical downloads remain byte-identical and a live model/browser task delivers a file through the canonical paths. Production runs the verified immutable cleanup images with all five services healthy; PWA/native API, SSE, noVNC WebSocket, two historical downloads, live file delivery, removed aliases, and private filesystem/network denial pass. Refreshing the retained Pal extension worker and restarting Chromium restores session metadata; repeated same-tab title/URL queries pass.
+- [x] Backend build/lint, native runtime and full split-stack smoke checks pass. Targeted path-rewrite checks cover nested JSON, newlines, file/NSS URLs, exact temporary paths, key collisions, JSON null escapes/numeric overflow, and preservation of unrelated host/URL/suffix paths. Removed-tooling references remain only in this historical plan; runtime code and deployment guidance use current paths.
 
 Exit criteria: fresh and migrated setups pass with the final image/configuration, no runtime dependency on legacy paths or cutover settings remains, and migration-only tooling and references are removed.
 
@@ -219,12 +219,12 @@ Exit criteria: fresh and migrated setups pass with the final image/configuration
 - One two-container runtime suite: native shell/process control, parallel code-mode RPC/context, forbidden tool, timeout/abort, private sentinel isolation, and backend restart persistence.
 - Focused file regressions: shared path/symlink escape, upload materialization, and stable publication after source changes.
 - Reuse browser/worker/desktop smoke coverage for task ownership, media, and interaction.
-- One disposable migration/rollback rehearsal covering database, historical attachments, Chrome sessions, and an installed utility outside home.
+- Dev migration acceptance followed by production cutover, covering database counts, historical attachments, Chrome state, and retained recovery sources.
 - One PWA end-to-end file exchange and desktop/reconnect acceptance flow.
 
 ## Validation Commands
 
-Run relevant targeted tests first. Implementation adds the split-runtime and migration harness commands and records their exact names here.
+Run relevant targeted tests first. The retained commands exercise the normal split runtime and its user workflows.
 
 ```bash
 cd backend
@@ -246,6 +246,6 @@ Use targeted Vitest service/end-to-end suites for changed file contracts and run
 - One persistent execution container holds all agent-controlled shell, code, browser, and desktop activity.
 - Agent-service retains orchestration and private credentials without exposing its filesystem/environment or administrative authority to execution.
 - One shared agent-home volume supports file exchange and unmodified native code-mode staging.
-- Existing state is preserved, backend restarts preserve the desktop, and migration rollback is documented and rehearsed.
+- Existing state is preserved, backend restarts preserve the desktop, and paired migration recovery sources remain documented and retained.
 - Existing tool capabilities and PWA workflows remain usable; obsolete runtime branches are removed.
 - No vault/login feature or custom execution server is introduced.
