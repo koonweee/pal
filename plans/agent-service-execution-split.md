@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Blocked — awaiting the independent device login for live-model verification.
 
 ## Goal
 
@@ -147,7 +147,7 @@ Implementation tasks:
 - [x] Remove superseded local-execution branches and duplicate configuration. Keep host builds/tests supported.
 - [x] Update architecture/backend.md, architecture/deployment.md, .env.example, scripts, and relevant plan status after validation.
 - [x] Record any tool/guidance changes in the completion report using the repository-required table.
-- [ ] Commit coherent validated changes. Deployment to an existing running stack remains a separately requested action.
+- [x] Commit coherent validated changes. Deployment to an existing running stack remains a separately requested action.
 
 Exit criteria:
 
