@@ -24,7 +24,7 @@ docker run --rm --network "$source_network" -e DATABASE_URL=postgresql://pal:pal
 docker run --rm -i --network "$source_network" -e DATABASE_URL=postgresql://pal:pal@postgres:5432/pal -e MIGRATION_PHASE=seed pal-agent-service-local node --input-type=module < scripts/migration/records.mjs
 source_compose exec -T legacy sh -eu -c '
   mkdir -p /data/agent /data/uploads /data/workspace
-  printf "%s" "{\"fixture\":\"private-model-token-for-migration\"}" > /data/agent/auth.json
+  printf "%s" "{\"type\":\"oauth\",\"access\":\"private-model-token-for-migration\",\"refresh\":\"private-refresh-token-for-migration\",\"expires\":0}" > /data/agent/auth.json
   printf "Historical file data" > /data/uploads/11111111-1111-4111-8111-111111111111.txt
   printf "original workspace" > /data/workspace/report.txt
   printf "original home" > /data/home/notes.txt

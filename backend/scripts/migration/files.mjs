@@ -26,7 +26,7 @@ try {
   );
   assert.equal(
     await readFile('/data/private/agent/auth.json', 'utf8'),
-    '{"fixture":"private-model-token-for-migration"}',
+    '{"type":"oauth","access":"private-model-token-for-migration","refresh":"private-refresh-token-for-migration","expires":0}',
   );
   const response = await fetch(
     'http://127.0.0.1:3000/files/11111111-1111-4111-8111-111111111111/download',

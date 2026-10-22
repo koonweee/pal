@@ -50,11 +50,15 @@ def member_copy(source, output, member, name, secrets=()):
         raise RuntimeError("Unsupported persistent file: " + name)
 
 def tokens(value):
+    # @mastra/code-sdk AuthStorage uses these fields for OAuth/API credentials.
+    # Account labels, email addresses, identities, and expiry are metadata.
     if isinstance(value, dict):
-        return [item for child in value.values() for item in tokens(child)]
+        return [item for key, child in value.items() for item in
+                ([child.encode()] if key in ("access", "refresh", "key")
+                 and isinstance(child, str) and child else tokens(child))]
     if isinstance(value, list):
         return [item for child in value for item in tokens(child)]
-    return [value.encode()] if isinstance(value, str) and len(value) >= 20 else []
+    return []
 
 def prepare(args):
     legacy, postgres = inspect(args.legacy), inspect(args.postgres)
@@ -220,13 +224,14 @@ def prepare(args):
     print("Prepared copied state and rollback backups in " + str(directory))
     print("Original containers, images, and volumes are retained and unchanged.")
 
-parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--legacy", required=True, help="Stopped legacy Pal container")
-parser.add_argument("--postgres", required=True, help="Running legacy PostgreSQL container")
-parser.add_argument("--project", required=True, help="New Compose project with no existing target volumes")
-parser.add_argument("--backup", required=True, help="New private backup directory")
-parser.add_argument("--helper", default="pal-execution-local", help="Locally built execution helper image")
-args = parser.parse_args()
-if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,45}", args.project):
-    parser.error("Invalid target project")
-prepare(args)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--legacy", required=True, help="Stopped legacy Pal container")
+    parser.add_argument("--postgres", required=True, help="Running legacy PostgreSQL container")
+    parser.add_argument("--project", required=True, help="New Compose project with no existing target volumes")
+    parser.add_argument("--backup", required=True, help="New private backup directory")
+    parser.add_argument("--helper", default="pal-execution-local", help="Locally built execution helper image")
+    args = parser.parse_args()
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,45}", args.project):
+        parser.error("Invalid target project")
+    prepare(args)
