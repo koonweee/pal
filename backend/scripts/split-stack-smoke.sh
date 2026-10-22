@@ -1,7 +1,6 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/.."
-export PAL_EXECUTION_IMAGE=pal-execution-local
 mode="${1:-all}"
 shift "$(( $# > 0 ? 1 : 0 ))"
 case "$mode" in all|browser|desktop|workers|files|mcp) ;; *) echo "Unknown smoke mode: $mode" >&2; exit 2 ;; esac

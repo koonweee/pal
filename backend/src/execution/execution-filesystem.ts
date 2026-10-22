@@ -12,7 +12,7 @@ import {
 } from '@mastra/core/workspace';
 import { resolve, relative, isAbsolute, sep } from 'node:path';
 import type { ExecutionService } from './execution.service.js';
-import { AGENT_HOME, executionPath } from './paths.js';
+import { AGENT_HOME } from './paths.js';
 
 /** Native LocalFilesystem operations execute inside the agent's filesystem namespace. */
 export class ExecutionFilesystem extends MastraFilesystem {
@@ -27,10 +27,6 @@ export class ExecutionFilesystem extends MastraFilesystem {
   }
 
   private async call<T>(method: string, args: unknown[]): Promise<T> {
-    // Only path arguments are rewritten; file contents and option values are untouched.
-    args[0] = executionPath(args[0] as string);
-    if (method === 'copyFile' || method === 'moveFile')
-      args[1] = executionPath(args[1] as string);
     while (args.length && args.at(-1) === undefined) args.pop();
     const output = await this.execution.output(
       'node',
@@ -53,7 +49,7 @@ export class ExecutionFilesystem extends MastraFilesystem {
   }
 
   resolveAbsolutePath(path: string) {
-    const absolute = resolve(AGENT_HOME, executionPath(path));
+    const absolute = resolve(AGENT_HOME, path);
     const suffix = relative(AGENT_HOME, absolute);
     return suffix === '..' ||
       suffix.startsWith('..' + sep) ||

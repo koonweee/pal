@@ -49,10 +49,8 @@ services:
     build:
       context: .
       target: execution
-      args:
-        PAL_EXECUTION_BASE: ${PAL_EXECUTION_BASE:-base}
-    image: ${PAL_EXECUTION_IMAGE:-pal-execution-local}
-    hostname: ${PAL_EXECUTION_HOSTNAME:-pal}
+    image: pal-execution-local
+    hostname: pal
     labels:
       mastra.sandbox.id: ${PAL_EXECUTION_ID:-pal-execution}
     environment:

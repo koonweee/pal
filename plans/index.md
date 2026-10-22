@@ -14,7 +14,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Agent Service and Persistent Execution Container](agent-service-execution-split.md) | In Progress | Split runtime implemented and verified; dev/production migration and compatibility cleanup in progress. |
+| [Agent Service and Persistent Execution Container](agent-service-execution-split.md) | In Progress | Dev and production migration accepted; final compatibility cleanup rollout in progress. |
 | [PWA Cold-Start Cache](pwa-cold-start-cache.md) | Done | Restore cached appearance and a bounded display-only Main snapshot before authoritative network synchronization. |
 | [Public Repository Sanitization](public-repository-sanitization.md) | Done        | Remove user-specific branding and private deployment evidence while retaining reusable behavior and a concise Tailscale-only warning. |
 | [Pocket Quest Header](pocket-quest-header.md) | Done | Animated quest charm and completion cues timed to settled completed work. |

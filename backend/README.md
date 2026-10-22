@@ -27,7 +27,7 @@ docker compose up -d --wait --no-deps agent-service
 docker compose logs -f agent-service execution web
 ~~~
 
-Execution image rebuilds replace the desktop and stop its running applications. Named volumes preserve home, browser state, and workspace. Preserve additional installed packages in the image; [offline migration](MIGRATION.md) retains an existing container's filesystem changes.
+Execution image rebuilds replace the desktop and stop its running applications. Named volumes preserve home, browser state, and workspace. Include additional installed packages in the execution image.
 
 ## Full-stack local development
 
@@ -61,11 +61,9 @@ To expose the staged PWA over the script-managed Tailscale HTTPS route:
 
 serve retains the existing development HTTPS origin on port 8444 and configures the OAuth callback origin. pwa-up rebuilds the frontend and notifies connected clients. Use rebuild when an update includes backend/API changes.
 
-Existing combined-container installations require the [offline migration procedure](MIGRATION.md) before starting this stack.
-
 ## Configuration
 
-.env.example documents settings. Compose supplies the private database address, private authentication/upload paths, shared /home/pal/workspace, remote browser endpoint, and execution ID. PAL_DOCKER_GID selects Docker socket access on Linux. PAL_WEB_PORT selects the loopback gateway port. PAL_EXECUTION_BASE, PAL_EXECUTION_IMAGE, and PAL_EXECUTION_HOSTNAME retain a migrated desktop's image and identity.
+.env.example documents settings. Compose supplies the private database address, private authentication/upload paths, shared /home/pal/workspace, remote browser endpoint, and execution ID. PAL_DOCKER_GID selects Docker socket access on Linux. PAL_WEB_PORT selects the loopback gateway port.
 
 Agent-service owns model credentials and integration clients. Execution receives desktop and public HTTP(S) proxy settings. Native filesystem tools resolve paths inside execution; code mode uses the shared /home/pal/tmp with matching service/desktop UIDs.
 
@@ -155,7 +153,6 @@ The isolated runtime suites build disposable Compose projects and retain the exi
 ~~~bash
 npm run runtime:smoke
 npm run runtime:stack:smoke
-npm run runtime:migration:smoke
 npm run browser:smoke
 npm run workers:smoke
 npm run desktop:smoke
@@ -163,7 +160,7 @@ npm run files:smoke
 npm run mcp:smoke
 ~~~
 
-The stack suite includes PWA upload/download/SSE, browser groups/popups/worker cleanup, desktop input, private-network isolation, backend restart, and execution outage. The migration suite preserves synthetic conversations, schedules, files, a Chromium login, keyring files, and installed utilities, then switches back to the retained legacy state.
+The stack suite includes PWA upload/download/SSE, browser groups/popups/worker cleanup, desktop input, private-network isolation, backend restart, and execution outage.
 
 Optional model checks require PAL_SMOKE_AUTH_PATH pointing to a private login file. The harness copies it into disposable service-private storage:
 
