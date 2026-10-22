@@ -35,12 +35,14 @@
     "desktop:smoke": "node scripts/desktop-smoke.mjs",
     "browser:smoke": "node scripts/browser-smoke.mjs",
     "workers:smoke": "node scripts/browser-smoke.mjs --workers",
-    "files:smoke": "npm run build && node scripts/files-smoke.mjs"
+    "files:smoke": "npm run build && node scripts/files-smoke.mjs",
+    "runtime:smoke": "sh scripts/split-runtime-smoke.sh"
   },
   "dependencies": {
     "@ai-sdk/openai": "3.0.124",
     "@mastra/code-sdk": "1.10.1",
     "@mastra/core": "1.76.0",
+    "@mastra/docker": "0.8.0",
     "@mastra/mcp": "2.1.2",
     "@mastra/memory": "1.37.0",
     "@mastra/pg": "1.29.0",

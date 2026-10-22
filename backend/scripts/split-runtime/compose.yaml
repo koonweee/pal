@@ -1,0 +1,28 @@
+services:
+  execution:
+    init: true
+    build:
+      context: ../..
+      dockerfile: scripts/split-runtime/Dockerfile
+    image: pal-split-runtime-smoke
+    labels:
+      mastra.sandbox.id: pal-split-runtime-smoke
+    volumes:
+      - home:/home/pal
+    environment:
+      HOME: /home/pal
+    command: ["sleep", "infinity"]
+  service:
+    image: pal-split-runtime-smoke
+    user: '1000:0'
+    depends_on:
+      - execution
+    environment:
+      TMPDIR: /home/pal/tmp
+      PAL_SERVICE_SENTINEL: service-only
+    volumes:
+      - home:/home/pal
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: ["node", "/opt/pal/check.mjs"]
+volumes:
+  home:

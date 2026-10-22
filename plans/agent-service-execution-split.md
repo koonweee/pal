@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned
+In Progress
 
 ## Goal
 
@@ -38,19 +38,26 @@ Separate Pal's backend and agent orchestration from model-controlled execution u
 
 Implementation tasks:
 
-- [ ] Pin a published @mastra/docker version compatible with the installed core; inspect actual package behavior rather than relying on upstream main.
-- [ ] Add one focused two-container smoke harness using a stable sandbox ID and a Compose-created labeled execution container.
-- [ ] Verify discovery/reconnection, execution user, stdout/stderr streaming, stdin, exit codes, cancellation, and concurrent commands.
-- [ ] Verify native createCodeMode with shared absolute temporary paths and compatible UID/GID; retain the existing tool dispatcher, allowlist, request context, and media exclusions.
-- [ ] Validate node/TypeScript support, runner cleanup, rejected tool calls, timeout, and abort. Record upstream gaps before introducing any workaround.
-- [ ] Prove shell/code cannot read a private service sentinel file or environment variable.
-- [ ] Check generated RPC frames are treated as untrusted requests and service-side validation remains authoritative.
+- [x] Pin a published @mastra/docker version compatible with the installed core; inspect actual package behavior rather than relying on upstream main.
+- [x] Add one focused two-container smoke harness using a stable sandbox ID and a Compose-created labeled execution container.
+- [x] Verify discovery/reconnection, execution user, stdout/stderr streaming, stdin, exit codes, cancellation, and concurrent commands.
+- [x] Verify native createCodeMode with shared absolute temporary paths and compatible UID/GID; retain the existing tool dispatcher, allowlist, request context, and media exclusions.
+- [x] Validate node/TypeScript support, runner cleanup, rejected tool calls, timeout, and abort. Record upstream gaps before introducing any workaround.
+- [x] Prove shell/code cannot read a private service sentinel file or environment variable.
+- [x] Check generated RPC frames are treated as untrusted requests and service-side validation remains authoritative.
 
 Exit criteria:
 
 - Native code mode executes only inside execution, calls an allowed service-side tool with the originating context, and completes without a custom transport.
 - Shell/process behavior and backend-private storage separation pass the focused harness.
 - Any dependency limitation has a concrete minimal resolution recorded here before proceeding.
+
+Validation:
+
+- `npm run runtime:smoke` passes with published @mastra/docker 0.8.0 and core 1.76.0: streamed shell/stdin, failure status, timeout/abort, private file/environment isolation, parallel native code-mode RPC with task context, a forged forbidden-tool frame, runner cleanup, reconnection, and a user process surviving a replacement service process.
+- Matching service/execution UID is required because native runner directories are owner-only. Docker init reaps terminated children so native termination checks complete.
+- Provider 0.12.0 fails at import against core 1.76.0 despite its peer range (missing FactorySandbox). Pin 0.8.0; no core upgrade or custom transport.
+- Backend build/lint and harness syntax checks pass. Existing Pal containers and data were untouched.
 
 ### 2. Split Images, Deployment, and Lifecycle
 
@@ -144,6 +151,7 @@ Run relevant targeted tests first. Implementation adds the split-runtime and mig
 cd backend
 npm run build
 npm run lint
+npm run runtime:smoke
 npm run files:smoke
 npm run browser:smoke
 npm run workers:smoke
