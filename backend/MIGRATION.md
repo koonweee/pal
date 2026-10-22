@@ -22,6 +22,8 @@ The execution base is imported from a sanitized archive. It preserves system pac
 
 Review legacy-filesystem-changes.txt and legacy-paths.json. If required tools live in excluded directories, move them into an execution-owned location before taking the final stopped snapshot, or reinstall them in the execution image. Review symlinks and external path references. Conflicting home workspace/incoming files stop migration rather than overwrite data.
 
+The source /data may be a named volume or bind mount. Restored PostgreSQL retains the existing pal role password.
+
 The new volumes contain:
 
 | Volume | Contents |

@@ -63,8 +63,8 @@ def prepare(args):
     if not postgres["State"]["Running"]:
         raise RuntimeError("PostgreSQL must be running for its consistent backup")
     mounts = {m["Destination"]: m for m in legacy["Mounts"]}
-    if mounts.get("/data", {}).get("Type") != "volume":
-        raise RuntimeError("Expected the legacy named volume at /data")
+    if mounts.get("/data", {}).get("Type") not in ("volume", "bind"):
+        raise RuntimeError("Expected the legacy persistent mount at /data")
     if legacy["Config"].get("Hostname") is None:
         raise RuntimeError("Legacy hostname is required")
     # Never overwrite any target state, even after a partial attempt.
@@ -197,11 +197,19 @@ def prepare(args):
         with (directory / "postgres.dump").open("rb") as stream:
             docker("exec", "-i", db, "pg_restore", "-U", "pal", "-d", "pal",
                    "--exit-on-error", "--no-owner", stdin=stream)
+        # Preserve database authentication without exposing the stored password hash.
+        password = docker("exec", postgres["Id"], "psql", "-U", "pal", "-d", "pal",
+                          "-At", "-c", "select rolpassword from pg_authid where rolname = 'pal'",
+                          capture_output=True).stdout.decode().strip()
+        if password:
+            statement = "alter role pal password '" + password.replace("'", "''") + "';\n"
+            docker("exec", "-i", db, "psql", "-U", "pal", "-d", "pal", "-v", "ON_ERROR_STOP=1",
+                   input=statement.encode(), stdout=subprocess.DEVNULL)
     finally:
         docker("rm", "-f", db, stdout=subprocess.DEVNULL)
     manifest = {
         "legacyContainer": legacy["Id"], "postgresContainer": postgres["Id"],
-        "legacyImage": legacy["Image"], "legacyVolume": mounts["/data"]["Name"],
+        "legacyImage": legacy["Image"], "legacyStorage": mounts["/data"].get("Name", mounts["/data"]["Source"]),
         "project": args.project, "volumes": names, "executionBase": image,
         "hostname": legacy["Config"]["Hostname"],
     }

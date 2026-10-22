@@ -24,8 +24,8 @@ EXPOSE 3000
 CMD ["node", "dist/main.js"]
 
 FROM ${PAL_EXECUTION_BASE} AS execution
-RUN mkdir -p /tmp /run /root /home && chmod 1777 /tmp \
-    && apt-get update && apt-get install -y --no-install-recommends \
+RUN mkdir -p /tmp /run /root /home /var/log/apt && chmod 1777 /tmp \
+    && apt-get update && apt-get -o Dpkg::Options::=--force-confold install -y --no-install-recommends \
     bash ca-certificates curl git python3 python3-venv ripgrep sudo socat \
     xfce4-session xfwm4 xfce4-panel xfdesktop4 xfce4-settings xfce4-terminal thunar devilspie2 picom papirus-icon-theme librsvg2-common \
     dbus-x11 tigervnc-standalone-server novnc websockify supervisor xdotool x11-utils x11-xserver-utils x11-xkb-utils \

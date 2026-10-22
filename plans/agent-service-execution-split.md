@@ -2,7 +2,7 @@
 
 ## Status
 
-Done
+In Progress
 
 ## Goal
 
@@ -181,9 +181,19 @@ Tool/guidance report:
 
 Validation: backend build/lint, two execution regressions, four file HTTP checks, runtime:smoke, and runtime:stack:smoke pass with the unmodified published provider 0.10.0 and core 1.76.0. Execution replacement and concurrent-copy regressions reproduce their failures before the fixes.
 
-## Post-Migration Cleanup (Deferred)
+## Deployment and Cleanup
 
-The refactor is complete. This follow-up starts after dev and production migrations are accepted and their rollback windows close. Fresh installations use the normal image and paths. Keep migration tooling separate, path translation centralized in execution/paths.ts, and Docker compatibility symlinks in one explicit block; no additional runtime mode or abstraction is needed.
+Implementation and isolated verification are complete. Dev is the migration acceptance run; no additional disposable migration rehearsals are required. Migrate production after dev acceptance, then remove migration compatibility. Retain original state and protected backups through acceptance and cleanup.
+
+- [x] Back up and prepare copied dev state. All 56 database table counts and 794 copied regular files match the stopped source before application startup. The preserved-image build creates apt log directories and retains existing package configuration during upgrades. Migration accepts bind-mounted source data and preserves the PostgreSQL role password.
+- [x] Accept dev: API/PWA and Tailnet routes, seven byte-identical historical downloads, browser/desktop operations, live Main-to-Task shell execution, private service isolation, and browser/process persistence across backend restart pass. Browser credential databases were copied byte-for-byte; no credential values were inspected.
+- [ ] Migrate production pal-sf through the internal Komodo Core using the accepted dev procedure. Host SSH works; privileged filesystem migration requires an owner-terminal command because sudo is interactive.
+- [ ] Verify production before switching ingress and accepting new writes.
+- [ ] Complete the post-migration cleanup checklist and verify both deployments using the final image/configuration.
+
+## Post-Migration Cleanup
+
+Start cleanup after dev and production migrations are accepted. Retain rollback backups and the original checkout/configuration independently of code cleanup. Fresh installations use the normal image and paths. Keep migration tooling separate, path translation centralized in execution/paths.ts, and Docker compatibility symlinks in one explicit block; no additional runtime mode or abstraction is needed.
 
 Removal checklist:
 
@@ -196,7 +206,7 @@ Removal checklist:
 | Preserved execution base | Capture required packages, utilities, and configuration in the normal execution image before removing PAL_EXECUTION_BASE and its build wiring. |
 | Preserved identity | Verify browser sessions with the final hostname before removing PAL_EXECUTION_HOSTNAME. Remove cutover-only PAL_EXECUTION_IMAGE overrides and related configuration when no installation needs them. |
 
-- [ ] Record acceptance and rollback closure for dev and production. Retain protected backups under the deployment retention policy; code cleanup does not delete them.
+- [ ] Record acceptance for dev and production and the retained rollback procedure. Retain protected backups under the deployment retention policy; code cleanup does not delete them.
 - [ ] Complete the seam inventory and targeted rewrites. Avoid blanket replacement in arbitrary historical text or file contents; verify any remaining old references have no operational dependency.
 - [ ] Remove obsolete compatibility code, fixtures, commands, and configuration in one focused cleanup commit. Keep ordinary SQL migrations and the permanent execution/filesystem adapters.
 - [ ] Verify a fresh setup and disposable copies of migrated state using the final image/configuration: conversations, scheduled task execution, historical attachment inspection/download, installed utilities, browser sessions through noVNC, and desktop persistence across backend restart.
