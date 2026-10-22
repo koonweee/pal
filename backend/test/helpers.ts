@@ -1,7 +1,19 @@
+import {
+  ExecutionService,
+  ExecutionFileError,
+} from '../dist/execution/execution.service.js';
+import { LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import { DestinationService } from '../dist/delivery/destination.service.js';
 import { InstanceSettingsService } from '../dist/instance-settings/instance-settings.service.js';
 import 'reflect-metadata';
-import { mkdtemp, rm } from 'node:fs/promises';
+import {
+  mkdtemp,
+  rm,
+  mkdir,
+  writeFile,
+  readFile,
+  stat,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
@@ -35,6 +47,7 @@ interface TestRuntimeDependencies {
   preferences: PreferencesService;
   destinations: DestinationService;
   instanceSettings: InstanceSettingsService;
+  execution: ExecutionService;
 }
 
 export async function startTestApp(
@@ -51,8 +64,33 @@ export async function startTestApp(
   const uploads = await mkdtemp(join(tmpdir(), 'pal-test-'));
   process.env.DATABASE_URL = url;
   process.env.PAL_UPLOAD_DIR = uploads;
+  const sandbox = new LocalSandbox({
+    workingDirectory: uploads,
+    isolation: 'none',
+  });
+  const execution = {
+    home: uploads,
+    filesystem: new LocalFilesystem({ basePath: uploads, contained: true }),
+    sandbox: Object.assign(sandbox, {
+      async writeFiles(files: { path: string; content: string | Buffer }[]) {
+        for (const file of files) {
+          await mkdir(join(file.path, '..'), { recursive: true });
+          await writeFile(file.path, file.content);
+        }
+      },
+    }),
+    async readFile(path: string, limit: number) {
+      if (!(await stat(path)).isFile())
+        throw new ExecutionFileError('not_file');
+      const data = await readFile(path);
+      if (data.length > limit) throw new ExecutionFileError('too_large');
+      return data;
+    },
+  } as unknown as ExecutionService;
   const { AppModule } = await import('../dist/app.module.js');
   const module = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(ExecutionService)
+    .useValue(execution)
     .overrideProvider(ConfigService)
     .useValue(
       new ConfigService({
@@ -109,6 +147,7 @@ export async function startTestApp(
               preferences,
               destinations,
               instanceSettings,
+              execution,
             })
           : {
               async submit(message: UserVisibleMessage) {

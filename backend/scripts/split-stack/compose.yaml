@@ -1,0 +1,18 @@
+services:
+  agent-service:
+    env_file: !reset []
+    environment:
+      DATABASE_URL: postgresql://pal:pal@postgres:5432/pal_split_test
+      PAL_PUBLIC_URL: http://localhost:14080
+      PAL_EXECUTION_ID: pal-split-stack-execution
+  execution:
+    labels:
+      mastra.sandbox.id: pal-split-stack-execution
+  web:
+    ports: !override
+      - "127.0.0.1:14080:8080"
+  postgres:
+    environment:
+      POSTGRES_DB: pal_split_test
+    ports:
+      - "127.0.0.1:15543:5432"

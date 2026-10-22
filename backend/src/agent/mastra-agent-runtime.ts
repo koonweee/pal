@@ -46,6 +46,7 @@ import {
   taskPreferenceActor,
 } from '../preferences/preference-tools.js';
 import { browserTools } from '../browser/browser-tools.js';
+import { ExecutionService } from '../execution/execution.service.js';
 import { X11Computer } from './x11-computer.js';
 import { createMainSession, MAIN_RESOURCE_ID } from './main-session.js';
 import type { TextContext } from './publish-text.processor.js';
@@ -101,6 +102,7 @@ export class MastraAgentRuntime
     private readonly destinations: DestinationService,
     @Inject(InstanceSettingsService)
     private readonly instanceSettings: InstanceSettingsService,
+    @Inject(ExecutionService) private readonly execution: ExecutionService,
   ) {}
 
   async onModuleInit() {
@@ -140,10 +142,12 @@ export class MastraAgentRuntime
         );
       },
       connectionString: this.config.getOrThrow<string>('DATABASE_URL'),
-      workingDirectory: this.config.getOrThrow<string>('PAL_AGENT_WORKING_DIR'),
+      workingDirectory: this.execution.home,
+      sandbox: this.execution.sandbox,
+      filesystem: this.execution.filesystem,
       computer: this.config.get<boolean>('PAL_DESKTOP_ENABLED')
         ? new X11Computer(
-            { ...process.env },
+            this.execution,
             this.config.get<string>('PAL_DESKTOP_VIEWER_URL'),
           )
         : undefined,

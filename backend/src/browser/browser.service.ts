@@ -1,6 +1,4 @@
-import { execFile, spawn } from 'node:child_process';
-import { readFile, rm } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { ExecutionService } from '../execution/execution.service.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import {
   Inject,
@@ -54,13 +52,32 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
     @Inject(ConfigService) private readonly config: ConfigService,
     @Inject(TasksService) private readonly tasks: TasksService,
     @Inject(EventsService) private readonly events: EventsService,
+    @Inject(ExecutionService) private readonly execution: ExecutionService,
   ) {}
 
   get enabled() {
     return this.config.get<boolean>('PAL_DESKTOP_ENABLED') === true;
   }
   private get endpoint() {
-    return `http://127.0.0.1:${this.config.get<number>('PAL_BROWSER_PORT') ?? 9222}`;
+    return (
+      this.config.get<string>('PAL_BROWSER_ENDPOINT') ?? 'http://execution:9223'
+    );
+  }
+  private async version(timeout = 1000) {
+    const response = await fetch(this.endpoint + '/json/version', {
+      signal: AbortSignal.timeout(timeout),
+    });
+    if (!response.ok)
+      throw new Error('Browser debugging endpoint is unavailable');
+    return response.json() as Promise<{ webSocketDebuggerUrl: string }>;
+  }
+
+  private async cdpEndpoint() {
+    const version = await this.version();
+    const url = new URL(this.endpoint);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.pathname = new URL(version.webSocketDebuggerUrl).pathname;
+    return url.href;
   }
   private identity(taskId: string, workerId?: string) {
     // Unix socket paths are limited; the worker UUID is globally unique.
@@ -95,40 +112,24 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
     if (this.connecting) return this.connecting;
     this.connecting = (async () => {
       try {
-        await fetch(this.endpoint + '/json/version', {
-          signal: AbortSignal.timeout(1000),
-        });
+        await this.version();
       } catch {
-        const launcher = fileURLToPath(
-          new URL('../../desktop/browser.sh', import.meta.url),
-        );
-        const child = spawn(launcher, ['about:blank'], {
-          detached: true,
-          stdio: 'ignore',
-          env: {
-            ...process.env,
-            PAL_BROWSER_PORT: String(
-              this.config.get<number>('PAL_BROWSER_PORT') ?? 9222,
-            ),
-            ...(this.config.get<string>('PAL_BROWSER_PROFILE')
-              ? {
-                  PAL_BROWSER_PROFILE: this.config.get<string>(
-                    'PAL_BROWSER_PROFILE',
-                  ),
-                }
-              : {}),
-          },
-        });
-        child.on('error', (error) => this.logger.warn(error.message));
-        child.unref();
+        await this.execution.output('sh', [
+          '-c',
+          'nohup /opt/pal/desktop/browser.sh about:blank </dev/null >/home/pal/tmp/browser.log 2>&1 &',
+        ]);
       }
+
       const deadline = Date.now() + 15_000;
       while (true) {
         try {
-          let browser = await chromium.connectOverCDP(this.endpoint, {
-            timeout: 1000,
-            noDefaults: true,
-          });
+          let browser = await chromium.connectOverCDP(
+            await this.cdpEndpoint(),
+            {
+              timeout: 1000,
+              noDefaults: true,
+            },
+          );
           try {
             const scriptURL = await this.wakeWorker(browser);
             if (
@@ -140,10 +141,13 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
               // A stopped MV3 target can be absent from a new CDP client's
               // auto-attach inventory. Reattach once after waking it.
               await browser.close();
-              browser = await chromium.connectOverCDP(this.endpoint, {
-                timeout: 1000,
-                noDefaults: true,
-              });
+              browser = await chromium.connectOverCDP(
+                await this.cdpEndpoint(),
+                {
+                  timeout: 1000,
+                  noDefaults: true,
+                },
+              );
             }
           } catch (error) {
             await browser.close();
@@ -236,46 +240,35 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
     args: string[],
     signal?: AbortSignal,
   ): Promise<CliResult> {
-    const executable = fileURLToPath(
-      // Pal's Debian runtime uses the packaged native executable directly so
-      // timeout/abort kills the CLI process, without an orphaned Node-wrapper child.
-      new URL(
-        process.platform === 'linux'
-          ? `../../node_modules/agent-browser/bin/agent-browser-linux-${process.arch}`
-          : '../../node_modules/.bin/agent-browser',
-        import.meta.url,
-      ),
+    const result = await this.execution.run(
+      '/opt/pal/node_modules/.bin/agent-browser',
+      [
+        '--session',
+        this.session(taskId),
+        ...(args[0] === 'close'
+          ? []
+          : [
+              '--cdp',
+              'http://127.0.0.1:9222',
+              '--pin-tab',
+              '--idle-timeout',
+              '30m',
+            ]),
+        '--json',
+        ...args,
+      ],
+      { signal, timeout: 30_000 },
     );
-    return new Promise((resolve, reject) => {
-      execFile(
-        executable,
-        [
-          '--session',
-          this.session(taskId),
-          ...(args[0] === 'close'
-            ? []
-            : ['--cdp', this.endpoint, '--pin-tab', '--idle-timeout', '30m']),
-          '--json',
-          ...args,
-        ],
-        { timeout: 30_000, maxBuffer: 8 * 1024 * 1024, signal },
-        (error, stdout) => {
-          // The CLI returns structured operation errors with a nonzero exit code.
-          try {
-            const result = JSON.parse(stdout) as CliResult;
-            if (typeof result.success !== 'boolean')
-              throw new Error('Invalid browser response');
-            resolve(result);
-          } catch {
-            if (!error && args.includes('--help')) {
-              resolve({ success: true, data: { help: stdout }, error: null });
-              return;
-            }
-            reject(error ?? new Error('Browser command returned invalid JSON'));
-          }
-        },
-      );
-    });
+    try {
+      const parsed = JSON.parse(result.stdout) as CliResult;
+      if (typeof parsed.success !== 'boolean')
+        throw new Error('Invalid browser response');
+      return parsed;
+    } catch {
+      if (result.success && args.includes('--help'))
+        return { success: true, data: { help: result.stdout }, error: null };
+      throw new Error('Browser command returned invalid JSON');
+    }
   }
 
   private async workspace(
@@ -394,11 +387,13 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
     try {
       return {
         text: 'Task browser screenshot',
-        data: (await readFile(path)).toString('base64'),
+        data: (await this.execution.readFile(path, 25_000_000)).toString(
+          'base64',
+        ),
         mediaType: 'image/png',
       };
     } finally {
-      await rm(path, { force: true });
+      await this.execution.output('rm', ['-f', '--', path]);
     }
   }
 
@@ -418,9 +413,7 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
     if (!this.enabled || this.closing) return;
     if (!this.browser?.isConnected()) {
       try {
-        await fetch(this.endpoint + '/json/version', {
-          signal: AbortSignal.timeout(500),
-        });
+        await this.version(500);
       } catch {
         return;
       }
@@ -445,9 +438,7 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
     if (!this.enabled || this.closing) return;
     if (!this.browser?.isConnected()) {
       try {
-        await fetch(this.endpoint + '/json/version', {
-          signal: AbortSignal.timeout(500),
-        });
+        await this.version(500);
       } catch {
         return;
       }

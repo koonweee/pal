@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
-import { constants, createWriteStream } from 'node:fs';
+import { createWriteStream } from 'node:fs';
 import { mkdir, open, readdir, rename, rm, stat } from 'node:fs/promises';
 import { basename, extname, resolve } from 'node:path';
 import { Transform, type Readable } from 'node:stream';
@@ -147,37 +147,6 @@ export class ApplicationFileStorage {
       throw error;
     } finally {
       if (storageFilename !== id) this.release(id);
-    }
-  }
-
-  async importFile(input: {
-    path: string;
-    filename?: string;
-    contentType?: string;
-  }) {
-    const filename = this.validateFilename(
-      input.filename ?? basename(input.path),
-    );
-    const contentType = this.validateContentType(input.contentType);
-    const handle = await open(
-      input.path,
-      constants.O_RDONLY | constants.O_NONBLOCK,
-    ).catch(() => {
-      throw new ApplicationError('invalid_input', 'File is not readable');
-    });
-    try {
-      const info = await handle.stat();
-      if (!info.isFile())
-        throw new ApplicationError('invalid_input', 'Expected a regular file');
-      if (info.size > MAX_FILE_BYTES)
-        throw new ApplicationError('too_large', 'File exceeds 25 MB');
-      return await this.storeStream({
-        stream: handle.createReadStream({ autoClose: false }),
-        filename,
-        contentType,
-      });
-    } finally {
-      await handle.close();
     }
   }
 

@@ -24,15 +24,6 @@ export function validateEnvironment(env: Record<string, unknown>) {
   const releaseId = env.PAL_RELEASE_ID ?? 'development';
   if (typeof releaseId !== 'string' || !releaseId.trim())
     throw new Error('PAL_RELEASE_ID must be a nonempty string');
-  const browserPort = Number(env.PAL_BROWSER_PORT ?? 9222);
-  if (!Number.isInteger(browserPort) || browserPort < 1 || browserPort > 65535)
-    throw new Error('PAL_BROWSER_PORT must be between 1 and 65535');
-  if (
-    env.PAL_BROWSER_PROFILE !== undefined &&
-    (typeof env.PAL_BROWSER_PROFILE !== 'string' ||
-      !env.PAL_BROWSER_PROFILE.trim())
-  )
-    throw new Error('PAL_BROWSER_PROFILE must be a nonempty path');
   const viewerUrl = env.PAL_DESKTOP_VIEWER_URL;
   const catalogWarnPercent = Number(env.PAL_MCP_CATALOG_WARN_PERCENT ?? 10);
   if (
@@ -60,7 +51,7 @@ export function validateEnvironment(env: Record<string, unknown>) {
     typeof env.PAL_PUBLIC_URL !== 'string'
   )
     throw new Error('PAL_PUBLIC_URL must be an HTTP(S) origin');
-  const publicUrl = new URL(env.PAL_PUBLIC_URL ?? 'http://localhost:3000/');
+  const publicUrl = new URL(env.PAL_PUBLIC_URL ?? 'http://localhost:8080/');
   if (
     !['http:', 'https:'].includes(publicUrl.protocol) ||
     publicUrl.username ||
@@ -167,16 +158,27 @@ export function validateEnvironment(env: Record<string, unknown>) {
     )
       throw new Error('PAL_DESKTOP_VIEWER_URL must be an HTTP(S) URL');
   }
+  const browserEndpoint = new URL(
+    typeof env.PAL_BROWSER_ENDPOINT === 'string'
+      ? env.PAL_BROWSER_ENDPOINT
+      : 'http://web:8081',
+  );
   if (
-    desktopEnabled === 'true' &&
-    (typeof env.DISPLAY !== 'string' || !env.DISPLAY.trim())
+    !['http:', 'https:'].includes(browserEndpoint.protocol) ||
+    browserEndpoint.username ||
+    browserEndpoint.password ||
+    browserEndpoint.search ||
+    browserEndpoint.hash ||
+    browserEndpoint.pathname !== '/'
   )
-    throw new Error('DISPLAY is required when desktop tools are enabled');
+    throw new Error('PAL_BROWSER_ENDPOINT must be an HTTP(S) origin');
   return {
     ...env,
     PAL_DESKTOP_ENABLED: desktopEnabled === 'true',
     PAL_RELEASE_ID: releaseId.trim(),
-    PAL_BROWSER_PORT: browserPort,
+    PAL_BROWSER_ENDPOINT: browserEndpoint.origin,
+    PAL_DESKTOP_VIEWER_URL:
+      viewerUrl || new URL('/desktop/v2/vnc.html', publicUrl).href,
     DATABASE_URL: databaseUrl,
     PORT: port,
     HOST: host,

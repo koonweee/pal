@@ -7,6 +7,7 @@ profile="${PAL_BROWSER_PROFILE:-${XDG_CONFIG_HOME:-$HOME/.config}/chromium}"
 mkdir -p "$profile"
 exec "${PAL_BROWSER_EXECUTABLE:-chromium}" \
   --user-data-dir="$profile" \
+  --proxy-server="http://web:3128" \
   --remote-debugging-address=127.0.0.1 \
   --remote-debugging-port="${PAL_BROWSER_PORT:-9222}" \
   --load-extension="$app_dir/browser-extension" \

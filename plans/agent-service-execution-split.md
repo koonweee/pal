@@ -10,12 +10,13 @@ Separate Pal's backend and agent orchestration from model-controlled execution u
 
 ## Current Behavior
 
-- `backend/src/agent/main-session.ts` constructs a shared LocalFilesystem and LocalSandbox/X11Sandbox with unrestricted local execution and inherited process environment.
-- NestJS, Mastra, Chromium, X11, and noVNC share the `pal` container in `backend/compose.yaml`. PostgreSQL runs separately.
-- `backend/src/browser/browser.service.ts` launches Chromium and agent-browser locally. Task/worker tab ownership, groups, and cleanup are Pal-owned.
-- `backend/src/agent/task-tool-discovery.processor.ts` uses native createCodeMode. The installed transport writes local temporary runner files and spawns them through the workspace sandbox.
-- ApplicationFileStorage imports arbitrary local paths. Upload manifests and historical agent context contain existing absolute paths.
-- `frontend/nginx.conf` routes API and desktop traffic to the same container. `scripts/dev-local` rebuilds that combined runtime.
+- Agent orchestration runs in agent-service. Compose owns one persistent Debian execution desktop, the PWA gateway, and PostgreSQL.
+- ComposeSandbox delegates execution/process streams to the pinned Mastra Docker provider, attaches by label, and leaves the container running on backend shutdown.
+- Native code mode uses the shared home and matching UIDs without a custom transport.
+- Browser CLI and X11 operations run inside execution. Private CDP forwarding connects the service to Chromium.
+- Canonical attachments stay private; manifests materialize inspection copies in agent home and publication reads files through execution.
+- The full-stack smoke suite verifies browser/desktop actions, real PWA file exchange/SSE, network isolation, restart persistence, and API availability during execution outage.
+- Legacy-state migration and remaining legacy smoke-script adaptation are outstanding.
 
 ## Decisions and Scope
 
@@ -63,15 +64,15 @@ Validation:
 
 Implementation tasks:
 
-- [ ] Split backend and execution image targets. Keep desktop startup, dependencies, and agent-browser in execution; remove Nest/model credentials from its startup environment.
-- [ ] Add agent-service, execution, and web wiring to Compose, retaining postgres and the development Vite overlay.
-- [ ] Use native DockerSandbox behind a narrow lifecycle adapter: require the expected labeled container, fail clearly if absent, and disconnect without stopping/removing it on backend shutdown. Compose exclusively owns creation, replacement, and deletion.
-- [ ] Give Docker management access only to agent-service. No Docker socket, backend-private volume, or backend environment in execution.
-- [ ] Keep database/admin ingress inaccessible from execution, including alternate gateway/host/Tailnet routes. Validate actual routing; network names alone are insufficient. Use a service-private ingress credential if topology alone cannot enforce the boundary, without adding a user sign-in flow.
-- [ ] Retain execution internet access and private agent-service-to-execution browser/desktop access.
-- [ ] Update gateway routing, health/readiness, model login, migrations, logs, and dev-local commands. Backend rebuilds preserve execution; execution-image updates explicitly recreate it.
-- [ ] Define behavior when execution is unavailable: web/chat history remain available; execution-dependent calls fail clearly, with no local fallback.
-- [ ] Audit global TMPDIR consumers, shared-home file permissions, and service runtime module/config paths. Never load executable backend code or credentials from agent-controlled home.
+- [x] Split backend and execution image targets. Keep desktop startup, dependencies, and agent-browser in execution; remove Nest/model credentials from its startup environment.
+- [x] Add agent-service, execution, and web wiring to Compose, retaining postgres and the development Vite overlay.
+- [x] Use native DockerSandbox behind a narrow lifecycle adapter: require the expected labeled container, fail clearly if absent, and disconnect without stopping/removing it on backend shutdown. Compose exclusively owns creation, replacement, and deletion.
+- [x] Give Docker management access only to agent-service. No Docker socket, backend-private volume, or backend environment in execution.
+- [x] Keep database/admin ingress inaccessible from execution, including alternate gateway/host/Tailnet routes. Validate actual routing; network names alone are insufficient. Use a service-private ingress credential if topology alone cannot enforce the boundary, without adding a user sign-in flow.
+- [x] Retain execution internet access and private agent-service-to-execution browser/desktop access.
+- [x] Update gateway routing, health/readiness, model login, migrations, logs, and dev-local commands. Backend rebuilds preserve execution; execution-image updates explicitly recreate it.
+- [x] Define behavior when execution is unavailable: web/chat history remain available; execution-dependent calls fail clearly, with no local fallback.
+- [x] Audit global TMPDIR consumers, shared-home file permissions, and service runtime module/config paths. Never load executable backend code or credentials from agent-controlled home.
 
 Exit criteria:
 
@@ -83,14 +84,14 @@ Exit criteria:
 
 Implementation tasks:
 
-- [ ] Replace LocalSandbox/X11Sandbox with the Docker-backed workspace and one shared-home filesystem with containment enabled.
-- [ ] Route arbitrary execution-container paths through shell. Native file tools operate on shared home.
-- [ ] Execute model-authored code and browser CLI commands inside execution; keep service tools and integration clients in agent-service.
-- [ ] Adapt X11Computer through native sandbox execution, preserving screenshots, mouse, keyboard, clipboard behavior, and viewer URL.
-- [ ] Preserve browser session pinning, task groups, worker tab ownership, screenshots, and cleanup. Avoid premature replacement with a different browser provider.
-- [ ] Keep CDP private; connect through an authenticated/private transport as required by the split network. Do not expose a public debugging port.
-- [ ] Distinguish agent-owned process cleanup from unrelated desktop/user processes, including interrupted code-mode runs.
-- [ ] Update shared execution/file guidance only where paths or capabilities change; retain existing model-facing tool schemas.
+- [x] Replace LocalSandbox/X11Sandbox with the Docker-backed workspace and one shared-home filesystem with containment enabled.
+- [x] Route arbitrary execution-container paths through shell. Native file tools operate on shared home.
+- [x] Execute model-authored code and browser CLI commands inside execution; keep service tools and integration clients in agent-service.
+- [x] Adapt X11Computer through native sandbox execution, preserving screenshots, mouse, keyboard, clipboard behavior, and viewer URL.
+- [x] Preserve browser session pinning, task groups, worker tab ownership, screenshots, and cleanup. Avoid premature replacement with a different browser provider.
+- [x] Keep CDP private; connect through an authenticated/private transport as required by the split network. Do not expose a public debugging port.
+- [x] Distinguish agent-owned process cleanup from unrelated desktop/user processes, including interrupted code-mode runs.
+- [x] Update shared execution/file guidance only where paths or capabilities change; retain existing model-facing tool schemas.
 
 Exit criteria:
 
@@ -98,13 +99,22 @@ Exit criteria:
 - Task/worker cleanup preserves unrelated browser tabs and user processes.
 - No model-authored program falls back to execution inside agent-service.
 
+Validation for milestones 2–3:
+
+- `npm run runtime:stack:smoke` builds the split images and runs disposable containers/volumes to verify public HTTPS, blocked gateway/backend/host routes, private storage/socket isolation, browser task/worker grouping, native desktop input and media, actual upload/inspection/publication/download, PWA history/SSE/upload/download/viewer routing, restart persistence, and history during execution outage.
+- `npm run runtime:smoke` exercises the production adapter, remote native filesystem/media, missing-container refusal, forbidden RPC, timeout/abort cleanup, and a deterministic concurrent-publication-read rejection.
+- Backend build/lint, focused browser/discovery tests, 12 affected agent/MCP integration tests, four file HTTP tests, and frontend check/check:ui/trim pass.
+- Native LocalFilesystem operations execute in the execution namespace to avoid backend symlink/path races. Docker stdin/stdout supplies the transport; there is no execution server. The adapter uses the exported Docker process manager's container-binding seam because the provider lacks an attach-only lifecycle.
+- Execution internet access uses Squid in the existing web container. Proxy-aware public HTTP(S) works; software that ignores proxy settings has no direct route.
+- Existing Pal containers and volumes remain untouched. Migration and legacy smoke-script work remain below.
+
 ### 4. Preserve Files and Migrate Existing State
 
 Implementation tasks:
 
-- [ ] Keep canonical uploads and published files private. Materialize input copies in shared home before forwarding readable paths; recreate missing copies from canonical storage when needed.
-- [ ] Snapshot generated files into private storage on publication. Preserve file IDs, names, limits, delivery associations, and cleanup rules.
-- [ ] Harden file imports and shared-home reads against path traversal, symlinks, ancestor replacement, special files, and concurrent modification. Prefer copying through execution-side file access where host-side resolution could expose service-private paths.
+- [x] Keep canonical uploads and published files private. Materialize input copies in shared home before forwarding readable paths; recreate missing copies from canonical storage when needed.
+- [ ] Snapshot generated files into private storage on publication. Preserve file IDs, names, limits, delivery associations, and cleanup rules. Snapshots/IDs/limits/delivery pass; managed inspection-copy expiry cleanup remains.
+- [x] Harden file imports and shared-home reads against path traversal, symlinks, ancestor replacement, special files, and concurrent modification. Prefer copying through execution-side file access where host-side resolution could expose service-private paths.
 - [ ] Inventory legacy absolute paths in application records, manifests, private conversation memory, browser configuration, and installed utilities. Define a one-time rewrite or execution-local compatibility mapping without mounting old service secrets into execution.
 - [ ] Back up PostgreSQL and persistent volumes; stop writers for migration. Preserve the old runtime image and container writable-layer changes so user-installed packages and configuration are recoverable.
 - [ ] Migrate agent home/workspace to the shared home; move provider authentication and canonical uploads to private service storage. Preserve ownership, browser encryption/keyring state, hostname-sensitive profile behavior, and installed tools.
@@ -118,6 +128,7 @@ Exit criteria:
 - Published attachments remain unchanged after execution edits/deletes its source.
 - A malicious shared-home path cannot publish/read a private service sentinel.
 - Migration and rollback are rehearsed against disposable copies before changing the user's running stack.
+
 
 ### 5. Validate Parity and Remove Superseded Runtime Paths
 
@@ -152,6 +163,7 @@ cd backend
 npm run build
 npm run lint
 npm run runtime:smoke
+npm run runtime:stack:smoke
 npm run files:smoke
 npm run browser:smoke
 npm run workers:smoke

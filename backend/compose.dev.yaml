@@ -1,21 +1,29 @@
 services:
-  pal:
+  agent-service:
     environment:
       PAL_PUBLIC_URL: ${PAL_DEV_PUBLIC_URL:-http://localhost:5173}
       PAL_DESKTOP_VIEWER_URL: ${PAL_DEV_PUBLIC_URL:-http://localhost:5173}/desktop/v2/vnc.html
-    healthcheck:
-      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:3000/health']
-      interval: 2s
-      timeout: 3s
-      retries: 60
-      start_period: 10s
+      PAL_EXECUTION_ID: pal-dev-execution
+  execution:
+    labels:
+      mastra.sandbox.id: pal-dev-execution
+  web:
+    build:
+      args:
+        PAL_RELEASE_ID: development
+        PAL_APP_VARIANT: dev
+    ports: !override
+      - "127.0.0.1:${PAL_DEV_PWA_PORT:-14173}:8080"
+  postgres:
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-15433}:5432"
   frontend:
     image: node:24.15.0-trixie-slim@sha256:291be77873bc04731968cacf82f0fcef17cee8cf200c6b6951e2bcab41560eb7
     working_dir: /opt/pal-web
     command: ['sh', '-c', 'npm ci && npm run dev -- --host 0.0.0.0']
     environment:
-      PAL_BACKEND_URL: http://pal:3000
-      PAL_DESKTOP_URL: http://pal:6080
+      PAL_BACKEND_URL: http://agent-service:3000
+      PAL_DESKTOP_URL: http://web:8080/desktop
       PAL_DEV_ALLOWED_HOST: ${PAL_DEV_ALLOWED_HOST:-}
       CHOKIDAR_USEPOLLING: 'true'
     ports:
@@ -23,22 +31,11 @@ services:
     volumes:
       - ../frontend:/opt/pal-web
       - frontend_node_modules:/opt/pal-web/node_modules
+    networks: [service]
     depends_on:
-      pal:
+      agent-service:
         condition: service_healthy
-    restart: unless-stopped
-    init: true
-  frontend-stage:
-    profiles: ['pwa-stage']
-    build:
-      context: ../frontend
-      args:
-        PAL_RELEASE_ID: development
-        PAL_APP_VARIANT: dev
-    ports:
-      - '127.0.0.1:${PAL_DEV_PWA_PORT:-14173}:8080'
-    depends_on:
-      pal:
+      web:
         condition: service_healthy
     restart: unless-stopped
     init: true

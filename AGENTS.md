@@ -36,7 +36,8 @@ Run the integrated local development stack from the repository root with `./scri
 
 - `up`: start the isolated development stack. Frontend source changes use Vite hot reload and need no restart.
 - `frontend-restart`: refresh the frontend container after frontend dependency changes.
-- `rebuild`: rebuild the stack after backend, agent-guidance, desktop, package, or system dependency changes.
+- `rebuild`: rebuild backend and agent guidance while preserving the execution desktop.
+- `execution-rebuild`: replace the execution desktop after desktop or system dependency changes; home/profile data persist and running desktop applications stop.
 - `serve`: expose the staged production PWA over Tailscale when Tailnet access is requested. Use `unserve` to remove the script-managed route.
 - `pwa-up`: rebuild the staged production PWA after frontend-only changes and notify connected clients that an update is available.
 - `status`, `logs`, and `down`: inspect or stop the stack.

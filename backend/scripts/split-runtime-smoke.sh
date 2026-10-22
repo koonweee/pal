@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/.."
+npm run build
 project=pal-split-runtime-smoke
 compose_file=scripts/split-runtime/compose.yaml
 cleanup() {

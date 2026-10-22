@@ -1,21 +1,35 @@
 import assert from 'node:assert/strict';
 import { readdir, writeFile } from 'node:fs/promises';
-import { DockerSandbox } from '@mastra/docker';
-import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
+import 'reflect-metadata';
+import { ConfigService } from '@nestjs/config';
+import { ComposeSandbox } from './dist/execution/compose-sandbox.js';
+import { ExecutionService } from './dist/execution/execution.service.js';
+import {
+  Workspace,
+  createWorkspaceTools,
+  WORKSPACE_TOOLS,
+} from '@mastra/core/workspace';
 import { RequestContext } from '@mastra/core/request-context';
 import { createCodeMode, createTool, noopObserve } from '@mastra/core/tools';
 import { jsonSchema } from 'ai';
 
-const sandbox = new DockerSandbox({
-  id: 'pal-split-runtime-smoke',
-  workingDirectory: '/home/pal',
-});
+const execution = new ExecutionService(
+  new ConfigService({
+    PAL_EXECUTION_ID: 'pal-split-runtime-smoke',
+    PAL_AGENT_WORKING_DIR: '/home/pal',
+  }),
+);
+const sandbox = execution.sandbox;
 await sandbox._start();
 const originalId = sandbox.container.id;
 if (process.env.SMOKE_PHASE === 'restart') {
-  const result = await sandbox.executeCommand('kill -0 "$(cat /home/pal/user-process.pid)"');
+  const result = await sandbox.executeCommand(
+    'kill -0 "$(cat /home/pal/user-process.pid)"',
+  );
   assert.equal(result.exitCode, 0, result.stderr);
-  console.log('PASS: new service process reconnects while execution user process survives');
+  console.log(
+    'PASS: new service process reconnects while execution user process survives',
+  );
   process.exit(0);
 }
 const command = async (text) => {
@@ -24,17 +38,28 @@ const command = async (text) => {
   return result.stdout.trim();
 };
 assert.equal(await command('id -u'), '1000');
-assert.equal(await command('printf "%s" "${PAL_SERVICE_SENTINEL-unavailable}"'), 'unavailable');
+assert.equal(
+  await command('printf "%s" "${PAL_SERVICE_SENTINEL-unavailable}"'),
+  'unavailable',
+);
 // The shared image is intentionally the same; a runtime-only private file proves
 // mount separation rather than merely using different image contents.
 await writeFile('/service-private/runtime-sentinel', 'service-only');
-assert.equal(await command('test ! -e /service-private/runtime-sentinel && echo isolated'), 'isolated');
-assert.equal(await command('test ! -S /var/run/docker.sock && echo isolated'), 'isolated');
+assert.equal(
+  await command('test ! -e /service-private/runtime-sentinel && echo isolated'),
+  'isolated',
+);
+assert.equal(
+  await command('test ! -S /var/run/docker.sock && echo isolated'),
+  'isolated',
+);
 assert.equal(await command('printf hello; printf error >&2'), 'hello');
 
 let streamed = '';
 const echo = await sandbox.processes.spawn('read text; printf "%s" "$text"', {
-  onStdout: (chunk) => { streamed += chunk; },
+  onStdout: (chunk) => {
+    streamed += chunk;
+  },
 });
 await echo.sendStdin('from-stdin\n');
 assert.equal((await echo.wait()).exitCode, 0);
@@ -45,12 +70,14 @@ assert.equal(failed.exitCode, 17);
 const timeout = await sandbox.executeCommand('sleep 30', [], { timeout: 100 });
 assert.notEqual(timeout.exitCode, 0);
 const controller = new AbortController();
-const pending = sandbox.executeCommand('sleep 30', [], { abortSignal: controller.signal });
+const pending = sandbox.executeCommand('sleep 30', [], {
+  abortSignal: controller.signal,
+});
 setTimeout(() => controller.abort(), 100);
 assert.notEqual((await pending).exitCode, 0);
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: '/home/pal', contained: true }),
+  filesystem: execution.filesystem,
   sandbox,
 });
 await workspace.init();
@@ -60,8 +87,10 @@ const tool = createTool({
   id: 'service_probe',
   description: 'Return host-only state without exporting its value.',
   inputSchema: jsonSchema({
-    type: 'object', properties: { value: { type: 'number' } },
-    required: ['value'], additionalProperties: false,
+    type: 'object',
+    properties: { value: { type: 'number' } },
+    required: ['value'],
+    additionalProperties: false,
   }),
   execute: async ({ value }, ctx) => {
     assert.equal(ctx.requestContext.get('task'), 'smoke-task');
@@ -70,13 +99,19 @@ const tool = createTool({
   },
 });
 const code = createCodeMode({ tools: { service_probe: tool }, timeout: 5000 });
-const run = (source, abortSignal) => code.tool.execute(
-  { code: source }, { workspace, requestContext: context, observe: noopObserve, abortSignal },
+const run = (source, abortSignal) =>
+  code.tool.execute(
+    { code: source },
+    { workspace, requestContext: context, observe: noopObserve, abortSignal },
+  );
+const result = await run(
+  'return await Promise.all([external_service_probe({value: 2}), external_service_probe({value: 3})]);',
 );
-const result = await run('return await Promise.all([external_service_probe({value: 2}), external_service_probe({value: 3})]);');
 assert.equal(result.success, true, JSON.stringify(result));
 assert.deepEqual(result.result, [4, 6]);
-const privateCheck = await run('return process.env.PAL_SERVICE_SENTINEL ?? "unavailable";');
+const privateCheck = await run(
+  'return process.env.PAL_SERVICE_SENTINEL ?? "unavailable";',
+);
 assert.equal(privateCheck.result, 'unavailable');
 const forbidden = await run('return await external_unavailable({});');
 assert.equal(forbidden.success, false);
@@ -108,9 +143,88 @@ const timed = await slow.tool.execute(
 assert.equal(timed.success, false);
 assert.equal(timed.error.name, 'TimeoutError');
 assert.deepEqual((await readdir('/home/pal/tmp')).sort(), before);
-const reconnected = new DockerSandbox({ id: 'pal-split-runtime-smoke' });
+const png = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lH8AAAAASUVORK5CYII=',
+  'base64',
+);
+await execution.filesystem.writeFile('fixture.png', png);
+assert.deepEqual(await execution.readFile('/home/pal/fixture.png', 1000), png);
+await assert.rejects(execution.readFile('/home/pal/fixture.png', 1), {
+  kind: 'too_large',
+});
+await assert.rejects(execution.readFile('/home/pal', 1000), {
+  kind: 'not_file',
+});
+assert(
+  (await execution.filesystem.readdir('.')).some(
+    (file) => file.name === 'fixture.png',
+  ),
+);
+await execution.filesystem.writeFile('snapshot.txt', 'stable');
+await sandbox.writeFiles([
+  {
+    path: '/home/pal/mutate-read.mjs',
+    content: `
+  import fs from 'node:fs/promises';
+  import {syncBuiltinESMExports} from 'node:module';
+  const original = fs.open;
+  fs.open = async (...args) => {
+    const handle = await original(...args);
+    if (args[0] === '/home/pal/snapshot.txt') {
+      const read = handle.read.bind(handle);
+      let changed = false;
+      handle.read = async (...params) => {
+        const result = await read(...params);
+        if (!changed) { changed = true; await fs.appendFile(args[0], 'x'); }
+        return result;
+      };
+    }
+    return handle;
+  };
+  syncBuiltinESMExports();
+`,
+  },
+]);
+sandbox.setEnv((runtimeEnv) => ({
+  ...runtimeEnv,
+  NODE_OPTIONS: '--import /home/pal/mutate-read.mjs',
+}));
+try {
+  await assert.rejects(execution.readFile('/home/pal/snapshot.txt', 1000), {
+    kind: 'unreadable',
+  });
+} finally {
+  sandbox.setEnv((runtimeEnv) => {
+    delete runtimeEnv.NODE_OPTIONS;
+    return runtimeEnv;
+  });
+}
+const native = await createWorkspaceTools(workspace);
+const reader = native[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
+const media = await reader.execute(
+  { path: '/home/pal/fixture.png' },
+  { workspace, observe: noopObserve },
+);
+assert.equal(reader.toModelOutput(media).value[1].type, 'media');
+await execution.filesystem.writeFile('native-file.txt', 'shared home');
+assert.equal(
+  await execution.filesystem.readFile('native-file.txt', { encoding: 'utf8' }),
+  'shared home',
+);
+await command('ln -s /service-private/runtime-sentinel /home/pal/private-link');
+await assert.rejects(execution.filesystem.readFile('private-link'));
+await assert.rejects(
+  new ComposeSandbox('pal-split-absent', '/home/pal')._start(),
+);
+await sandbox._stop();
+const reconnected = new ComposeSandbox('pal-split-runtime-smoke', '/home/pal');
 await reconnected._start();
 assert.equal(reconnected.container.id, originalId);
-await command('sleep 60 </dev/null >/dev/null 2>&1 & echo $! > /home/pal/user-process.pid');
-console.log('PASS: Docker execution, streaming/stdin, isolation, cancellation, native code mode, cleanup, and reconnection');
+await sandbox._start();
+await command(
+  'sleep 60 </dev/null >/dev/null 2>&1 & echo $! > /home/pal/user-process.pid',
+);
+console.log(
+  'PASS: Docker execution, streaming/stdin, isolation, cancellation, native code mode, cleanup, and reconnection',
+);
 // Compose owns cleanup; deliberately do not stop/destroy the persistent container.

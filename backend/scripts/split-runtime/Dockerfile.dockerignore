@@ -4,3 +4,8 @@
 !scripts/
 !scripts/split-runtime/
 !scripts/split-runtime/check.mjs
+!dist/
+!dist/execution/
+!dist/execution/**
+!execution/
+!execution/**

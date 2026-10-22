@@ -1,3 +1,4 @@
+import { ExecutionModule } from './execution/execution.module.js';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { validateEnvironment } from './config/configuration.js';
@@ -13,6 +14,7 @@ import { WebPushModule } from './adapters/web-push/web-push.module.js';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnvironment }),
+    ExecutionModule,
     DatabaseModule,
     EventsModule,
     McpModule,

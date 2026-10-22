@@ -1,80 +1,60 @@
 # Deployment
 
-Compose runs NestJS, Mastra, and an Xfce/X11 desktop together in the `pal` container and PostgreSQL in a separate service. Direct host development uses the same local providers. The [agent container plan](../plans/agent-container.md) and [desktop plan](../plans/x11-desktop.md) track validation; direct VM provisioning is deferred.
+Docker Compose runs four services:
 
-The local development overlay adds a Vite container with the React source mounted for hot reload. An optional profile builds the Nginx production gateway with the `Pal Dev` identity for installation and service-worker testing beside Vite. Both web endpoints and every supporting published port bind only to Mac loopback; API, SSE, and noVNC traffic remain inside the private Compose network behind each same-origin gateway. The `pal-dev` Compose project and its environment, database, agent home, and browser state are separate from production. Telegram and APNs delivery are disabled unless dedicated development credentials are explicitly configured.
+| Service | Responsibility |
+| --- | --- |
+| agent-service | NestJS, Mastra orchestration, model authentication, integration clients, API/SSE, and database access |
+| execution | One persistent Debian/Xfce desktop, Chromium, shell/code execution, and agent files |
+| web | PWA static assets, API/desktop gateway, private CDP forwarding, and Squid egress proxy |
+| postgres | Application and Mastra schemas |
 
-Optional Tailnet access uses Tailscale Serve as a private HTTPS reverse proxy to the loopback production-style PWA gateway. The lifecycle script owns one scoped HTTPS endpoint, preserves other Serve configuration, and switches the development backend public URL and OAuth callbacks to that generated Tailnet origin. Vite remains loopback-only for hot reload. Serve configuration is independent of the Compose lifecycle and remains active until explicitly disabled.
+The development overlay adds Vite and isolated local database/PWA ports. Production and development use separate Compose projects and volumes. Host-side builds and tests are supported; runtime execution uses Docker.
 
-Installed production PWA acceptance requires a stable HTTPS origin whose identity survives releases. The local Tailnet Serve URL is a development origin and is not a production installation origin unless it is explicitly promoted and retained as part of deployment.
+## Storage and Execution
 
-## Shared Runtime Design
+Both agent-service and execution mount the agent-home volume at `/home/pal`. It contains the workspace, materialized attachment copies, downloads, browser profile, installed user utilities, and temporary code-mode runners. Both containers use UID 1000. The service sets `TMPDIR=/home/pal/tmp`; secret-bearing temporary data must use service-private storage explicitly.
 
-NestJS and Mastra run together in one process. Native local filesystem and command tools operate on the environment hosting that process. Deployment supplies the machine boundary and administrative permissions.
+The service-data volume mounts only in agent-service at `/data/private`. It owns model authentication, service HOME, canonical uploads, and published file snapshots. PostgreSQL has its own volume. Execution receives neither those volumes nor the backend environment.
 
-The layout uses `/opt/pal` for the application and persistent `/data` directories for the agent's home, workspace, authentication, and uploads. Paths and the PostgreSQL connection are supplied through environment configuration. The application needs no container/VM switch or execution adapter.
+Mastra's Docker provider supplies command execution and process streams. ComposeSandbox attaches to exactly one running container carrying the configured `mastra.sandbox.id` label. Compose owns container creation, replacement, and deletion. Backend shutdown detaches the workspace and leaves the desktop running. Operations resolve the stable label again after container replacement; missing execution fails without a local fallback.
 
-## Container and Direct VM
+Agent-service alone accesses Docker's socket. On Linux, set `PAL_DOCKER_GID` to the socket's group ID; Docker Desktop uses the default 0. Execution retains passwordless sudo inside its container, with no Docker socket or host administrative mounts.
 
-| Concern | Container deployment | Direct VM deployment |
-| --- | --- | --- |
-| Application installation | Build Pal into an image. | Clone Pal, install locked dependencies, and build. |
-| System utilities | Install baseline utilities in the Dockerfile. | Install utilities during VM provisioning. |
-| Agent execution | Local tools execute inside the container. | The same local tools execute inside the VM. |
-| Administrative access | Dedicated user with passwordless sudo inside the container, subject to Docker capabilities. | Dedicated user with passwordless sudo in the VM. |
-| Process lifecycle | Supervisor manages D-Bus, desktop, viewer, and API; Compose supplies restart policy and `init: true`. | A systemd service. |
-| Persistent agent files | Named volume mounted at `/data`. | Persistent disk mounted or available at `/data`. |
-| PostgreSQL | Existing separate Compose service and database volume. | Reachable PostgreSQL instance configured by URL. |
-| API/viewer ingress | HTTP and noVNC ports publish on Mac loopback; raw VNC stays internal. | Bind to an appropriate private interface or use private ingress. |
+Native filesystem operations delegate to LocalFilesystem inside execution through Docker process stdin/stdout. This isolates path resolution from service-private files, including shared-home symlink races. File tools operate within the agent home; shell commands can access the execution container's other paths. Upload manifests point to copies in `/home/pal/incoming`. Publication reads files inside execution and stores immutable canonical copies in private service storage.
 
-Application migrations remain an explicit deployment step. Local development uses `npm run db:migrate` from the host; production runs `npm run db:migrate:prod` from the pinned runtime image before starting the API.
+## Network Boundaries
 
-Production serves the built React PWA through a small same-origin gateway. The gateway routes browser `/api` requests, native root API requests, SSE, and the versioned `/desktop` HTTP/WebSocket paths to the private runtime services. Its 25 MiB request-body limit admits multipart uploads up to the backend's 25,000,000-byte per-file limit. Only the gateway joins the ingress network.
+Execution joins an internal Docker network. Its configured HTTP(S) proxy runs in web, permits public web destinations, and denies private, loopback, link-local, and Tailnet destination addresses. Chromium uses this proxy; command tools receive proxy environment variables. Software that ignores proxy configuration has no direct internet route.
 
-Each production rollout supplies one opaque `PAL_RELEASE_ID` to the backend runtime and React frontend build. The browser compares that release through HTTP headers and the initial `frontend.updated` SSE event, then checks its service-worker registration. A production-style staging build also supplies `PAL_APP_VARIANT=dev`, giving it `Pal Dev` installation metadata and a distinct manifest ID.
+Web rejects gateway requests originating from the execution subnet. Agent-service and PostgreSQL are on the separate service network. The only published production port is the loopback-bound PWA gateway. The CDP-forwarding listener and egress proxy are private Docker endpoints.
 
-The web manifest uses validated 192 px and 512 px versions of the iOS artwork plus a 180 px Apple touch icon. The artwork is declared as a general icon rather than maskable because it does not fit the maskable safe zone.
+Pal remains Tailscale-only. Do not expose its gateway to the public internet.
 
-`frontend/` builds the production React/PWA gateway with the same private exposure boundary. Its service worker caches only the static application shell. API, SSE, file, OAuth, notification, and noVNC routes are network-only, and Nginx serves the worker, manifest, and document with revalidation while hashed assets are immutable. Prior immutable backend and gateway images are retained for compatible rollbacks.
+## Development and Updates
 
-> [!WARNING]
-> Pal is Tailscale-only. Do not expose it to the public internet.
+Use `./scripts/dev-local` from the repository root:
 
-## Application Updates
+- `up` builds and starts the isolated split stack.
+- `rebuild` refreshes backend code while retaining the running execution container.
+- `execution-rebuild` replaces the execution image/container and restarts its clients. Browser profile and home files persist; running desktop applications stop.
+- `frontend-restart` refreshes Vite after frontend dependency changes.
+- `pwa-up` rebuilds the production-style PWA and announces an available update.
+- `serve` and `unserve` manage the scoped private Tailscale Serve route.
+- `status`, `logs`, and `down` inspect or stop the stack.
 
-The development workflow builds the image and recreates the Pal container while preserving `/data`. Application updates are deployed externally. Pal owns its workspace and tools and runs as a dedicated user with unrestricted passwordless sudo inside the container. That administrative capability includes technical access to application files; externally managed updates describe the supported workflow.
+Database migrations remain explicit deployment steps, run from agent-service before the application starts. Production supplies a shared opaque `PAL_RELEASE_ID` to backend and frontend builds. The development web build uses the `Pal Dev` installation identity.
 
-## Persistence
+The gateway forwards API/SSE to agent-service and versioned desktop HTTP/WebSocket paths to execution. Nginx refreshes upstream Docker DNS when containers are replaced. Its 25 MiB request-body limit admits Pal's 25,000,000-byte uploads. The PWA service worker caches the static shell; API, files, OAuth, notifications, and noVNC remain network-only.
 
-Restarting the same container retains its writable filesystem. Replacing a container retains named-volume data, while system modifications outside those volumes are discarded. Keep user-installed tools and configuration under `/data/home`; put reproducible baseline system dependencies in the image. See [Docker storage](https://docs.docker.com/engine/storage/).
+## Persistence and Desktop
 
-VM disk changes, including installed system packages, survive ordinary reboots when the disk is persistent. Replacing a VM requires retaining or restoring its disks and provisioning the new machine.
+Restarting a container retains its writable filesystem. Replacing it retains named-volume contents. Back up agent home, service data, and PostgreSQL application/Mastra schemas together. User-installed packages outside home require an image or filesystem backup before execution-image replacement.
 
-Back up `/data` together with PostgreSQL application and Mastra schemas. Authentication files belong in private persistent storage. These deployment details stay in repository documentation; they do not add agent instructions.
+TigerVNC supplies a shared 1200×900 X11 display. Supervisor owns D-Bus, Xfce, noVNC, and the CDP bridge. Docker init reaps orphaned processes. The desktop profile installs the coral Xfce/GTK assets and floating launcher; home preserves later user customization.
 
-## Moving to a VM
+Chromium uses `/home/pal/.config/chromium` by default and the stable `pal` hostname. The bundled launcher loads the task-groups extension and retains Chromium's sandbox through the repository's seccomp profile. Raw CDP listens on execution loopback; private forwarding connects BrowserService through web. Chromium starts on demand. Browser/group cleanup preserves unrelated tabs. Cookies and profile state persist; browser restart begins fresh runtime groups.
 
-Provision Node and baseline utilities, install/build Pal, restore its persistent directories, configure PostgreSQL and paths, and start NestJS under systemd. Stop the previous agent runtime before starting its replacement against the same stored conversations. Mastra continues using the same local providers.
-
-## Desktop
-
-TigerVNC provides a single 1200×900 X11 display shared by task agents and the user. noVNC/websockify exposes the viewer, embedded through the web gateway's HTTP/WebSocket proxy. All applications run as `pal` with shared display and session D-Bus settings.
-
-The [desktop appearance profile](../backend/desktop/profile/README.md) installs matching coral GTK/Xfwm assets, Papirus icons, and Chromium GTK defaults. Per-user initialization configures 64 px workspace margins and one floating launcher panel. XDG autostart runs Devilspie2 to maximize newly opened normal app windows and Picom for shared rounded corners and compositing; Xfwm owns window management with its compositor disabled. Versioned markers preserve later customization; original preferences are backed up in the user’s XDG state directory. The same installer supports Debian-based Xfce/X11 VMs.
-
-Compose applies a [Moby-based seccomp profile](../backend/desktop/seccomp.README.md) allowing the namespace syscalls required by Chromium. The browser retains its namespace and Seccomp-BPF sandboxes; container capabilities remain at their existing defaults.
-
-The API starts after the window manager is ready. Supervisor restarts the desktop independently after failure; computer operations fail during the outage while chat and shell remain available. Graceful container shutdown stops Main and task runs before the desktop and D-Bus.
-
-Browser profiles, desktop preferences, and saved files persist under `/data/home`. Compose keeps a stable `pal` hostname so Chromium can recover stale profile locks after recreation. Session sockets are ephemeral. Reboot starts a fresh desktop without restoring running applications. Direct Mac development disables the X11 capability.
-
-## Shared Chromium
-
-`pal-browser` resolves to `backend/desktop/browser.sh`. Both the desktop Chromium launcher and BrowserService use it to load the bundled task-groups extension and enable loopback CDP on `PAL_BROWSER_PORT` (default 9222). The shared profile defaults to `${XDG_CONFIG_HOME:-$HOME/.config}/chromium`, under persistent `/data/home` in Compose. `PAL_BROWSER_PROFILE` selects an absolute alternative path; `PAL_BROWSER_EXECUTABLE` selects the Chromium binary. Chromium starts on demand and retains its sandbox. The debugging port stays internal.
-
-The image runs `desktop/browser-install.sh` to install the launcher and desktop entry. For an Xfce VM, keep the installed Pal checkout at a stable path, install/build its locked dependencies, then run `sudo backend/desktop/browser-install.sh` alongside the desktop profile installer. Start the desktop and API as the same user with the same home, display, browser configuration, and session D-Bus. Use the Chromium desktop entry or `pal-browser` so the extension and profile agree.
-
-Cookies and login state persist across browser/container restarts. Running browser sessions and task groups start fresh after restart; API reconnect recovers groups in the running browser. Group cleanup leaves unrelated tabs and user-created groups available.
 
 ## Web Push
 

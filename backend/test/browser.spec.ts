@@ -6,6 +6,7 @@ import {
 } from '@mastra/core/request-context';
 import { noopObserve, type Tool } from '@mastra/core/tools';
 import { PARENT_TASK_ID, WORKER_ID } from '../dist/agent/task-workers.js';
+import type { ExecutionService } from '../dist/execution/execution.service.js';
 import { BrowserService } from '../dist/browser/browser.service.js';
 import { browserTools } from '../dist/browser/browser-tools.js';
 import { EventsService } from '../dist/events/events.service.js';
@@ -16,6 +17,7 @@ it('routes concurrent task tools by trusted thread identity and preserves screen
     new ConfigService({ PAL_DESKTOP_ENABLED: true }),
     {} as TasksService,
     new EventsService(),
+    {} as ExecutionService,
   );
   const command = vi
     .spyOn(service, 'command')
@@ -73,6 +75,7 @@ it('routes concurrent task tools by trusted thread identity and preserves screen
         new ConfigService(),
         {} as TasksService,
         new EventsService(),
+        {} as ExecutionService,
       ),
     ),
   ).toEqual({});

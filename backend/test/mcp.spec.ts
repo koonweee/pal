@@ -435,6 +435,7 @@ it('keeps Main catalog-free and refreshes code mode for reused and scheduled tas
         preferences,
         destinations,
         instanceSettings,
+        execution,
       }) =>
         new MastraAgentRuntime(
           new ConfigService({
@@ -455,6 +456,7 @@ it('keeps Main catalog-free and refreshes code mode for reused and scheduled tas
           preferences,
           destinations,
           instanceSettings,
+          execution,
         ),
     });
     const service = app.app.get(McpService);

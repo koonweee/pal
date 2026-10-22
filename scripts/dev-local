@@ -97,8 +97,6 @@ wait_for_url() {
 
 compose() {
   PAL_ENV_FILE="$config_file" \
-  PORT="${PAL_DEV_BACKEND_PORT:-13000}" \
-  PAL_DESKTOP_PORT="${PAL_DEV_DESKTOP_PORT:-16080}" \
   POSTGRES_PORT="${PAL_DEV_POSTGRES_PORT:-15433}" \
   PAL_DEV_PUBLIC_URL="$public_url" \
   PAL_DEV_ALLOWED_HOST="$allowed_host" \
@@ -111,13 +109,13 @@ start_pwa_stage() {
     echo "The local development backend is not healthy. Run ./scripts/dev-local up first." >&2
     return 1
   fi
-  compose --profile pwa-stage up -d --build --wait --no-deps frontend-stage
+  compose up -d --build --wait --no-deps web
   wait_for_url "$pwa_local_url/health"
 }
 
 publish_pwa_update() {
   local revision
-  revision="$(compose --profile pwa-stage images -q frontend-stage)"
+  revision="$(compose images -q web)"
   if [[ -z "$revision" ]]; then
     echo "Pal Dev PWA was rebuilt, but its frontend revision could not be determined." >&2
     return
@@ -126,7 +124,7 @@ publish_pwa_update() {
     --request POST \
     --header 'Content-Type: application/json' \
     --data "{\"revision\":\"$revision\"}" \
-    "http://127.0.0.1:${PAL_DEV_BACKEND_PORT:-13000}/frontend-updates" \
+    "$local_url/api/frontend-updates" \
     >/dev/null; then
     echo "Pal Dev PWA was rebuilt, but the live update notice failed." >&2
   fi
@@ -147,29 +145,35 @@ case "$command_name" in
     ;;
   login)
     prepare
-    compose build pal
-    compose run --rm --no-deps pal node dist/agent/login.js --device
+    compose build agent-service
+    compose run --rm --no-deps agent-service node dist/agent/login.js --device
     ;;
   up)
     prepare
-    compose build pal
+    compose build agent-service execution web
     compose up -d --wait postgres
-    compose run --rm pal node dist/database/migrate.js
-    if ! compose run --rm --no-deps pal sh -c 'test -s "$PAL_AGENT_AUTH_PATH"'; then
+    compose run --rm --no-deps agent-service node dist/database/migrate.js
+    if ! compose run --rm --no-deps agent-service sh -c 'test -s "$PAL_AGENT_AUTH_PATH"'; then
       echo "Development agent login is required. Run:" >&2
       echo "  ./scripts/dev-local login" >&2
       exit 2
     fi
-    compose up -d --wait pal frontend
+    compose up -d --wait execution agent-service web frontend
     echo "Pal development is available at $local_url"
     ;;
   rebuild)
     prepare
-    compose build pal
+    compose build agent-service
     compose up -d --wait postgres
-    compose run --rm pal node dist/database/migrate.js
-    compose up -d --wait --force-recreate pal frontend
+    compose run --rm --no-deps agent-service node dist/database/migrate.js
+    compose up -d --wait --no-deps --force-recreate agent-service web frontend
     echo "Pal development is available at $local_url"
+    ;;
+  execution-rebuild)
+    prepare
+    compose build execution
+    compose up -d --wait --no-deps --force-recreate execution
+    compose restart agent-service web
     ;;
   frontend-restart)
     prepare
@@ -180,13 +184,13 @@ case "$command_name" in
     ;;
   logs)
     prepare
-    compose logs -f pal frontend
+    compose logs -f agent-service execution web frontend
     ;;
   status)
     prepare
     compose ps
     echo "Pal development URL: $local_url"
-    if compose --profile pwa-stage ps --status running --services | grep -qx frontend-stage; then
+    if compose ps --status running --services | grep -qx web; then
       echo "Pal PWA staging URL: $pwa_local_url"
       if [[ "$managed_serve" == true ]]; then
         echo "Pal Tailnet PWA URL: $public_url"
@@ -212,7 +216,7 @@ case "$command_name" in
     tailnet_url="https://$tailnet_dns:$serve_port"
     write_serve_state "$tailnet_url" "$tailnet_dns" "$serve_port" "$pwa_local_port"
     load_serve_state
-    compose up -d --wait --force-recreate pal frontend
+    compose up -d --wait --no-deps --force-recreate agent-service web frontend
     wait_for_url "$public_url/api/health"
     publish_pwa_update
     echo "Pal Dev Tailnet PWA is available at $public_url"
@@ -237,7 +241,7 @@ case "$command_name" in
     fi
     rm "$serve_state_file"
     load_serve_state
-    compose up -d --wait --force-recreate pal frontend
+    compose up -d --wait --no-deps --force-recreate agent-service web frontend
     wait_for_url "$local_url/api/health"
     echo "Pal Tailnet Serve is disabled; local development remains at $local_url"
     ;;
@@ -253,7 +257,7 @@ case "$command_name" in
     compose down
     ;;
   *)
-    echo "Usage: ./scripts/dev-local {config|login|up|rebuild|frontend-restart|logs|status|serve|unserve|pwa-up|down}" >&2
+    echo "Usage: ./scripts/dev-local {config|login|up|rebuild|execution-rebuild|frontend-restart|logs|status|serve|unserve|pwa-up|down}" >&2
     exit 2
     ;;
 esac

@@ -1,3 +1,4 @@
+import { ExecutionService } from '../dist/execution/execution.service.js';
 import { DestinationService } from '../dist/delivery/destination.service.js';
 import { FilesService } from '../dist/files/files.service.js';
 import { BrowserService } from '../dist/browser/browser.service.js';
@@ -304,6 +305,7 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
         preferences,
         destinations,
         instanceSettings,
+        execution,
       }) =>
         new MastraAgentRuntime(
           new ConfigService({
@@ -324,6 +326,7 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
           preferences,
           destinations,
           instanceSettings,
+          execution,
         ),
     });
     const chat = fixture.app.get(ChatService);
@@ -714,6 +717,7 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
       fixture.app.get(PreferencesService),
       fixture.app.get(DestinationService),
       fixture.app.get(InstanceSettingsService),
+      fixture.app.get(ExecutionService),
     );
     try {
       await replacement.onModuleInit();

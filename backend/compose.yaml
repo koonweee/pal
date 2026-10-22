@@ -1,54 +1,129 @@
 name: pal-rewrite
+x-app-logging: &app-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 services:
-  pal:
+  agent-service:
     build:
       context: .
-      target: runtime
-    image: pal-local
-    hostname: pal
+      target: agent-service
+    image: pal-agent-service-local
     env_file: ${PAL_ENV_FILE:-.env}
     environment:
       DATABASE_URL: postgresql://pal:pal@postgres:5432/pal
       HOST: 0.0.0.0
       PORT: 3000
-      PAL_UPLOAD_DIR: /data/uploads
-      PAL_AGENT_AUTH_PATH: /data/agent/auth.json
-      PAL_AGENT_WORKING_DIR: /data/workspace
+      HOME: /data/private/home
+      TMPDIR: /home/pal/tmp
+      PAL_UPLOAD_DIR: /data/private/uploads
+      PAL_AGENT_AUTH_PATH: /data/private/agent/auth.json
+      PAL_AGENT_WORKING_DIR: /home/pal/workspace
+      PAL_EXECUTION_ID: ${PAL_EXECUTION_ID:-pal-execution}
       PAL_DESKTOP_ENABLED: "true"
+      PAL_BROWSER_ENDPOINT: http://web:8081
       PAL_RELEASE_ID: ${PAL_RELEASE_ID:-development}
-    ports:
-      - "127.0.0.1:${PORT:-3000}:3000"
-      - "127.0.0.1:${PAL_DESKTOP_PORT:-6080}:6080"
     volumes:
-      - pal_data:/data
+      - service_data:/data/private
+      - agent_home:/home/pal
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "${PAL_DOCKER_GID:-0}"
+    networks: [service]
     depends_on:
       postgres:
         condition: service_healthy
-    security_opt:
-      - seccomp:./desktop/seccomp.json
+      execution:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+      start_period: 10s
+    logging: *app-logging
     init: true
     restart: unless-stopped
     stop_grace_period: 40s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+
+  execution:
+    build:
+      context: .
+      target: execution
+    image: ${PAL_EXECUTION_IMAGE:-pal-execution-local}
+    hostname: pal
+    labels:
+      mastra.sandbox.id: ${PAL_EXECUTION_ID:-pal-execution}
+    environment:
+      HOME: /home/pal
+      TMPDIR: /home/pal/tmp
+      HTTP_PROXY: http://web:3128
+      HTTPS_PROXY: http://web:3128
+      http_proxy: http://web:3128
+      https_proxy: http://web:3128
+      NO_PROXY: localhost,127.0.0.1,::1
+      no_proxy: localhost,127.0.0.1,::1
+      NODE_USE_ENV_PROXY: "1"
+    volumes:
+      - agent_home:/home/pal
+    networks: [execution]
+    cap_drop: [NET_RAW]
+    security_opt:
+      - seccomp:./desktop/seccomp.json
+    healthcheck:
+      test: ["CMD", "sh", "-c", "xprop -root _NET_SUPPORTING_WM_CHECK | grep -q 'window id'"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    logging: *app-logging
+    init: true
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../frontend
+      args:
+        PAL_RELEASE_ID: ${PAL_RELEASE_ID:-development}
+    image: pal-web-local
+    ports:
+      - "127.0.0.1:${PAL_WEB_PORT:-8080}:8080"
+    networks: [service, execution]
+    depends_on:
+      execution:
+        condition: service_healthy
+      agent-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -qO- http://127.0.0.1:8080/health >/dev/null && kill -0 $(cat /run/squid.pid)"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    logging: *app-logging
+    init: true
+    restart: unless-stopped
+
   postgres:
     image: postgres:17.6-alpine
     environment:
       POSTGRES_USER: pal
       POSTGRES_PASSWORD: pal
       POSTGRES_DB: pal
-    ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks: [service]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pal -d pal"]
       interval: 2s
       timeout: 3s
       retries: 30
+
 volumes:
-  pal_data:
+  service_data:
+  agent_home:
   postgres_data:
+
+networks:
+  service:
+  execution:
+    internal: true

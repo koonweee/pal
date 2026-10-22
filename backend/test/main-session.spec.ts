@@ -1,3 +1,5 @@
+import { ExecutionService } from '../dist/execution/execution.service.js';
+import { LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import { DestinationService } from '../dist/delivery/destination.service.js';
 import { FilesService } from '../dist/files/files.service.js';
 import { MAX_FILE_BYTES } from '../dist/files/application-file-storage.js';
@@ -438,6 +440,7 @@ it('keeps generation failures private, and shuts down silently', async () => {
     fixture.app.get(PreferencesService),
     fixture.app.get(DestinationService),
     fixture.app.get(InstanceSettingsService),
+    fixture.app.get(ExecutionService),
   );
   try {
     await runtime.onModuleInit();
@@ -479,7 +482,7 @@ it('exposes all supported native workspace tools, keeps results private, and sto
   const outside = join(directory, 'outside.txt');
   const pidFile = join(directory, 'foreground.pid');
   const events: AgentControllerEvent[] = [];
-  const computer = new X11Computer();
+  const computer = new X11Computer({ output: async () => Buffer.alloc(0) });
   const png = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL1sAAAAASUVORK5CYII=',
     'base64',
@@ -563,7 +566,12 @@ it('exposes all supported native workspace tools, keeps results private, and sto
     main = await createMainSession({
       connectionString: databaseUrl,
       schemaName: schema,
-      workingDirectory: join(directory, 'workspace'),
+      workingDirectory: directory,
+      sandbox: new LocalSandbox({
+        workingDirectory: directory,
+        isolation: 'none',
+      }),
+      filesystem: new LocalFilesystem({ basePath: directory, contained: true }),
       computer,
       model,
       memoryOptions: {

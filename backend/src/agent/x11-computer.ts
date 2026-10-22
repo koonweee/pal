@@ -1,5 +1,5 @@
-import { execFile } from 'node:child_process';
-import { LocalSandbox, type SandboxComputer } from '@mastra/core/workspace';
+import type { SandboxComputer } from '@mastra/core/workspace';
+import type { ExecutionService } from '../execution/execution.service.js';
 
 const aliases: Record<string, string> = {
   ctrl: 'Control_L',
@@ -34,7 +34,7 @@ const aliases: Record<string, string> = {
 
 export class X11Computer implements SandboxComputer {
   constructor(
-    private readonly env: NodeJS.ProcessEnv = { ...process.env },
+    private readonly execution: Pick<ExecutionService, 'output'>,
     private readonly viewerUrl?: string,
   ) {}
 
@@ -43,32 +43,7 @@ export class X11Computer implements SandboxComputer {
     args: string[],
     input?: string,
   ): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
-      const child = execFile(
-        command,
-        args,
-        {
-          env: this.env,
-          encoding: 'buffer',
-          timeout: 30_000,
-          maxBuffer: 12 * 1024 * 1024,
-        },
-        (error, stdout) => {
-          if (error)
-            reject(
-              new Error(
-                `Desktop command ${command} failed; check the X11 session`,
-                { cause: error },
-              ),
-            );
-          else resolve(stdout);
-        },
-      );
-      child.stdin?.on('error', () => {
-        /* execFile reports process failure. */
-      });
-      child.stdin?.end(input);
-    });
+    return this.execution.output(command, args, { input });
   }
 
   private xdo(...args: string[]) {
@@ -76,11 +51,14 @@ export class X11Computer implements SandboxComputer {
   }
 
   async screenshot() {
-    const data = await this.run('python3', [
+    const encoded = await this.run('python3', [
       '-c',
-      "import os,sys; from PIL import ImageGrab; ImageGrab.grab(xdisplay=os.environ['DISPLAY']).save(sys.stdout.buffer, format='PNG')",
+      "import os,io,base64; from PIL import ImageGrab; data=io.BytesIO(); ImageGrab.grab(xdisplay=os.environ['DISPLAY']).save(data, format='PNG'); print(base64.b64encode(data.getvalue()).decode())",
     ]);
-    return { data, mediaType: 'image/png' as const };
+    return {
+      data: Buffer.from(encoded.toString().trim(), 'base64'),
+      mediaType: 'image/png' as const,
+    };
   }
 
   async moveMouse(x: number, y: number) {
@@ -192,18 +170,5 @@ export class X11Computer implements SandboxComputer {
 
   streamUrl() {
     return Promise.resolve(this.viewerUrl ?? null);
-  }
-}
-
-/** Add desktop control while retaining Mastra's native local execution lifecycle. */
-export class X11Sandbox extends LocalSandbox {
-  override readonly computer: SandboxComputer;
-
-  constructor(
-    options: NonNullable<ConstructorParameters<typeof LocalSandbox>[0]>,
-    computer: SandboxComputer,
-  ) {
-    super(options);
-    this.computer = computer;
   }
 }

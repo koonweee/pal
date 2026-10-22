@@ -16,3 +16,6 @@
 
 !browser-extension/
 !browser-extension/**
+
+!execution/
+!execution/**

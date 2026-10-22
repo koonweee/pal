@@ -5,13 +5,20 @@ import {
   type OnModuleInit,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import type { Readable } from 'node:stream';
+import { Readable } from 'node:stream';
+import {
+  ExecutionService,
+  ExecutionFileError,
+} from '../execution/execution.service.js';
 import { isUUID } from 'class-validator';
 import { ApplicationError } from '../application/contracts/errors.js';
 import type { AgentFile } from './files.types.js';
 import type { AttachmentRecord } from './files.repository.js';
 import { FilesRepository, attachmentView } from './files.repository.js';
-import { ApplicationFileStorage } from './application-file-storage.js';
+import {
+  ApplicationFileStorage,
+  MAX_FILE_BYTES,
+} from './application-file-storage.js';
 @Injectable()
 export class FilesService implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(FilesService.name);
@@ -21,6 +28,7 @@ export class FilesService implements OnModuleInit, OnApplicationShutdown {
     @Inject(FilesRepository) private readonly repository: FilesRepository,
     @Inject(ApplicationFileStorage)
     private readonly storage: ApplicationFileStorage,
+    @Inject(ExecutionService) private readonly execution: ExecutionService,
   ) {}
   async onModuleInit() {
     await this.storage.initialize();
@@ -82,7 +90,28 @@ export class FilesService implements OnModuleInit, OnApplicationShutdown {
     filename?: string;
     contentType?: string;
   }) {
-    return this.save(await this.storage.importFile(input));
+    let bytes: Buffer;
+    try {
+      bytes = await this.execution.readFile(input.path, MAX_FILE_BYTES);
+    } catch (error) {
+      if (error instanceof ExecutionFileError) {
+        if (error.kind === 'too_large')
+          throw new ApplicationError('too_large', 'File exceeds 25 MB');
+        if (error.kind === 'not_file')
+          throw new ApplicationError(
+            'invalid_input',
+            'Expected a regular file',
+          );
+      }
+      throw new ApplicationError('invalid_input', 'File is not readable');
+    }
+    return this.save(
+      await this.storage.storeStream({
+        stream: Readable.from(bytes),
+        filename: input.filename ?? input.path.split('/').pop() ?? 'file',
+        contentType: input.contentType,
+      }),
+    );
   }
   private async save(file: Omit<AttachmentRecord, 'createdAt'>) {
     try {
@@ -99,18 +128,27 @@ export class FilesService implements OnModuleInit, OnApplicationShutdown {
       throw new ApplicationError('invalid_input', 'Invalid attachment ID');
     const rows = await this.repository.getMany(ids);
     const byId = new Map(rows.map((row) => [row.id, row]));
-    return ids.map((id) => {
-      const row = byId.get(id);
-      if (!row)
-        throw new ApplicationError(
-          'invalid_input',
-          'One or more attachments do not exist',
-        );
-      return {
-        ...attachmentView(row),
-        path: this.storage.path(row.storageFilename),
-      };
-    });
+    return Promise.all(
+      ids.map(async (id) => {
+        const row = byId.get(id);
+        if (!row)
+          throw new ApplicationError(
+            'invalid_input',
+            'One or more attachments do not exist',
+          );
+        const path = this.execution.home + '/incoming/' + row.storageFilename;
+        const handle = await this.storage.open(row.storageFilename);
+        try {
+          await this.execution.sandbox._start();
+          await this.execution.sandbox.writeFiles([
+            { path, content: await handle.readFile() },
+          ]);
+        } finally {
+          await handle.close();
+        }
+        return { ...attachmentView(row), path };
+      }),
+    );
   }
   async get(id: string) {
     const file = await this.repository.get(id);

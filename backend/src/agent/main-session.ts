@@ -12,16 +12,15 @@ import { Memory } from '@mastra/memory';
 import type { MemoryConfig } from '@mastra/core/memory';
 import { PostgresStore } from '@mastra/pg';
 import {
-  LocalFilesystem,
-  LocalSandbox,
   Workspace,
   WORKSPACE_TOOLS,
   type SandboxComputer,
+  type WorkspaceSandbox,
+  type WorkspaceFilesystem,
 } from '@mastra/core/workspace';
 import { MAX_FILE_BYTES } from '../files/application-file-storage.js';
 import { taskWorkerDelegation, WORKER_ID } from './task-workers.js';
 import { TaskSchedulerWorker } from './task-scheduler.worker.js';
-import { X11Sandbox } from './x11-computer.js';
 import {
   publishTextProcessor,
   type TextContext,
@@ -40,6 +39,8 @@ export async function createMainSession(options: {
   schemaName?: string;
   workingDirectory?: string;
   computer?: SandboxComputer;
+  sandbox?: WorkspaceSandbox;
+  filesystem?: WorkspaceFilesystem;
   model: Agent['model'];
   memoryOptions?: MemoryConfig;
   tools?: NonNullable<ConstructorParameters<typeof Agent>[0]['tools']>;
@@ -69,29 +70,11 @@ export async function createMainSession(options: {
   onEvent: (event: AgentControllerEvent) => void;
 }) {
   const mainInstructions = await loadAgentInstructions('main');
-  // NestJS and the agent currently share the workspace execution environment.
-  // For future isolation, keep them outside and use remote sandbox/filesystem providers.
   const workspace = options.workingDirectory
     ? new Workspace({
         id: 'pal-main-workspace',
-        filesystem: new LocalFilesystem({
-          basePath: options.workingDirectory,
-          contained: false,
-        }),
-        sandbox: options.computer
-          ? new X11Sandbox(
-              {
-                workingDirectory: options.workingDirectory,
-                isolation: 'none',
-                env: { ...process.env },
-              },
-              options.computer,
-            )
-          : new LocalSandbox({
-              workingDirectory: options.workingDirectory,
-              isolation: 'none',
-              env: { ...process.env },
-            }),
+        filesystem: options.filesystem,
+        sandbox: options.sandbox,
         tools: {
           requireApproval: false,
           [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
@@ -100,6 +83,13 @@ export async function createMainSession(options: {
         },
       })
     : undefined;
+  if (options.workingDirectory && (!options.sandbox || !options.filesystem))
+    throw new Error('An execution sandbox is required for the agent workspace');
+  if (options.sandbox && options.computer)
+    Object.defineProperty(options.sandbox, 'computer', {
+      value: options.computer,
+      configurable: true,
+    });
   const storage = new PostgresStore({
     id: 'pal-main-storage',
     connectionString: options.connectionString,
@@ -107,7 +97,7 @@ export async function createMainSession(options: {
   });
   try {
     await storage.init();
-    await workspace?.init();
+    // Providers start lazily so history and chat remain available during desktop outages.
     const memory = new Memory({
       storage,
       options: options.memoryOptions ?? {

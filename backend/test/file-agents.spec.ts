@@ -241,6 +241,7 @@ it('carries file paths through native input/delegation and publishes file-only o
         preferences,
         destinations,
         instanceSettings,
+        execution,
       }) =>
         new MastraAgentRuntime(
           new ConfigService({
@@ -261,6 +262,7 @@ it('carries file paths through native input/delegation and publishes file-only o
           preferences,
           destinations,
           instanceSettings,
+          execution,
         ),
     });
     const uploaded = await request(fixture.url)
