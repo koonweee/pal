@@ -27,7 +27,7 @@ services:
     volumes:
       - service_data:/data/private
       - agent_home:/home/pal
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     group_add:
       - "${PAL_DOCKER_GID:-0}"
     networks: [service]
@@ -88,7 +88,10 @@ services:
     image: pal-web-local
     ports:
       - "127.0.0.1:${PAL_WEB_PORT:-8080}:8080"
-    networks: [service, execution]
+    networks:
+      service: {}
+      execution:
+        interface_name: palexec0
     depends_on:
       agent-service:
         condition: service_healthy

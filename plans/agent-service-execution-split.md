@@ -187,7 +187,7 @@ Implementation and isolated verification are complete. Dev is the migration acce
 
 - [x] Back up and prepare copied dev state. All 56 database table counts and 794 copied regular files match the stopped source before application startup. The preserved-image build creates apt log directories and retains existing package configuration during upgrades. Migration accepts bind-mounted source data and preserves the PostgreSQL role password.
 - [x] Accept dev: API/PWA and Tailnet routes, seven byte-identical historical downloads, browser/desktop operations, live Main-to-Task shell execution, private service isolation, and browser/process persistence across backend restart pass. Browser credential databases were copied byte-for-byte; no credential values were inspected.
-- [ ] Migrate production pal-sf through the internal Komodo Core using the accepted dev procedure. Host SSH works; privileged filesystem migration requires an owner-terminal command because sudo is interactive.
+- [ ] Migrate production pal-sf through the internal Komodo Core using the accepted dev procedure. Host SSH works; privileged filesystem migration requires an owner-terminal command because sudo is interactive. The gateway names its execution interface explicitly so production can attach its additional Traefik ingress network. A three-network check on migrated dev verifies API availability and execution denial; the temporary network is removed. Native remote execution/filesystem access passes through the read-only socket bind.
 - [ ] Verify production before switching ingress and accepting new writes.
 - [ ] Complete the post-migration cleanup checklist and verify both deployments using the final image/configuration.
 

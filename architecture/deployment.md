@@ -1,6 +1,6 @@
 # Deployment
 
-Docker Compose runs four services:
+Docker Compose 2.36 or later runs four services:
 
 | Service | Responsibility |
 | --- | --- |
@@ -19,7 +19,7 @@ The service-data volume mounts only in agent-service at `/data/private`. It owns
 
 Mastra's Docker provider supplies command execution and process streams. ComposeSandbox attaches to exactly one running container carrying the configured `mastra.sandbox.id` label. Compose owns container creation, replacement, and deletion. Backend shutdown detaches the workspace and leaves the desktop running. Operations resolve the stable label again after container replacement; missing execution fails without a local fallback.
 
-Agent-service alone accesses Docker's socket. On Linux, set `PAL_DOCKER_GID` to the socket's group ID; Docker Desktop uses the default 0. Execution retains passwordless sudo inside its container, with no Docker socket or host administrative mounts.
+Agent-service alone accesses Docker's socket through a read-only filesystem bind. The socket still grants full Docker API access; agent-service is trusted host administration code. On Linux, set `PAL_DOCKER_GID` to the socket's group ID; Docker Desktop uses the default 0. Execution retains passwordless sudo inside its container, with no Docker socket or host administrative mounts.
 
 Native filesystem operations delegate to LocalFilesystem inside execution through Docker process stdin/stdout. This isolates path resolution from service-private files, including shared-home symlink races. File tools operate within the agent home; shell commands can access the execution container's other paths. Upload manifests point to copies in `/home/pal/incoming`. Inspection-copy materialization runs one file at a time across concurrent requests. Publication reads files inside execution and stores immutable canonical copies in private service storage.
 
@@ -27,7 +27,7 @@ Native filesystem operations delegate to LocalFilesystem inside execution throug
 
 Execution joins an internal Docker network. Its configured HTTP(S) proxy runs in web, permits public web destinations, and denies private, loopback, link-local, and Tailnet destination addresses. Chromium uses this proxy; command tools receive proxy environment variables. Software that ignores proxy configuration has no direct internet route.
 
-Web rejects gateway requests originating from the execution subnet. Agent-service and PostgreSQL are on the separate service network. The only published production port is the loopback-bound PWA gateway. The CDP-forwarding listener and egress proxy are private Docker endpoints.
+Web rejects gateway requests originating from the execution subnet, derived from its Compose-named palexec0 interface. Additional ingress networks do not change this boundary. Agent-service and PostgreSQL are on the separate service network. The only published production port is the loopback-bound PWA gateway. The CDP-forwarding listener and egress proxy are private Docker endpoints.
 
 Pal remains Tailscale-only. Do not expose its gateway to the public internet.
 
