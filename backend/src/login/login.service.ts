@@ -6,6 +6,7 @@ import { ApplicationError } from '../application/contracts/errors.js';
 import { BitwardenService, type CredentialInput } from './bitwarden.service.js';
 import { LoginRepository } from './login.repository.js';
 import { LoginBrowser } from './login-browser.js';
+import type { SecureFields } from './login-fields.js';
 
 @Injectable()
 export class LoginService implements OnModuleDestroy {
@@ -84,19 +85,18 @@ export class LoginService implements OnModuleDestroy {
       let vaultStatus = this.vault.configured ? 'ready' : 'not_configured';
       if (this.vault.configured) {
         try {
-          for (const target of result.targets.filter(
-            (t) => !t.fields.includes('code'),
-          ))
-            for (const item of await this.vault.matching(
-              this.inspector.url(
-                this.owner(taskId, workerId),
-                target.targetRef,
-              ),
-            ))
-              accounts.set(item.id, {
+          const urls = new Map(
+            result.inputs.map((input) => [
+              this.inspector.url(this.owner(taskId, workerId), input.ref),
+              input.origin,
+            ]),
+          );
+          for (const [url, origin] of urls)
+            for (const item of await this.vault.matching(url))
+              accounts.set(origin + ':' + item.id, {
                 id: item.id,
                 label: item.name,
-                origin: target.origin,
+                origin,
               });
         } catch {
           vaultStatus = 'unavailable';
@@ -105,13 +105,13 @@ export class LoginService implements OnModuleDestroy {
       const inspectionId = await this.repository.inspection(
         taskId,
         origin,
-        result.targets,
+        result.inputs,
         result.image,
       );
       this.events.publish({ event: 'login.updated', taskId });
       return {
         origin,
-        targets: result.targets,
+        inputs: result.inputs,
         accounts: [...accounts.values()],
         vaultStatus,
         inspectionId,
@@ -125,23 +125,17 @@ export class LoginService implements OnModuleDestroy {
       );
     }
   }
-  async request(taskId: string, targetRef: string, workerId?: string) {
-    const target = this.inspector.target(
-      this.owner(taskId, workerId),
-      targetRef,
-    );
-    await this.inspector.assertCurrent(
+  async request(taskId: string, fields: SecureFields, workerId?: string) {
+    const target = await this.inspector.select(
       await this.browser.selectedPage(taskId, workerId),
       this.owner(taskId, workerId),
-      targetRef,
+      fields,
     );
-    const kind = target.fields.includes('code') ? 'code' : 'credentials';
+    const kind = target.roles.includes('code') ? 'code' : 'credentials';
     if (kind === 'credentials' && this.vault.configured) {
-      const accounts = await this.vault.matching(
-        this.inspector.url(this.owner(taskId, workerId), targetRef),
-      );
+      const accounts = await this.vault.matching(target.url);
       const complete = accounts.filter((account) =>
-        target.fields.every(
+        target.roles.every(
           (field) => !!account.login?.[field as 'username' | 'password'],
         ),
       );
@@ -151,7 +145,7 @@ export class LoginService implements OnModuleDestroy {
         !(
           tried &&
           complete.some((account) => account.id === tried.accountId) &&
-          target.fields.every((field) => tried.fields.has(field))
+          target.roles.every((field) => tried.fields.has(field))
         )
       ) {
         return {
@@ -169,7 +163,7 @@ export class LoginService implements OnModuleDestroy {
       taskId,
       target.origin,
       kind,
-      kind === 'code' ? targetRef : undefined,
+      kind === 'code' ? fields : undefined,
       workerId,
     );
     await this.tasks.update(taskId, { status: 'needs-input' });
@@ -184,29 +178,23 @@ export class LoginService implements OnModuleDestroy {
 
   async fill(
     taskId: string,
-    targetRef: string,
+    fields: SecureFields,
     accountId?: string,
     workerId?: string,
   ) {
-    const target = this.inspector.target(
-      this.owner(taskId, workerId),
-      targetRef,
-    );
     const page = await this.browser.selectedPage(taskId, workerId);
-    await this.inspector.assertCurrent(
+    const target = await this.inspector.select(
       page,
       this.owner(taskId, workerId),
-      targetRef,
+      fields,
     );
-    if (target.fields.includes('code'))
+    if (target.roles.includes('code'))
       return {
         status: 'input_required' as const,
         message:
           'Request secure PWA verification-code entry with secure_entry_request.',
       };
-    const matches = await this.vault.matching(
-      this.inspector.url(this.owner(taskId, workerId), target.targetRef),
-    );
+    const matches = await this.vault.matching(target.url);
     const preferredId =
       accountId ??
       this.attempt(this.owner(taskId, workerId), target.origin)?.accountId;
@@ -223,7 +211,7 @@ export class LoginService implements OnModuleDestroy {
         'Select a matching account, or request credentials',
       );
     if (
-      target.fields.some(
+      target.roles.some(
         (field) => !account.login?.[field as 'username' | 'password'],
       )
     )
@@ -235,7 +223,7 @@ export class LoginService implements OnModuleDestroy {
       const result = await this.inspector.fill(
         page,
         this.owner(taskId, workerId),
-        targetRef,
+        fields,
         account.login!,
       );
       const previous = this.attempt(
@@ -246,7 +234,7 @@ export class LoginService implements OnModuleDestroy {
         accountId: account.id,
         fields: new Set([
           ...(previous?.accountId === account.id ? previous.fields : []),
-          ...target.fields,
+          ...target.roles,
         ]),
         at: Date.now(),
       });
@@ -305,27 +293,23 @@ export class LoginService implements OnModuleDestroy {
   async submitCode(id: string, code: string) {
     try {
       const row = await this.repository.finish(id, 'code', async (row) => {
-        if (!row.targetRef)
+        if (!row.fields || !('code' in row.fields))
           throw new ApplicationError(
             'conflict',
-            'Verification target expired; inspect again',
+            'Verification selection expired; inspect again',
           );
         const owner = this.owner(row.taskId, row.workerId ?? undefined);
-        const target = this.inspector.target(owner, row.targetRef);
-        if (!target.fields.includes('code') || target.origin !== row.origin)
+        const page = await this.browser.selectedPage(
+          row.taskId,
+          row.workerId ?? undefined,
+        );
+        const target = await this.inspector.select(page, owner, row.fields);
+        if (target.origin !== row.origin)
           throw new ApplicationError(
             'conflict',
-            'Verification target changed; inspect again',
+            'Verification selection changed; inspect again',
           );
-        await this.inspector.fill(
-          await this.browser.selectedPage(
-            row.taskId,
-            row.workerId ?? undefined,
-          ),
-          owner,
-          row.targetRef,
-          { code },
-        );
+        await this.inspector.fill(page, owner, row.fields, { code });
       });
       this.events.publish({ event: 'login.updated', taskId: row.taskId });
       void this.flushNotifications();

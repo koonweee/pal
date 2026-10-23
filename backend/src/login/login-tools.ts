@@ -4,6 +4,7 @@ import { jsonSchema } from 'ai';
 import { taskIdFromThread } from '../agent/task-tools.js';
 import { WORKER_ID, PARENT_TASK_ID } from '../agent/task-workers.js';
 import type { LoginService } from './login.service.js';
+import type { SecureFields } from './login-fields.js';
 import { ApplicationError } from '../application/contracts/errors.js';
 
 export function loginTools(service: LoginService) {
@@ -36,11 +37,38 @@ export function loginTools(service: LoginService) {
       };
     }
   };
+  const fieldsSchema: Parameters<typeof jsonSchema>[0] = {
+    anyOf: [
+      {
+        type: 'object',
+        properties: {
+          username: { type: 'string' },
+          password: { type: 'string' },
+        },
+        additionalProperties: false,
+        anyOf: [{ required: ['username'] }, { required: ['password'] }],
+      },
+      {
+        type: 'object',
+        properties: {
+          code: {
+            type: 'array',
+            items: { type: 'string' },
+            minItems: 1,
+            maxItems: 64,
+            uniqueItems: true,
+          },
+        },
+        required: ['code'],
+        additionalProperties: false,
+      },
+    ],
+  };
   return {
     login_inspect: createTool({
       id: 'login_inspect',
       description:
-        'Foreground and inspect your selected browser tab for login or verification-code targets and matching accounts. Returns metadata and a masked annotated screenshot. Never read existing credential values. Call again after navigation or stale targets.',
+        'Inspect editable inputs in your selected browser tab. Returns opaque refs, HTML metadata, matching accounts and a masked screenshot labelled i1, i2, etc.; each badge matches the ref prefix. Decide which inputs are username, password or verification code, then pass fields to secure_fill or secure_entry_request. Input roles are your judgment. Never read existing values. Reinspect after navigation or stale refs.',
       inputSchema: jsonSchema<Record<string, never>>({
         type: 'object',
         properties: {},
@@ -70,34 +98,34 @@ export function loginTools(service: LoginService) {
     secure_entry_request: createTool({
       id: 'secure_entry_request',
       description:
-        'Open secure entry under the owning Task’s Logins button in the PWA. Login entry collects the complete username/password once and saves it; use secure_fill for later stages. Verification entry collects only a code and fills it immediately without saving. The backend chooses the form from targetRef. If credentials_available is returned, use secure_fill. Yield while awaiting input; workers report to their parent Task. The owning Task receives completion notification.',
-      inputSchema: jsonSchema<{ targetRef: string }>({
+        'Open secure entry under the owning Task’s Logins button in the PWA. Login entry collects the complete username/password once and saves it; use secure_fill for later stages. Verification entry collects only a code and fills it immediately without saving. Pass either username/password input refs or an ordered code-ref array from login_inspect. The selected roles determine the PWA form. If credentials_available is returned, use secure_fill. Yield while awaiting input; workers report to their parent Task. The owning Task receives completion notification.',
+      inputSchema: jsonSchema<{ fields: SecureFields }>({
         type: 'object',
-        properties: { targetRef: { type: 'string' } },
-        required: ['targetRef'],
+        properties: { fields: fieldsSchema },
+        required: ['fields'],
         additionalProperties: false,
       }),
-      execute: ({ targetRef }, context) => {
+      execute: ({ fields }, context) => {
         const { taskId, workerId } = identity(context);
-        return safe(() => service.request(taskId, targetRef, workerId));
+        return safe(() => service.request(taskId, fields, workerId));
       },
     }),
     secure_fill: createTool({
       id: 'secure_fill',
       description:
-        'Fill a fresh inspected target from the matching vault account without seeing values. Reuse the same saved account across username/password stages; both credentials were collected together. Omit accountId when one account matches or this browser flow already selected it. For verification codes, input_required means call secure_entry_request. Does not click submit or prove login success.',
-      inputSchema: jsonSchema<{ targetRef: string; accountId?: string }>({
+        'Assign username/password roles to inspected input refs in fields and fill from the matching vault account without seeing values. Password refs must identify password inputs. For code, pass an ordered array of refs; a single input uses a one-element array. Reuse the same saved account across username/password stages; both credentials were collected together. Omit accountId when one account matches or this browser flow already selected it. For verification codes, input_required means call secure_entry_request. Does not click submit or prove login success.',
+      inputSchema: jsonSchema<{ fields: SecureFields; accountId?: string }>({
         type: 'object',
         properties: {
-          targetRef: { type: 'string' },
+          fields: fieldsSchema,
           accountId: { type: 'string' },
         },
-        required: ['targetRef'],
+        required: ['fields'],
         additionalProperties: false,
       }),
-      execute: ({ targetRef, accountId }, context) => {
+      execute: ({ fields, accountId }, context) => {
         const { taskId, workerId } = identity(context);
-        return safe(() => service.fill(taskId, targetRef, accountId, workerId));
+        return safe(() => service.fill(taskId, fields, accountId, workerId));
       },
     }),
   };

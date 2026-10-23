@@ -407,18 +407,11 @@
           },
           "origin": {
             "type": "string"
-          },
-          "targets": {
-            "items": {
-              "$ref": "#/components/schemas/LoginTargetDto"
-            },
-            "type": "array"
           }
         },
         "required": [
           "id",
-          "origin",
-          "targets"
+          "origin"
         ],
         "type": "object"
       },
@@ -484,28 +477,6 @@
           "configured",
           "requests",
           "inspections"
-        ],
-        "type": "object"
-      },
-      "LoginTargetDto": {
-        "properties": {
-          "fields": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "origin": {
-            "type": "string"
-          },
-          "targetRef": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "targetRef",
-          "origin",
-          "fields"
         ],
         "type": "object"
       },
@@ -1661,7 +1632,7 @@
     "contact": {},
     "description": "Private single-owner HTTP and SSE contract for canonical Pal clients.",
     "title": "Pal First-party API",
-    "version": "3"
+    "version": "4"
   },
   "openapi": "3.0.0",
   "paths": {

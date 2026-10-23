@@ -1,3 +1,4 @@
+import type { LoginInput, SecureFields } from '../login/login-fields.js';
 import { DEFAULT_INSTANCE_SETTINGS } from '../instance-settings/instance-settings.types.js';
 import type { DestinationRole } from '../delivery/destination.types.js';
 import { sql } from 'drizzle-orm';
@@ -395,7 +396,7 @@ export const loginRequests = pgTable(
       .$type<'credentials' | 'code'>()
       .notNull()
       .default('credentials'),
-    targetRef: text('target_ref'),
+    fields: jsonb('fields').$type<SecureFields>(),
     workerId: text('worker_id'),
     accountId: text('account_id'),
     notifiedAt: timestamp('notified_at', { withTimezone: true }),
@@ -418,14 +419,8 @@ export const loginInspections = pgTable('login_inspections', {
     .notNull()
     .references(() => tasks.id, { onDelete: 'cascade' }),
   origin: text('origin').notNull(),
-  targets: jsonb('targets')
-    .$type<
-      {
-        targetRef: string;
-        origin: string;
-        fields: ('username' | 'password' | 'code')[];
-      }[]
-    >()
+  metadata: jsonb('metadata')
+    .$type<{ inputs: LoginInput[] } | { targets: unknown[] }>()
     .notNull(),
   image: text('image').notNull(),
 });

@@ -117,16 +117,15 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
   try {
     const inspection = await login.inspect(task.id);
     outputs.push(inspection);
-    expect(inspection.targets[0].fields).toEqual(['username']);
+    expect(inspection.inputs[0].autocomplete).toBe('username');
     const preview = await request(fixture.url)
       .get('/login/inspections/' + inspection.inspectionId + '/image')
       .expect(200);
     expect(preview.headers['cache-control']).toBe('no-store');
     expect(preview.headers['content-type']).toContain('image/png');
-    const pending = await login.request(
-      task.id,
-      inspection.targets[0].targetRef,
-    );
+    const pending = await login.request(task.id, {
+      username: inspection.inputs[0].ref,
+    });
     outputs.push(pending);
     expect((await fixture.app.get(TasksService).details(task.id)).status).toBe(
       'needs-input',
@@ -152,9 +151,9 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
     const fresh = await login.inspect(task.id);
     outputs.push(fresh);
     expect(
-      (await login.request(task.id, fresh.targets[0].targetRef)).status,
+      (await login.request(task.id, { username: fresh.inputs[0].ref })).status,
     ).toBe('credentials_available');
-    outputs.push(await login.fill(task.id, fresh.targets[0].targetRef));
+    outputs.push(await login.fill(task.id, { username: fresh.inputs[0].ref }));
     expect(await page.locator('#user').inputValue()).toBe(
       'SYNTHETIC_PRIVATE_USER',
     );
@@ -163,22 +162,24 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
     );
     const passwordStage = await login.inspect(task.id);
     expect(
-      (await login.request(task.id, passwordStage.targets[0].targetRef)).status,
+      (await login.request(task.id, { password: passwordStage.inputs[0].ref }))
+        .status,
     ).toBe('credentials_available');
     expect(
       (await login.snapshot(task.id)).requests.filter(
         (r) => r.status === 'pending',
       ),
     ).toHaveLength(0);
-    outputs.push(await login.fill(task.id, passwordStage.targets[0].targetRef));
+    outputs.push(
+      await login.fill(task.id, { password: passwordStage.inputs[0].ref }),
+    );
     expect(await page.locator('#pass').inputValue()).toBe(
       'SYNTHETIC_PRIVATE_PASSWORD',
     );
     // Once tried, replacement remains available for a rejected saved password.
-    const replacement = await login.request(
-      task.id,
-      passwordStage.targets[0].targetRef,
-    );
+    const replacement = await login.request(task.id, {
+      password: passwordStage.inputs[0].ref,
+    });
     expect(replacement.status).toBe('awaiting_user');
     await login.finish(replacement.requestId!);
     expect(await page.locator('#comment').inputValue()).toBe('');
@@ -189,17 +190,22 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
       '<form>' +
         Array.from(
           { length: 6 },
-          (_, i) =>
-            `<input type="tel" aria-label="Verification Code Digit ${i + 1}">`,
+          (_, i) => `<input type="tel" aria-label="${i + 1}">`,
         ).join('') +
         '</form>',
     );
     const otp = await login.inspect(task.id);
-    expect(otp.targets[0].fields).toEqual(['code']);
-    expect((await login.fill(task.id, otp.targets[0].targetRef)).status).toBe(
-      'input_required',
-    );
-    const codeRequest = await login.request(task.id, otp.targets[0].targetRef);
+    expect(otp.inputs).toHaveLength(6);
+    expect(
+      (
+        await login.fill(task.id, {
+          code: otp.inputs.map((input) => input.ref),
+        })
+      ).status,
+    ).toBe('input_required');
+    const codeRequest = await login.request(task.id, {
+      code: otp.inputs.map((input) => input.ref),
+    });
     expect(codeRequest.kind).toBe('code');
     const snapshot = (
       await request(fixture.url).get(`/login/tasks/${task.id}`).expect(200)
@@ -231,7 +237,9 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
         .evaluateAll((es) => es.every((e) => e.value === '')),
     ).toBe(true);
     expect(save).toHaveBeenCalledTimes(1);
-    const staleRequest = await login.request(task.id, otp.targets[0].targetRef);
+    const staleRequest = await login.request(task.id, {
+      code: otp.inputs.map((input) => input.ref),
+    });
     await page.goto('https://example.test/other');
     const stale = await request(fixture.url)
       .post(`/login/requests/${staleRequest.requestId}/code`)

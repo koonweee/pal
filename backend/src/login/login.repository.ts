@@ -3,7 +3,7 @@ import { and, desc, eq, lt, gt, ne, isNull, or } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service.js';
 import { loginInspections, loginRequests } from '../database/schema.js';
 import { ApplicationError } from '../application/contracts/errors.js';
-import type { LoginTarget } from './login-browser.js';
+import type { LoginInput, SecureFields } from './login-fields.js';
 
 @Injectable()
 export class LoginRepository {
@@ -14,13 +14,13 @@ export class LoginRepository {
     taskId: string,
     origin: string,
     kind: 'credentials' | 'code' = 'credentials',
-    targetRef?: string,
+    fields?: SecureFields,
     workerId?: string,
   ): Promise<typeof loginRequests.$inferSelect> {
     await this.cleanup();
     const [created] = await this.database.db
       .insert(loginRequests)
-      .values({ taskId, origin, kind, targetRef, workerId })
+      .values({ taskId, origin, kind, fields, workerId })
       .onConflictDoNothing()
       .returning();
     if (created) return created;
@@ -37,7 +37,10 @@ export class LoginRepository {
       );
     // A changed target gets a new request ID so an in-progress user draft
     // cannot silently move to another verification form.
-    if (kind === 'code' && existing.targetRef !== targetRef) {
+    if (
+      kind === 'code' &&
+      JSON.stringify(existing.fields) !== JSON.stringify(fields)
+    ) {
       await this.database.db
         .update(loginRequests)
         .set({ status: 'cancelled', notifiedAt: new Date() })
@@ -47,19 +50,24 @@ export class LoginRepository {
             eq(loginRequests.status, 'pending'),
           ),
         );
-      return this.request(taskId, origin, kind, targetRef, workerId);
+      return this.request(taskId, origin, kind, fields, workerId);
     }
     return existing;
   }
   async inspection(
     taskId: string,
     origin: string,
-    targets: LoginTarget[],
+    inputs: LoginInput[],
     image: Buffer,
   ) {
     const [row] = await this.database.db
       .insert(loginInspections)
-      .values({ taskId, origin, targets, image: image.toString('base64') })
+      .values({
+        taskId,
+        origin,
+        metadata: { inputs },
+        image: image.toString('base64'),
+      })
       .returning({ id: loginInspections.id });
     await this.cleanup();
     return row.id;
@@ -81,7 +89,6 @@ export class LoginRepository {
       .select({
         id: loginInspections.id,
         origin: loginInspections.origin,
-        targets: loginInspections.targets,
       })
       .from(loginInspections)
       .where(

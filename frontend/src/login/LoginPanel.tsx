@@ -93,12 +93,9 @@ export function LoginPanel({
               <Text fw={600}>{inspection.origin}</Text>
               <img
                 src={loginPreviewUrl(inspection.id)}
-                alt={`Detected login fields on ${inspection.origin}`}
+                alt={`Inspected inputs on ${inspection.origin}`}
                 style={{ width: '100%', height: 'auto' }}
               />
-              {!inspection.targets.length && (
-                <Text>No supported login fields detected.</Text>
-              )}
             </Stack>
           ))}
         </Stack>

@@ -57,15 +57,16 @@ try {
     await page.goto('https://pal-login.example.test/');
   }
   const result = await inspector.inspect(a, first);
-  assert.equal(result.targets.length, 1);
-  const reference = result.targets[0].targetRef;
+  assert.equal(result.inputs.length, 2);
+  const fields = {
+    username: result.inputs[0].ref,
+    password: result.inputs[1].ref,
+  };
+  await assert.rejects(inspector.fill(b, first, fields, { password: 'dummy' }));
   await assert.rejects(
-    inspector.fill(b, first, reference, { password: 'dummy' }),
+    inspector.fill(a, second, fields, { password: 'dummy' }),
   );
-  await assert.rejects(
-    inspector.fill(a, second, reference, { password: 'dummy' }),
-  );
-  const filled = await inspector.fill(a, first, reference, {
+  const filled = await inspector.fill(a, first, fields, {
     username: 'SYNTHETIC_USER',
     password: 'SYNTHETIC_PASSWORD',
   });
@@ -73,22 +74,26 @@ try {
   assert.equal(await b.locator('#pass').inputValue(), '');
   assert.equal(await a.locator('#comment').inputValue(), '');
   assert.ok(
-    !JSON.stringify({ targets: result.targets, filled }).includes('SYNTHETIC'),
+    !JSON.stringify({ inputs: result.inputs, filled }).includes('SYNTHETIC'),
   );
   await a.setContent(
     '<form>' +
       Array.from(
         { length: 6 },
-        (_, i) =>
-          `<input type="tel" aria-label="Verification Code Digit ${i + 1}">`,
+        (_, i) => `<input type="tel" aria-label="Digit ${i + 1}">`,
       ).join('') +
       '</form>',
   );
   const code = await inspector.inspect(a, first);
-  assert.deepEqual(code.targets[0].fields, ['code']);
-  const codeFilled = await inspector.fill(a, first, code.targets[0].targetRef, {
-    code: '731946',
-  });
+  assert.equal(code.inputs.length, 6);
+  const codeFilled = await inspector.fill(
+    a,
+    first,
+    { code: code.inputs.map((input) => input.ref) },
+    {
+      code: '731946',
+    },
+  );
   assert.equal(
     await a
       .locator('input')
@@ -96,10 +101,10 @@ try {
     '731946',
   );
   assert.ok(
-    !JSON.stringify({ targets: code.targets, codeFilled }).includes('731946'),
+    !JSON.stringify({ inputs: code.inputs, codeFilled }).includes('731946'),
   );
   console.log(
-    'PASS real execution Chrome: verification digit group filled privately; pinned worker tabs, deterministic inspection, private fill, unrelated fields untouched, secret-free results',
+    'PASS real execution Chrome: verification digit group filled privately; pinned worker tabs, generic input extraction, private fill, unrelated fields untouched, secret-free results',
   );
 } finally {
   await service.closeGroup(id).catch(() => {});

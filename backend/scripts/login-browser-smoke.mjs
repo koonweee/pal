@@ -30,11 +30,16 @@ try {
       results.push({
         name,
         origin: new URL(page.url()).origin,
-        targets: result.targets.map(({ origin, fields }) => ({
-          origin,
-          fields,
-        })),
-        status: result.targets.length ? 'inspected' : 'no_supported_fields',
+        inputs: result.inputs.map(
+          ({ origin, type, autocomplete, label, group }) => ({
+            origin,
+            type,
+            autocomplete,
+            label,
+            group,
+          }),
+        ),
+        status: result.inputs.length ? 'inspected' : 'no_editable_inputs',
       });
     } catch {
       results.push({ name, status: 'unavailable_or_interactive' });

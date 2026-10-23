@@ -1,36 +1,46 @@
-// These self-contained functions are serialized by Playwright into the page.
+export type SecureFields =
+  | { username?: string; password?: string; code?: never }
+  | { code: string[]; username?: never; password?: never };
+export type SecureRole = 'username' | 'password' | 'code';
+export interface LoginInput {
+  ref: string;
+  origin: string;
+  type: string;
+  autocomplete: string;
+  label: string;
+  group: string;
+  maxLength?: number;
+}
+
+// Serialized by Playwright into the page. These checks validate destinations;
+// the model assigns semantic roles from the metadata and masked screenshot.
 export function isEligibleInput(
   el: HTMLInputElement,
-  role: 'any' | 'username' | 'password',
+  role: 'any' | SecureRole,
 ) {
   if (
     !el.isConnected ||
     el.disabled ||
     el.readOnly ||
-    el.type === 'hidden' ||
+    !['text', 'email', 'tel', 'number', 'password', 'url', 'search'].includes(
+      el.type,
+    ) ||
     !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
   )
     return false;
   const purposes = el.autocomplete.toLowerCase().split(/\s+/);
+  if (role !== 'any' && purposes.some((p) => p.startsWith('cc-'))) return false;
   if (
     role === 'password' &&
     (el.type !== 'password' ||
-      purposes.some(
-        (purpose) =>
-          purpose === 'new-password' ||
-          purpose === 'one-time-code' ||
-          purpose.startsWith('cc-'),
-      ))
+      purposes.some((p) => ['new-password', 'one-time-code'].includes(p)))
   )
     return false;
   if (
     role === 'username' &&
-    (!['text', 'email', 'tel'].includes(el.type) ||
-      purposes.some(
-        (purpose) =>
-          ['new-password', 'current-password', 'one-time-code'].includes(
-            purpose,
-          ) || purpose.startsWith('cc-'),
+    (el.type === 'password' ||
+      purposes.some((p) =>
+        ['new-password', 'current-password', 'one-time-code'].includes(p),
       ))
   )
     return false;
@@ -39,7 +49,6 @@ export function isEligibleInput(
     right = rect.right,
     top = rect.top,
     bottom = rect.bottom;
-  // checkVisibility does not account for an input clipped by a collapsed ancestor.
   let ancestor: Element | null =
     el.parentElement ??
     (el.getRootNode() instanceof ShadowRoot
@@ -64,69 +73,57 @@ export function isEligibleInput(
   }
   return right > left && bottom > top;
 }
-export function hasUsernameHint(el: HTMLInputElement) {
-  if (!['text', 'email', 'tel'].includes(el.type)) return false;
-  const purposes = el.autocomplete.toLowerCase().split(/\s+/);
-  if (purposes.includes('username')) return true;
-  const identifier = [el.name, el.id].some((value) =>
-    /(^|[_-])(email|user[_-]?name|account([_-]?(name|id))?|identifier|login|phone)([_-]|$)/i.test(
-      value,
-    ),
-  );
-  const root = el.getRootNode() as Document | ShadowRoot;
-  const label = [...(el.labels ?? [])]
-    .map((label) => label.textContent ?? '')
-    .concat(
-      el.getAttribute('aria-label') ?? '',
-      ...(el.getAttribute('aria-labelledby') ?? '')
-        .split(/\s+/)
-        .filter(Boolean)
-        .map((id) => root.getElementById(id)?.textContent ?? ''),
-    )
-    .join(' ');
-  return (
-    identifier &&
-    (purposes.includes('webauthn') ||
-      /email|user\s*name|account|phone/i.test(label))
-  );
-}
-// Verification semantics are required; a generic numeric/comment field is insufficient.
-export function codeInput(el: HTMLInputElement) {
-  if (!['text', 'tel', 'number', 'password'].includes(el.type)) return false;
-  const purposes = el.autocomplete.toLowerCase().split(/\s+/);
-  if (
-    purposes.some((p) => p.startsWith('cc-')) ||
-    /cvv|cvc/i.test(el.name + ' ' + el.id)
-  )
-    return false;
+
+export function inputMetadata(el: HTMLInputElement) {
   const root = el.getRootNode() as Document | ShadowRoot;
   const label = [
     el.getAttribute('aria-label') ?? '',
-    ...[...(el.labels ?? [])].map((l) => l.textContent ?? ''),
+    ...[...(el.labels ?? [])].map((label) => label.textContent ?? ''),
     ...(el.getAttribute('aria-labelledby') ?? '')
       .split(/\s+/)
       .filter(Boolean)
       .map((id) => root.getElementById(id)?.textContent ?? ''),
-  ].join(' ');
-  return (
-    purposes.includes('one-time-code') ||
-    /verification\s*code|authentication\s*code|one[- ]time\s*(code|password)|security\s*code\s*digit/i.test(
-      label,
-    )
-  );
+    el.getAttribute('placeholder') ?? '',
+  ]
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 240);
+  return {
+    type: el.type,
+    autocomplete: el.autocomplete,
+    label,
+    form: el.form
+      ? Array.from(root.querySelectorAll('form')).indexOf(el.form)
+      : -1,
+    ...(el.maxLength > 0 ? { maxLength: el.maxLength } : {}),
+  };
 }
-export function codeDigit(el: HTMLInputElement) {
+
+export function selectedFields(fields: SecureFields): [SecureRole, string][] {
+  const keys = fields && typeof fields === 'object' ? Object.keys(fields) : [];
   if (
-    !['text', 'tel', 'number', 'password'].includes(el.type) ||
-    el.autocomplete
-      .toLowerCase()
-      .split(/\s+/)
-      .some((p) => p.startsWith('cc-')) ||
-    /cvv|cvc/i.test(el.name + ' ' + el.id)
+    !keys.length ||
+    keys.some((key) => !['username', 'password', 'code'].includes(key))
   )
-    return false;
-  return (
-    el.maxLength === 1 ||
-    /(?:code\s*)?digit\s*\d/i.test(el.getAttribute('aria-label') ?? '')
-  );
+    throw new Error('Invalid field selection');
+  if ('code' in fields) {
+    if (
+      keys.length !== 1 ||
+      !Array.isArray(fields.code) ||
+      !fields.code.length ||
+      fields.code.length > 64 ||
+      fields.code.some((ref) => typeof ref !== 'string' || !ref)
+    )
+      throw new Error('Invalid code selection');
+    return fields.code.map((ref) => ['code', ref]);
+  }
+  return (['username', 'password'] as const)
+    .filter((key) => keys.includes(key))
+    .map((key) => {
+      const role = key as 'username' | 'password';
+      if (typeof fields[role] !== 'string' || !fields[role])
+        throw new Error('Invalid credential selection');
+      return [role, fields[role]];
+    });
 }

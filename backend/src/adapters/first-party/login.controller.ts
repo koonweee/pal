@@ -22,11 +22,6 @@ import { IsOptional, IsString, Length, IsUUID } from 'class-validator';
 import type { Response } from 'express';
 import { LoginService } from '../../login/login.service.js';
 
-class LoginTargetDto {
-  @ApiProperty() targetRef!: string;
-  @ApiProperty() origin!: string;
-  @ApiProperty({ type: [String] }) fields!: string[];
-}
 class LoginAccountDto {
   @ApiProperty() id!: string;
   @ApiProperty() label!: string;
@@ -42,7 +37,6 @@ class LoginRequestDto {
 class LoginInspectionDto {
   @ApiProperty() id!: string;
   @ApiProperty() origin!: string;
-  @ApiProperty({ type: [LoginTargetDto] }) targets!: LoginTargetDto[];
 }
 class LoginSnapshotDto {
   @ApiProperty() configured!: boolean;

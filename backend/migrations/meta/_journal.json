@@ -141,6 +141,13 @@
       "when": 1792731871356,
       "tag": "0019_secure_entry",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792733712023,
+      "tag": "0020_model_selected_fields",
+      "breakpoints": true
     }
   ]
 }

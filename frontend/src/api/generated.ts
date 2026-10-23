@@ -571,7 +571,6 @@ export interface components {
     LoginInspectionDto: {
       id: string;
       origin: string;
-      targets: components['schemas']['LoginTargetDto'][];
     };
     LoginRequestDto: {
       accounts: components['schemas']['LoginAccountDto'][];
@@ -586,11 +585,6 @@ export interface components {
       configured: boolean;
       inspections: components['schemas']['LoginInspectionDto'][];
       requests: components['schemas']['LoginRequestDto'][];
-    };
-    LoginTargetDto: {
-      fields: string[];
-      origin: string;
-      targetRef: string;
     };
     LoginUpdatedEventDto: {
       /** @enum {string} */

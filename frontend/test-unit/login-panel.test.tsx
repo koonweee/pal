@@ -55,9 +55,9 @@ test('shows masked preview and sends credentials only through the save API; clos
       },
     ],
     inspections: [
-      { id: 'inspection', origin: 'https://example.com', targets: [] },
-      { id: 'older', origin: 'https://example.com', targets: [] },
-      { id: 'oldest', origin: 'https://example.com', targets: [] },
+      { id: 'inspection', origin: 'https://example.com' },
+      { id: 'older', origin: 'https://example.com' },
+      { id: 'oldest', origin: 'https://example.com' },
     ],
   };
   vi.mocked(getLoginSnapshot).mockResolvedValue(snapshot);
