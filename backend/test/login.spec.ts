@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import 'reflect-metadata';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import { createServer, type Server } from 'node:http';
 import { LoginBrowser } from '../dist/login/login-browser.js';
 import {
@@ -431,7 +432,7 @@ it('uses the supported vault routes, reconciles repeated saves, and sanitizes pr
   }
 });
 
-it('starts and unlocks the private CLI once for concurrent callers without forwarding service secrets', async () => {
+it('prewarms the private CLI before concurrent lookups without forwarding service secrets', async () => {
   const root = await mkdtemp(join(tmpdir(), 'pal-vault-'));
   const probe = createServer();
   await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
@@ -492,6 +493,10 @@ if (command === 'serve') {
     }),
   );
   try {
+    expect(vault.onModuleInit()).toBeUndefined();
+    await vi.waitFor(async () => {
+      expect(await readFile(events, 'utf8')).toContain('api-sync');
+    });
     expect(
       await Promise.all([
         vault.matching('https://example.test'),
@@ -514,5 +519,51 @@ if (command === 'serve') {
   } finally {
     vault.onModuleDestroy();
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+it('skips unconfigured prewarming and retries a sanitized startup failure on demand', async () => {
+  let attempts = 0;
+  const routes: string[] = [];
+  class FixtureVault extends BitwardenService {
+    protected async ensureReady() {
+      if (++attempts === 1) throw new Error('SECRET_PROVIDER_ERROR');
+    }
+    protected async request<T>(path: string): Promise<T> {
+      routes.push(path);
+      return { data: [] } as T;
+    }
+  }
+  const warning = vi
+    .spyOn(Logger.prototype, 'warn')
+    .mockImplementation(() => {});
+  const unconfigured = new FixtureVault(new ConfigService());
+  const configured = new FixtureVault(
+    new ConfigService({
+      PAL_BITWARDEN_CLIENT_ID: 'fixture-id',
+      PAL_BITWARDEN_CLIENT_SECRET: 'fixture-key',
+      PAL_BITWARDEN_MASTER_PASSWORD: 'fixture-master',
+    }),
+  );
+  try {
+    expect(unconfigured.onModuleInit()).toBeUndefined();
+    expect(attempts).toBe(0);
+    expect(configured.onModuleInit()).toBeUndefined();
+    await vi.waitFor(() =>
+      expect(warning).toHaveBeenCalledWith(
+        'Password vault prewarming failed; login requests will retry',
+      ),
+    );
+    expect(routes).toEqual([]);
+    expect(await configured.matching('https://example.test')).toEqual([]);
+    expect(attempts).toBe(2);
+    expect(routes).toEqual([
+      '/sync',
+      '/list/object/items?url=https%3A%2F%2Fexample.test',
+    ]);
+  } finally {
+    unconfigured.onModuleDestroy();
+    configured.onModuleDestroy();
+    warning.mockRestore();
   }
 });

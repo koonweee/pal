@@ -11,7 +11,7 @@ Reduce latency after private PWA interactions and reprofile the same three synth
 ## Current Behavior
 
 - Private credential save, account selection and verification submission fill the bound browser fields directly, then notify the Task. Stale targets preserve saved credentials or account selection for recovery.
-- Bitwarden syncs on first use and hourly in the background. Pal writes are immediately available through its normal read-before-write workflow.
+- Bitwarden prewarms on application startup and refreshes hourly in the background. Pal writes are immediately available through its normal read-before-write workflow.
 - Shared Task/Worker guidance batches known fill/click actions and continues from successful private fills without redundant confirmation.
 
 ## Target Data Shape
@@ -49,6 +49,19 @@ Exit criteria:
 
 - Relevant automated checks pass and all synthetic outcomes or failures have traces.
 - The before/after report separates backend-enforced improvements from observed model batching behavior.
+
+### 3. Prewarm the vault
+
+Implementation tasks:
+
+- [x] Start configured-vault initialization and initial sync in the Nest lifecycle without blocking API startup; reuse existing initialization and sync promises.
+- [x] Verify prewarming before first lookup, unconfigured startup and sanitized failure with on-demand retry.
+- [x] Deploy to dev, verify proactive readiness and preserved desktop, and explain remaining model-turn costs from the existing traces.
+
+Exit criteria:
+
+- The vault becomes ready before a login request. Startup errors preserve API availability and existing on-demand recovery.
+- No new configuration, model controls or agent guidance is required.
 
 ## Tests
 
@@ -120,8 +133,25 @@ First fill on username-only pages means the username field. Website submission m
 
 1. Model round trips dominate: median Task request 3.89s, accounting for 58–76% of each flow's elapsed time. Task context ranges from 29k–51k input tokens. Initial routing takes 6.2–12.4s before the first Task model request; Main context is 129k–136k tokens, with some cache misses. These are observed costs, not proof that context size causes the full delay.
 2. Multistep navigation still needs model judgment after the immediate username fill. Apple/Amazon take 17.1/15.3s from private credential submission to password submission. The combined form and password correction need only 5.7/5.0s. Further combining inspection and preparation of known actions is the next candidate to measure.
-3. Cold vault startup remains a separate 12.7s first-inspection cost. Prewarming could move this outside the first login request if first-use latency matters.
+3. Cold vault startup remains a separate 12.7s first-inspection cost. Startup prewarming moves this work ahead of the first login request; callers arriving during startup share the remaining work.
 4. Warm inspection is about 1.5s end to end. Actual browser inspection is about 0.32s, vault matching median 0.46s, ordinary browser commands median 0.24s and execution calls median 0.08s. These are smaller than model round trips. Status-setting calls after entry requests add another possible turn to examine.
+
+### Model Turns and Multistep Forms
+
+The two costs multiply: a new page introduces serial observe/decide/act cycles, and each model request takes a median 3.89s. The Apple trace after private credential submission is:
+
+| Time after submission | Event |
+| --- | --- |
+| 1.18s | Backend finishes filling the username |
+| 4.39s | Model finishes producing the Continue-click call |
+| 9.06s | Model finishes requesting inspection of the password page |
+| 10.65s | Password-page inspection returns |
+| 15.28s | Model finishes producing the combined password-fill/submit call |
+| 17.12s | Website receives the password submission |
+
+The separate model call to request inspection contributes a cycle between navigation and field selection. Fresh page evidence is needed before assigning password-field roles; combining navigation and the resulting masked inspection could remove this extra cycle. login_inspect currently remains a direct multimodal tool outside code mode, so existing fill/click batching does not combine that pair.
+
+Across the comparison, model response headers arrive after a median 1.34s and full Task responses finish after a median 3.89s. Median output is only 27 tokens and the median cached input share is 99.1%. This establishes repeated model-request latency even for short tool calls; it does not isolate network, provider queueing, inference or streaming costs, or prove that accumulated context causes the delay. Faster model requests and fewer serial requests are separate optimization opportunities. The account-picker flow uses four Task requests; Apple uses thirteen for its additional stages and challenges.
 
 ### Sampling and Artifacts
 
@@ -136,3 +166,10 @@ Metadata-only local artifacts:
 - `.local/login-latency-picker/`: explicit account-switch follow-up.
 
 Reports render correctly in Chrome, including scenario filtering. Profiler methods and fetch are restored, the debugger is closed, injected runtime files are removed, and checks across all 24 fixture hosts find zero remaining dummy vault entries or unfinished secure-entry requests. Fixture tabs are closed. Dev services are healthy; the execution desktop retains its original container and start time.
+
+## Vault Prewarming Verification
+
+- Background initialization starts in the Nest lifecycle only when configured. It shares existing initialization/sync promises, preserves on-demand retry after a sanitized warning and prevents spawning the CLI if shutdown occurs during unlock.
+- Backend build, type-aware lint/boundary checks and all eight focused browser/vault tests pass. The CLI fixture completes startup sync before any lookup; unconfigured startup and failed-prewarm retry are covered.
+- Dev API startup completes at 18:35:38.746 UTC; Password vault prewarmed is logged at 18:35:48.587 UTC without a login request. A subsequent private status check reports unlocked and a fresh sync timestamp; an empty-domain lookup takes 975ms. The execution desktop retains its container/start time and all dev services are healthy.
+- Requests arriving before prewarming completes wait for the remaining shared work. The earlier flow comparison remains a warm-vault measurement; no new three-flow latency comparison was needed for this startup-only change.

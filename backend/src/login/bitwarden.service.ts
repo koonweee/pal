@@ -1,4 +1,10 @@
-import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  type OnModuleDestroy,
+  type OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -28,7 +34,8 @@ export interface CredentialInput {
 
 /** All secret-bearing responses remain in trusted service code. */
 @Injectable()
-export class BitwardenService implements OnModuleDestroy {
+export class BitwardenService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(BitwardenService.name);
   private child?: ChildProcess;
   private starting?: Promise<void>;
   private ready = false;
@@ -37,6 +44,17 @@ export class BitwardenService implements OnModuleDestroy {
   private synced = false;
   private syncTimer?: ReturnType<typeof setInterval>;
   constructor(@Inject(ConfigService) private readonly config: ConfigService) {}
+  onModuleInit() {
+    if (!this.configured) return;
+    void this.ensureReady()
+      .then(() => this.sync())
+      .then(() => this.logger.log('Password vault prewarmed'))
+      .catch(() => {
+        this.logger.warn(
+          'Password vault prewarming failed; login requests will retry',
+        );
+      });
+  }
   get configured() {
     return [
       'PAL_BITWARDEN_CLIENT_ID',
@@ -117,7 +135,7 @@ export class BitwardenService implements OnModuleDestroy {
             options,
           )
         ).stdout.trim();
-        if (!session) throw new Error();
+        if (!session || this.closing) throw new Error();
         const child = spawn(
           binary,
           ['serve', '--hostname', '127.0.0.1', '--port', '8087'],
