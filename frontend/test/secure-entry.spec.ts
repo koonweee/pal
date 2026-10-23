@@ -1,0 +1,178 @@
+import { expect, test } from '@playwright/test';
+import type { LoginRequest, Message, TaskDetails } from '../src/api/client';
+import { backend, usePalBackend } from './support/pal-backend';
+
+usePalBackend(test);
+for (const width of [900, 390]) {
+  test(`inline secure entry and recovery at ${width}px`, async ({
+    browser,
+    baseURL,
+  }) => {
+    const context = await browser.newContext({
+      viewport: { width, height: 900 },
+      hasTouch: width === 390,
+    });
+    const page = await context.newPage();
+    await page.route('**/vnc.html', (route) =>
+      route.fulfill({ status: 503, body: 'Unavailable' }),
+    );
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    const task: TaskDetails = {
+      id: 'login-task',
+      title: 'Store sign-in',
+      goal: 'Sign in',
+      description: '',
+      status: 'needs-input',
+      archived: false,
+      version: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      lastActivityAt: new Date().toISOString(),
+    };
+    backend.taskRows.push(task);
+    const rows = new Map<string, LoginRequest>();
+    rows.set('login-root', {
+      id: 'login-root',
+      origin: 'https://accounts.example.test',
+      kind: 'credentials',
+      status: 'pending',
+      inspectionId: 'login-preview',
+      configured: true,
+      accounts: [],
+    });
+    const card = (id: string): Message => ({
+      ...backend.message('Enter securely.'),
+      taskId: task.id,
+      phase: 'commentary',
+      metadata: { secureEntryRequestId: id },
+    });
+    backend.rows.push(card('login-root'));
+    let credentialSubmissions = 0,
+      codeSubmissions = 0;
+    const update = () =>
+      backend.emit('login.updated', {
+        event: 'login.updated',
+        taskId: task.id,
+      });
+    await page.route('**/api/login/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/image'))
+        return route.fulfill({
+          contentType: 'image/svg+xml',
+          body: '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="240"><rect width="600" height="240" fill="white"/><text x="20" y="35">Synthetic masked preview · i1</text></svg>',
+        });
+      const match = path.match(/\/requests\/([^/]+)(?:\/([^/]+))?$/)!;
+      const [id, action] = match.slice(1);
+      if (!action) return route.fulfill({ json: rows.get(id!) });
+      const root = [...rows.keys()].find((key) => rows.get(key)!.id === id)!;
+      const current = rows.get(root)!;
+      if (action === 'save') {
+        expect(route.request().postDataJSON()).toEqual({
+          username: 'dummy-user',
+          password: 'dummy-password',
+          label: 'Personal',
+        });
+        credentialSubmissions++;
+        rows.set(root, { ...current, status: 'saved', inspectionId: null });
+      } else if (action === 'code') {
+        expect(route.request().postDataJSON()).toEqual({ code: '731946' });
+        codeSubmissions++;
+        expect(id).toBe(codeSubmissions === 1 ? 'code-root' : 'new-code');
+        rows.set(root, {
+          ...current,
+          status: codeSubmissions === 1 ? 'updating' : 'filled',
+          inspectionId: null,
+        });
+      }
+      update();
+      return route.fulfill({
+        status: 201,
+        json: { id, status: rows.get(root)!.status },
+      });
+    });
+    try {
+      await page.goto(baseURL!);
+      await page.locator('#thread-open').click();
+      await page
+        .locator('#task-list')
+        .getByRole('button', { name: /Store sign-in/ })
+        .click();
+      const password = page.getByLabel(/^Password/);
+      await expect(password).toBeVisible();
+      await expect(page.getByRole('button', { name: /Logins/ })).toHaveCount(0);
+      await page.getByRole('button', { name: 'Show browser preview' }).click();
+      await expect(
+        page.getByRole('img', { name: /Selected fields/ }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole('img', { name: /Selected fields/ }),
+      ).toHaveAttribute('src', /login-preview\/image$/);
+      await page.getByRole('button', { name: 'Hide browser preview' }).click();
+      await page.getByLabel(/^Username/).fill('dummy-user');
+      await password.fill('dummy-password');
+      if (width === 390) {
+        expect(
+          (await page
+            .getByRole('button', { name: 'Save login' })
+            .boundingBox())!.height,
+        ).toBeGreaterThanOrEqual(44);
+        await page.setViewportSize({ width: 600, height: 900 });
+        await expect(password).toHaveValue('dummy-password');
+        await page.setViewportSize({ width, height: 900 });
+      }
+      await page.getByRole('button', { name: 'Save login' }).click();
+      await expect(
+        page.getByText('Login saved', { exact: true }),
+      ).toBeVisible();
+      await expect(password).toHaveCount(0);
+      await expect(
+        page.getByRole('button', { name: /browser preview/ }),
+      ).toHaveCount(0);
+      rows.set('code-root', {
+        ...rows.get('login-root')!,
+        id: 'code-root',
+        kind: 'code',
+        status: 'pending',
+        inspectionId: 'code-preview',
+        configured: false,
+      });
+      backend.publish(card('code-root'));
+      const code = page.getByLabel(/^Code/);
+      await code.fill('731946');
+      await page.getByRole('button', { name: 'Fill code' }).click();
+      await expect(page.getByText('Updating request…')).toBeVisible();
+      await expect(code).toHaveCount(0);
+      await expect(
+        page.getByRole('button', { name: /browser preview/ }),
+      ).toHaveCount(0);
+      rows.set('code-root', {
+        ...rows.get('code-root')!,
+        id: 'new-code',
+        status: 'pending',
+        inspectionId: 'new-code-preview',
+      });
+      update();
+      await expect(code).toHaveValue('');
+      await code.fill('731946');
+      await page.getByRole('button', { name: 'Fill code' }).click();
+      await expect(
+        page.getByText('Code filled', { exact: true }),
+      ).toBeVisible();
+      expect(credentialSubmissions).toBe(1);
+      expect(codeSubmissions).toBe(2);
+      expect(backend.submissions).toHaveLength(0);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth > innerWidth,
+        ),
+      ).toBe(false);
+      expect(
+        await page.evaluate(() => JSON.stringify({ ...localStorage })),
+      ).not.toMatch(/dummy-user|dummy-password|731946/);
+      expect(errors).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+}

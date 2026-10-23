@@ -4,8 +4,14 @@ import { jsonSchema } from 'ai';
 import { taskIdFromThread } from '../agent/task-tools.js';
 import { WORKER_ID, PARENT_TASK_ID } from '../agent/task-workers.js';
 import type { LoginService } from './login.service.js';
-import type { SecureFields } from './login-fields.js';
+import { normalizeFields } from './login-fields.js';
 import { ApplicationError } from '../application/contracts/errors.js';
+
+type FieldInput = {
+  username?: string | null;
+  password?: string | null;
+  code?: string[] | null;
+};
 
 export function loginTools(service: LoginService) {
   const identity = (
@@ -38,30 +44,23 @@ export function loginTools(service: LoginService) {
     }
   };
   const fieldsSchema: Parameters<typeof jsonSchema>[0] = {
+    type: 'object',
+    properties: {
+      username: { type: ['string', 'null'] },
+      password: { type: ['string', 'null'] },
+      code: {
+        type: ['array', 'null'],
+        items: { type: 'string' },
+        minItems: 1,
+        maxItems: 64,
+        uniqueItems: true,
+      },
+    },
+    additionalProperties: false,
     anyOf: [
-      {
-        type: 'object',
-        properties: {
-          username: { type: 'string' },
-          password: { type: 'string' },
-        },
-        additionalProperties: false,
-        anyOf: [{ required: ['username'] }, { required: ['password'] }],
-      },
-      {
-        type: 'object',
-        properties: {
-          code: {
-            type: 'array',
-            items: { type: 'string' },
-            minItems: 1,
-            maxItems: 64,
-            uniqueItems: true,
-          },
-        },
-        required: ['code'],
-        additionalProperties: false,
-      },
+      { required: ['username'] },
+      { required: ['password'] },
+      { required: ['code'] },
     ],
   };
   return {
@@ -98,8 +97,8 @@ export function loginTools(service: LoginService) {
     secure_entry_request: createTool({
       id: 'secure_entry_request',
       description:
-        'Open secure entry under the owning Task’s Logins button in the PWA. Login entry collects the complete username/password once and saves it; use secure_fill for later stages. Verification entry collects only a code and fills it immediately without saving. Pass either username/password input refs or an ordered code-ref array from login_inspect. The selected roles determine the PWA form. If credentials_available is returned, use secure_fill. Yield while awaiting input; workers report to their parent Task. The owning Task receives completion notification.',
-      inputSchema: jsonSchema<{ fields: SecureFields }>({
+        'Show an inline secure-entry card in the owning Task conversation. Login entry collects the complete username/password once and saves it; use secure_fill for later stages. Verification entry collects only a code and fills it immediately without saving. Pass either username/password input refs or an ordered code-ref array from login_inspect. The selected roles determine the PWA form. If credentials_available is returned, use secure_fill. Tell the user to use the inline form. Yield while awaiting input; workers report to their parent Task. The owning Task receives completion notification.',
+      inputSchema: jsonSchema<{ fields: FieldInput }>({
         type: 'object',
         properties: { fields: fieldsSchema },
         required: ['fields'],
@@ -107,25 +106,37 @@ export function loginTools(service: LoginService) {
       }),
       execute: ({ fields }, context) => {
         const { taskId, workerId } = identity(context);
-        return safe(() => service.request(taskId, fields, workerId));
+        return safe(() =>
+          service.request(taskId, normalizeFields(fields), workerId),
+        );
       },
     }),
     secure_fill: createTool({
       id: 'secure_fill',
       description:
         'Assign username/password roles to inspected input refs in fields and fill from the matching vault account without seeing values. Password refs must identify password inputs. For code, pass an ordered array of refs; a single input uses a one-element array. Reuse the same saved account across username/password stages; both credentials were collected together. Omit accountId when one account matches or this browser flow already selected it. For verification codes, input_required means call secure_entry_request. Does not click submit or prove login success.',
-      inputSchema: jsonSchema<{ fields: SecureFields; accountId?: string }>({
+      inputSchema: jsonSchema<{
+        fields: FieldInput;
+        accountId?: string | null;
+      }>({
         type: 'object',
         properties: {
           fields: fieldsSchema,
-          accountId: { type: 'string' },
+          accountId: { type: ['string', 'null'] },
         },
         required: ['fields'],
         additionalProperties: false,
       }),
       execute: ({ fields, accountId }, context) => {
         const { taskId, workerId } = identity(context);
-        return safe(() => service.fill(taskId, fields, accountId, workerId));
+        return safe(() =>
+          service.fill(
+            taskId,
+            normalizeFields(fields),
+            accountId ?? undefined,
+            workerId,
+          ),
+        );
       },
     }),
   };

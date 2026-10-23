@@ -5,6 +5,7 @@ import {
   isEligibleInput,
   inputMetadata,
   selectedFields,
+  StaleSecureFieldsError,
   type LoginInput,
   type SecureFields,
   type SecureRole,
@@ -12,6 +13,7 @@ import {
 
 interface BoundInput {
   owner: string;
+  inspectionId: string;
   at: number;
   view: LoginInput;
   page: Page;
@@ -38,6 +40,7 @@ export class LoginBrowser {
   async inspect(page: Page, owner: string) {
     await page.bringToFront();
     await this.release(owner);
+    const inspectionId = randomUUID();
     const inputs: LoginInput[] = [];
     const inspected = new Set<ElementHandle>();
     const labels: {
@@ -81,6 +84,7 @@ export class LoginBrowser {
           };
           this.inputs.set(view.ref, {
             owner,
+            inspectionId,
             at: Date.now(),
             view,
             page,
@@ -131,7 +135,7 @@ export class LoginBrowser {
             ]),
           maskColor: '#334155',
         });
-        return { inputs, image };
+        return { inputs, image, inspectionId };
       } finally {
         await page
           .evaluate((token) => document.getElementById(token)?.remove(), token)
@@ -160,10 +164,7 @@ export class LoginBrowser {
   url(owner: string, ref: string) {
     const input = this.inputs.get(ref);
     if (!input || input.owner !== owner || Date.now() - input.at > 10 * 60_000)
-      throw new ApplicationError(
-        'conflict',
-        'Input reference expired; inspect again',
-      );
+      throw new StaleSecureFieldsError();
     return input.url;
   }
   private async current(page: Page, input: BoundInput, role: SecureRole) {
@@ -179,11 +180,22 @@ export class LoginBrowser {
     )
       throw new Error();
   }
+  live(owner: string, fields: SecureFields | null) {
+    if (!fields) return false;
+    return selectedFields(fields).every(([, ref]) => {
+      const input = this.inputs.get(ref);
+      return (
+        input?.owner === owner &&
+        !input.page.isClosed() &&
+        !input.frame.isDetached() &&
+        input.frame.url() === input.url &&
+        Date.now() - input.at < 10 * 60_000
+      );
+    });
+  }
   async select(page: Page, owner: string, fields: SecureFields) {
+    const entries = selectedFields(fields);
     try {
-      const entries = selectedFields(fields);
-      if (new Set(entries.map(([, ref]) => ref)).size !== entries.length)
-        throw new Error();
       const selected = entries.map(([role, ref]) => {
         const input = this.inputs.get(ref);
         if (
@@ -201,16 +213,14 @@ export class LoginBrowser {
         await this.current(page, input, role);
       }
       return {
+        inspectionId: first.inspectionId,
         origin: first.view.origin,
         url: first.url,
         roles: [...new Set(selected.map((item) => item.role))],
         selected,
       };
     } catch {
-      throw new ApplicationError(
-        'conflict',
-        'Secure field selection is invalid or changed; inspect again',
-      );
+      throw new StaleSecureFieldsError();
     }
   }
   async fill(
@@ -231,13 +241,16 @@ export class LoginBrowser {
             code.length !== target.selected.length))
       )
         throw new ApplicationError(
-          'conflict',
+          'invalid_input',
           'Enter a complete verification code',
         );
       for (const { role, input } of target.selected) {
         const value = role === 'code' ? code : values[role];
         if (!value)
-          throw new ApplicationError('conflict', 'Missing secure entry value');
+          throw new ApplicationError(
+            'invalid_input',
+            'Missing secure entry value',
+          );
         const max = await input.element.evaluate((el) => el.maxLength);
         if (
           max > 0 &&
@@ -245,7 +258,7 @@ export class LoginBrowser {
             max
         )
           throw new ApplicationError(
-            'conflict',
+            'invalid_input',
             'Secure entry exceeds the selected input length',
           );
       }
@@ -264,10 +277,7 @@ export class LoginBrowser {
       return { status: 'filled' as const, fields: target.roles };
     } catch (error) {
       if (error instanceof ApplicationError) throw error;
-      throw new ApplicationError(
-        'conflict',
-        'Secure field selection changed or cannot be filled; inspect again',
-      );
+      throw new StaleSecureFieldsError();
     }
   }
 }

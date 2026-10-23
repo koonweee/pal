@@ -389,7 +389,9 @@ export const loginRequests = pgTable(
       .references(() => tasks.id, { onDelete: 'cascade' }),
     origin: text('origin').notNull(),
     status: text('status')
-      .$type<'pending' | 'saved' | 'filled' | 'cancelled'>()
+      .$type<
+        'pending' | 'saved' | 'filled' | 'cancelled' | 'updating' | 'failed'
+      >()
       .notNull()
       .default('pending'),
     kind: text('kind')
@@ -397,18 +399,26 @@ export const loginRequests = pgTable(
       .notNull()
       .default('credentials'),
     fields: jsonb('fields').$type<SecureFields>(),
+    inspectionId: uuid('inspection_id').references(
+      (): AnyPgColumn => loginInspections.id,
+      { onDelete: 'set null' },
+    ),
+    cardId: uuid('card_id').notNull(),
+    recoveryAttempts: integer('recovery_attempts').notNull().default(0),
+    recoveryAt: timestamp('recovery_at', { withTimezone: true }),
     workerId: text('worker_id'),
     accountId: text('account_id'),
     notifiedAt: timestamp('notified_at', { withTimezone: true }),
   },
   (t) => [
+    index('login_request_card_idx').on(t.cardId, t.createdAt.desc()),
     uniqueIndex('login_request_pending_idx')
       .on(t.taskId, t.origin, t.kind)
-      .where(sql`${t.status} = 'pending'`),
+      .where(sql`${t.status} in ('pending','updating','failed')`),
     check('login_request_kind', sql`${t.kind} in ('credentials','code')`),
     check(
       'login_request_status',
-      sql`${t.status} in ('pending','saved','filled','cancelled')`,
+      sql`${t.status} in ('pending','saved','filled','cancelled','updating','failed')`,
     ),
   ],
 );

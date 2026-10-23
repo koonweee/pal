@@ -1,3 +1,4 @@
+import { SecureEntryUpdates } from '../login/SecureEntryCard';
 import { Alert, Button } from '@mantine/core';
 import { useReducedMotion } from '@mantine/hooks';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -7,6 +8,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useMemo,
   useState,
 } from 'react';
 import { IconAction } from '../ui/IconAction';
@@ -109,6 +111,10 @@ function TypingIndicator() {
 }
 
 export function Conversation({ chat }: { chat: ChatController }) {
+  const secureEntryUpdates = useMemo(
+    () => ({ revision: chat.loginRevision ?? 0, connected: chat.connected }),
+    [chat.loginRevision, chat.connected],
+  );
   const reducedMotion = useReducedMotion();
   const reducedMotionRef = useRef(reducedMotion);
   const history = useRef<HTMLDivElement>(null);
@@ -622,15 +628,17 @@ export function Conversation({ chat }: { chat: ChatController }) {
             id="messages"
             style={{ height: virtualizer.getTotalSize() }}
           >
-            <MessageList
-              messages={chat.messages}
-              onNavigate={(id) => void chat.ensureMessage(id)}
-              onReply={chat.selectReply}
-              virtualizer={virtualizer}
-              scrollMargin={scrollMargin}
-              highlightedMessage={highlightedMessage}
-              showFirstDateSeparator={chat.before === null}
-            />
+            <SecureEntryUpdates.Provider value={secureEntryUpdates}>
+              <MessageList
+                messages={chat.messages}
+                onNavigate={(id) => void chat.ensureMessage(id)}
+                onReply={chat.selectReply}
+                virtualizer={virtualizer}
+                scrollMargin={scrollMargin}
+                highlightedMessage={highlightedMessage}
+                showFirstDateSeparator={chat.before === null}
+              />
+            </SecureEntryUpdates.Provider>
           </div>
           {chat.typing && <TypingIndicator />}
           {!chat.messages.length && !chat.loaded && (

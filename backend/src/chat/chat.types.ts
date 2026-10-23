@@ -12,6 +12,7 @@ export interface MessageActions {
 }
 export interface MessageMetadata {
   timezone?: string;
+  secureEntryRequestId?: string;
 }
 export interface MessageReplySummary {
   id: string;

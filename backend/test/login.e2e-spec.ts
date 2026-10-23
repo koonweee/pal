@@ -1,3 +1,11 @@
+import {
+  RequestContext,
+  MASTRA_THREAD_ID_KEY,
+} from '@mastra/core/request-context';
+import { noopObserve } from '@mastra/core/tools';
+import { loginTools } from '../dist/login/login-tools.js';
+import type { SecureFields } from '../dist/login/login-fields.js';
+import { ChatService } from '../dist/chat/chat.service.js';
 import { chromium } from 'playwright-core';
 import { BrowserService } from '../dist/browser/browser.service.js';
 import { LoginService } from '../dist/login/login.service.js';
@@ -40,9 +48,9 @@ it('keeps request metadata secret-free and saves once across repeated API submis
     .expect(201);
   expect(save).toHaveBeenCalledTimes(1);
   const snapshot = (
-    await request(fixture.url).get(`/login/tasks/${task.id}`).expect(200)
+    await request(fixture.url).get(`/login/requests/${pending.id}`).expect(200)
   ).body;
-  expect(snapshot.requests[0].status).toBe('saved');
+  expect(snapshot.status).toBe('saved');
   expect(JSON.stringify(snapshot)).not.toContain('SENTINEL');
   const row = (
     await fixture.database.pool.query(
@@ -123,9 +131,23 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
       .expect(200);
     expect(preview.headers['cache-control']).toBe('no-store');
     expect(preview.headers['content-type']).toContain('image/png');
-    const pending = await login.request(task.id, {
-      username: inspection.inputs[0].ref,
-    });
+    const pending = await loginTools(login).secure_entry_request.execute!(
+      {
+        fields: {
+          username: inspection.inputs[0].ref,
+          password: null,
+          code: null,
+        } as unknown as SecureFields,
+      },
+      {
+        requestContext: new RequestContext([
+          [MASTRA_THREAD_ID_KEY, 'pal-task:' + task.id],
+        ]),
+        observe: noopObserve,
+      },
+    );
+    if (!('requestId' in pending))
+      throw new Error('Expected secure entry request');
     outputs.push(pending);
     expect((await fixture.app.get(TasksService).details(task.id)).status).toBe(
       'needs-input',
@@ -166,8 +188,8 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
         .status,
     ).toBe('credentials_available');
     expect(
-      (await login.snapshot(task.id)).requests.filter(
-        (r) => r.status === 'pending',
+      (await fixture.app.get(LoginRepository).active()).filter(
+        (r) => r.taskId === task.id,
       ),
     ).toHaveLength(0);
     outputs.push(
@@ -208,10 +230,12 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
     });
     expect(codeRequest.kind).toBe('code');
     const snapshot = (
-      await request(fixture.url).get(`/login/tasks/${task.id}`).expect(200)
+      await request(fixture.url)
+        .get(`/login/requests/${codeRequest.requestId}`)
+        .expect(200)
     ).body;
-    expect(snapshot.inspections).toHaveLength(1);
-    expect(snapshot.requests[0].kind).toBe('code');
+    expect(snapshot.inspectionId).toBe(otp.inspectionId);
+    expect(snapshot.kind).toBe('code');
     const code = '731946';
     const first = await request(fixture.url)
       .post(`/login/requests/${codeRequest.requestId}/code`)
@@ -244,22 +268,39 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
     const stale = await request(fixture.url)
       .post(`/login/requests/${staleRequest.requestId}/code`)
       .send({ code })
-      .expect(409);
+      .expect(201);
+    expect(stale.body.status).toBe('updating');
     expect(JSON.stringify(stale.body)).not.toContain(code);
-    await fixture.database.pool.query(
-      "update login_requests set created_at=now()-interval '11 minutes' where id=$1",
-      [staleRequest.requestId],
+    expect((await login.get(staleRequest.requestId!)).inspectionId).toBeNull();
+    await until(async () => {
+      await login.flushNotifications();
+      return notifications.some((text) => text.includes('Automatic recovery'));
+    });
+    await page.setContent('<input autocomplete="one-time-code" id="code">');
+    const refreshed = await login.inspect(task.id);
+    const replacementCode = await login.request(task.id, {
+      code: [refreshed.inputs[0].ref],
+    });
+    expect(replacementCode.requestId).not.toBe(staleRequest.requestId);
+    const restored = await login.get(staleRequest.requestId!);
+    expect(restored.id).toBe(replacementCode.requestId);
+    expect(restored.inspectionId).toBe(refreshed.inspectionId);
+    const cards = (
+      await fixture.app.get(ChatService).history({ taskId: task.id })
+    ).messages.filter(
+      (m) => m.metadata.secureEntryRequestId === staleRequest.requestId,
     );
+    expect(cards).toHaveLength(1);
     await request(fixture.url)
       .post(`/login/requests/${staleRequest.requestId}/code`)
       .send({ code })
-      .expect(409);
-    await login.flushNotifications();
-    expect(
-      (await login.snapshot(task.id)).requests.find(
-        (r) => r.id === staleRequest.requestId,
-      )?.status,
-    ).toBe('cancelled');
+      .expect(201);
+    expect(await page.locator('#code').inputValue()).toBe('');
+    await request(fixture.url)
+      .post(`/login/requests/${replacementCode.requestId}/code`)
+      .send({ code })
+      .expect(201);
+    expect(await page.locator('#code').inputValue()).toBe(code);
     expect(JSON.stringify({ outputs, notifications })).not.toContain(code);
     const persisted = await fixture.database.pool.query(
       'select row_to_json(r) as value from login_requests r union all select row_to_json(i) from login_inspections i',
@@ -273,6 +314,140 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
     matching.mockRestore();
     save.mockRestore();
     configured.mockRestore();
+    await browser.close();
+  }
+});
+
+it('recovers code requests after restart, bounds attempts, times out, and resumes only after explicit retry', async () => {
+  const browser = await chromium.launch({
+    channel: 'chrome',
+    executablePath: process.env.TEST_CHROMIUM_PATH,
+    headless: true,
+  });
+  const task = await fixture.app.get(TasksService).create({
+    title: 'Recovery fixture',
+    goal: 'Verify bounded private recovery',
+  });
+  const page = await browser.newPage();
+  await page.route('https://recovery.example.test/**', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<input id="code" maxlength="6" autocomplete="one-time-code">',
+    }),
+  );
+  await page.goto('https://recovery.example.test/');
+  const browserService = fixture.app.get(BrowserService);
+  const selected = vi
+    .spyOn(browserService, 'selectedPage')
+    .mockResolvedValue(page);
+  const repository = fixture.app.get(LoginRepository);
+  const original = fixture.app.get(LoginService);
+  const notifications: string[] = [];
+  let restarted: LoginService | undefined;
+  try {
+    const inspection = await original.inspect(task.id);
+    const first = await original.request(task.id, {
+      code: [inspection.inputs[0].ref],
+    });
+    const root = first.requestId!;
+    original.onModuleDestroy();
+    restarted = new LoginService(
+      browserService,
+      fixture.app.get(BitwardenService),
+      repository,
+      fixture.app.get(EventsService),
+      fixture.app.get(TasksService),
+      fixture.app.get(ChatService),
+    );
+    restarted.bindNotifier(async (_id, text) => {
+      notifications.push(text);
+    });
+    await until(async () => {
+      await restarted!.flushNotifications();
+      return (await restarted!.get(root)).status === 'updating';
+    });
+    expect((await restarted.get(root)).inspectionId).toBeNull();
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const fresh = await restarted.inspect(task.id);
+      const next = await restarted.request(task.id, {
+        code: [fresh.inputs[0].ref],
+      });
+      expect((await repository.get(next.requestId!)).recoveryAttempts).toBe(
+        attempt,
+      );
+      if (attempt === 1) {
+        // Invalid values stay input errors and do not consume a recovery attempt.
+        await expect(
+          restarted.submitCode(next.requestId!, '1234567'),
+        ).rejects.toMatchObject({ code: 'invalid_input' });
+        expect((await restarted.get(root)).status).toBe('pending');
+      }
+      await page.setContent(
+        '<input id="code" maxlength="6" autocomplete="one-time-code">',
+      );
+      const result = await restarted.submitCode(next.requestId!, '731946');
+      expect(result.status).toBe(attempt === 1 ? 'updating' : 'failed');
+      expect(await page.locator('#code').inputValue()).toBe('');
+    }
+    const failed = await restarted.get(root);
+    const fresh = await restarted.inspect(task.id);
+    await expect(
+      restarted.request(task.id, { code: [fresh.inputs[0].ref] }),
+    ).rejects.toThrow(/recovery stopped/);
+    await restarted.retry(failed.id);
+    expect((await restarted.get(root)).status).toBe('updating');
+    const retryInspection = await restarted.inspect(task.id);
+    const retried = await restarted.request(task.id, {
+      code: [retryInspection.inputs[0].ref],
+    });
+    expect((await repository.get(retried.requestId!)).recoveryAttempts).toBe(1);
+    await restarted.finish(retried.requestId!);
+    expect((await restarted.get(root)).status).toBe('cancelled');
+    const timeout = await restarted.request(task.id, {
+      code: [retryInspection.inputs[0].ref],
+    });
+    await fixture.database.pool.query(
+      "update login_requests set created_at=now()-interval '11 minutes' where id=$1",
+      [timeout.requestId],
+    );
+    expect(
+      (await restarted.submitCode(timeout.requestId!, '731946')).status,
+    ).toBe('updating');
+    await fixture.database.pool.query(
+      "update login_requests set recovery_at=now()-interval '3 minutes' where id=$1",
+      [timeout.requestId],
+    );
+    await until(async () => {
+      await restarted!.flushNotifications();
+      return (await restarted!.get(timeout.requestId!)).status === 'failed';
+    });
+    await restarted.retry(timeout.requestId!);
+    expect((await restarted.get(timeout.requestId!)).status).toBe('updating');
+    await restarted.finish(timeout.requestId!);
+    expect((await restarted.get(timeout.requestId!)).status).toBe('cancelled');
+    const closeInspection = await restarted.inspect(task.id);
+    const closeRequest = await restarted.request(task.id, {
+      code: [closeInspection.inputs[0].ref],
+    });
+    await fixture.app
+      .get(TasksService)
+      .update(task.id, { status: 'completed' });
+    await until(async () => {
+      await restarted!.flushNotifications();
+      return (
+        (await restarted!.get(closeRequest.requestId!)).status === 'cancelled'
+      );
+    });
+    const cards = (
+      await fixture.app.get(ChatService).history({ taskId: task.id })
+    ).messages;
+    expect(
+      cards.filter((message) => message.metadata.secureEntryRequestId === root),
+    ).toHaveLength(1);
+    expect(JSON.stringify({ cards, notifications })).not.toContain('731946');
+  } finally {
+    restarted?.onModuleDestroy();
+    selected.mockRestore();
     await browser.close();
   }
 });

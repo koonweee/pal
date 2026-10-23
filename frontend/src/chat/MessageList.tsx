@@ -1,3 +1,4 @@
+import { SecureEntryCard } from '../login/SecureEntryCard';
 import { UnstyledButton } from '@mantine/core';
 import type { Virtualizer } from '@tanstack/react-virtual';
 import { Reply } from 'lucide-react';
@@ -46,7 +47,10 @@ const MessageRow = memo(
       [reply],
     );
     const bindSwipeReply = useSwipeReply({
-      enabled: persisted && !attachmentPreviewOpen,
+      enabled:
+        persisted &&
+        !attachmentPreviewOpen &&
+        !message.metadata.secureEntryRequestId,
       onReply: reply,
     });
     return (
@@ -61,7 +65,7 @@ const MessageRow = memo(
           </span>
         )}
         <article
-          className={`message ${message.role}${receiptSlot ? ' message-receipt-slot' : ''}${highlighted ? ' quote-highlight' : ''}`}
+          className={`message ${message.role}${message.metadata.secureEntryRequestId ? ' secure-entry-message' : ''}${receiptSlot ? ' message-receipt-slot' : ''}${highlighted ? ' quote-highlight' : ''}`}
           data-message-id={message.id}
           aria-label={message.role === 'user' ? 'You' : settings.agentName}
         >
@@ -90,7 +94,13 @@ const MessageRow = memo(
                 <span>{message.replyTo.textPreview || 'Message'}</span>
               </UnstyledButton>
             )}
-            {message.role === 'assistant' ? (
+            {message.role === 'assistant' &&
+            message.metadata.secureEntryRequestId ? (
+              <SecureEntryCard
+                key={message.metadata.secureEntryRequestId}
+                requestId={message.metadata.secureEntryRequestId}
+              />
+            ) : message.role === 'assistant' ? (
               <AssistantMarkdown text={message.text} />
             ) : (
               <div className="message-body plain-text">{message.text}</div>
@@ -102,17 +112,19 @@ const MessageRow = memo(
               />
             )}
           </div>
-          <IconAction
-            type="button"
-            className="reply-action"
-            mih="var(--pal-icon-action-size)"
-            label={`Reply to ${message.role === 'user' ? 'your' : `${settings.agentName}’s`} message`}
-            disabled={!persisted}
-            aria-hidden={persisted ? undefined : true}
-            onClick={activateReply}
-          >
-            <Reply aria-hidden="true" size={18} strokeWidth={1.75} />
-          </IconAction>
+          {!message.metadata.secureEntryRequestId && (
+            <IconAction
+              type="button"
+              className="reply-action"
+              mih="var(--pal-icon-action-size)"
+              label={`Reply to ${message.role === 'user' ? 'your' : `${settings.agentName}’s`} message`}
+              disabled={!persisted}
+              aria-hidden={persisted ? undefined : true}
+              onClick={activateReply}
+            >
+              <Reply aria-hidden="true" size={18} strokeWidth={1.75} />
+            </IconAction>
+          )}
           {receiptSlot && persisted && (
             <div
               className="message-read"

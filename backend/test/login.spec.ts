@@ -1,3 +1,4 @@
+import { normalizeFields } from '../dist/login/login-fields.js';
 import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -32,6 +33,40 @@ beforeEach(async () => {
   await page.goto('https://login.example.test/');
 });
 afterEach(async () => page?.close());
+
+it('accepts null optional roles and distinguishes malformed selections from stale references', async () => {
+  const service = new LoginBrowser();
+  const inspection = await service.inspect(page, 'a');
+  const fields = normalizeFields({
+    username: inspection.inputs[1].ref,
+    password: null,
+    code: null,
+  });
+  expect(fields).toEqual({ username: inspection.inputs[1].ref });
+  expect(
+    normalizeFields({ username: null, password: null, code: ['code-ref'] }),
+  ).toEqual({ code: ['code-ref'] });
+  await expect(
+    service.fill(page, 'a', fields, { username: 'dummy' }),
+  ).resolves.toMatchObject({ status: 'filled' });
+  for (const invalid of [
+    { username: null, password: null },
+    { username: 42 },
+    { username: 'a', code: ['b'] },
+    { username: 'a', password: 'a' },
+    { username: 'a', extra: null },
+  ]) {
+    try {
+      normalizeFields(invalid);
+      throw new Error('Expected invalid selection');
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'invalid_input' });
+    }
+  }
+  await expect(
+    service.select(page, 'a', { username: 'missing-ref' }),
+  ).rejects.toMatchObject({ code: 'conflict' });
+});
 
 it('extracts generic masked inputs and fills only explicitly assigned credential roles', async () => {
   const service = new LoginBrowser();

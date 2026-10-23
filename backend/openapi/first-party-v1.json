@@ -389,7 +389,9 @@
             "enum": [
               "saved",
               "filled",
-              "cancelled"
+              "cancelled",
+              "updating",
+              "failed"
             ],
             "type": "string"
           }
@@ -397,21 +399,6 @@
         "required": [
           "id",
           "status"
-        ],
-        "type": "object"
-      },
-      "LoginInspectionDto": {
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "origin": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "origin"
         ],
         "type": "object"
       },
@@ -423,7 +410,14 @@
             },
             "type": "array"
           },
+          "configured": {
+            "type": "boolean"
+          },
           "id": {
+            "type": "string"
+          },
+          "inspectionId": {
+            "nullable": true,
             "type": "string"
           },
           "kind": {
@@ -441,7 +435,9 @@
               "pending",
               "saved",
               "filled",
-              "cancelled"
+              "cancelled",
+              "updating",
+              "failed"
             ],
             "type": "string"
           }
@@ -451,32 +447,9 @@
           "origin",
           "kind",
           "status",
-          "accounts"
-        ],
-        "type": "object"
-      },
-      "LoginSnapshotDto": {
-        "properties": {
-          "configured": {
-            "type": "boolean"
-          },
-          "inspections": {
-            "items": {
-              "$ref": "#/components/schemas/LoginInspectionDto"
-            },
-            "type": "array"
-          },
-          "requests": {
-            "items": {
-              "$ref": "#/components/schemas/LoginRequestDto"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
+          "inspectionId",
           "configured",
-          "requests",
-          "inspections"
+          "accounts"
         ],
         "type": "object"
       },
@@ -748,6 +721,9 @@
       },
       "MessageMetadataResponseDto": {
         "properties": {
+          "secureEntryRequestId": {
+            "type": "string"
+          },
           "timezone": {
             "type": "string"
           }
@@ -1632,7 +1608,7 @@
     "contact": {},
     "description": "Private single-owner HTTP and SSE contract for canonical Pal clients.",
     "title": "Pal First-party API",
-    "version": "4"
+    "version": "5"
   },
   "openapi": "3.0.0",
   "paths": {
@@ -2087,6 +2063,37 @@
         ]
       }
     },
+    "/login/requests/{id}": {
+      "get": {
+        "operationId": "getLoginRequest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginRequestDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "login"
+        ]
+      }
+    },
     "/login/requests/{id}/cancel": {
       "post": {
         "operationId": "cancelLoginRequest",
@@ -2159,6 +2166,37 @@
         ]
       }
     },
+    "/login/requests/{id}/retry": {
+      "post": {
+        "operationId": "retryLoginRequest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginFinishedDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "login"
+        ]
+      }
+    },
     "/login/requests/{id}/save": {
       "post": {
         "operationId": "saveLoginRequest",
@@ -2188,37 +2226,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LoginFinishedDto"
-                }
-              }
-            },
-            "description": ""
-          }
-        },
-        "summary": "",
-        "tags": [
-          "login"
-        ]
-      }
-    },
-    "/login/tasks/{taskId}": {
-      "get": {
-        "operationId": "getLoginSnapshot",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "taskId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LoginSnapshotDto"
                 }
               }
             },

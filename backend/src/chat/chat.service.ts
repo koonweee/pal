@@ -115,9 +115,16 @@ export class ChatService implements ChatViewPort {
         idempotencyKey: idempotencyKey ?? null,
         replyToMessageId: targetVisible ? target.id : null,
         text: input.text,
-        metadata: input.metadata?.timezone
-          ? { timezone: input.metadata.timezone }
-          : {},
+        metadata: {
+          ...(input.metadata?.timezone
+            ? { timezone: input.metadata.timezone }
+            : {}),
+          ...(input.role === 'assistant' &&
+          taskId &&
+          input.metadata?.secureEntryRequestId
+            ? { secureEntryRequestId: input.metadata.secureEntryRequestId }
+            : {}),
+        },
         taskId,
         phase,
         actions: input.actions ?? null,

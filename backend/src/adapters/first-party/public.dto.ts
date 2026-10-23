@@ -33,6 +33,7 @@ export class MessageActionsResponseDto {
 }
 
 export class MessageMetadataResponseDto {
+  @ApiPropertyOptional() secureEntryRequestId?: string;
   @ApiPropertyOptional() timezone?: string;
 }
 

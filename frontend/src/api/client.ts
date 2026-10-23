@@ -403,12 +403,20 @@ export function disableWebPush(id: string) {
   );
 }
 
-export type LoginSnapshot = components['schemas']['LoginSnapshotDto'];
-export function getLoginSnapshot(taskId: string, signal?: AbortSignal) {
+export type LoginRequest = components['schemas']['LoginRequestDto'];
+export function getLoginRequest(id: string, signal?: AbortSignal) {
   return unwrap(
-    client.GET('/login/tasks/{taskId}', {
-      params: { path: { taskId } },
+    client.GET('/login/requests/{id}', {
+      params: { path: { id } },
       signal: requestSignal(signal),
+    }),
+  );
+}
+export function retryLoginRequest(id: string) {
+  return unwrap(
+    client.POST('/login/requests/{id}/retry', {
+      params: { path: { id } },
+      signal: requestSignal(),
     }),
   );
 }

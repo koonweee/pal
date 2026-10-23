@@ -159,6 +159,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/login/requests/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getLoginRequest'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/login/requests/{id}/cancel': {
     parameters: {
       query?: never;
@@ -191,6 +207,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/login/requests/{id}/retry': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['retryLoginRequest'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/login/requests/{id}/save': {
     parameters: {
       query?: never;
@@ -201,22 +233,6 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['saveLoginRequest'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/login/tasks/{taskId}': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations['getLoginSnapshot'];
-    put?: never;
-    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -566,25 +582,24 @@ export interface components {
     LoginFinishedDto: {
       id: string;
       /** @enum {string} */
-      status: 'saved' | 'filled' | 'cancelled';
-    };
-    LoginInspectionDto: {
-      id: string;
-      origin: string;
+      status: 'saved' | 'filled' | 'cancelled' | 'updating' | 'failed';
     };
     LoginRequestDto: {
       accounts: components['schemas']['LoginAccountDto'][];
+      configured: boolean;
       id: string;
+      inspectionId: string | null;
       /** @enum {string} */
       kind: 'credentials' | 'code';
       origin: string;
       /** @enum {string} */
-      status: 'pending' | 'saved' | 'filled' | 'cancelled';
-    };
-    LoginSnapshotDto: {
-      configured: boolean;
-      inspections: components['schemas']['LoginInspectionDto'][];
-      requests: components['schemas']['LoginRequestDto'][];
+      status:
+        | 'pending'
+        | 'saved'
+        | 'filled'
+        | 'cancelled'
+        | 'updating'
+        | 'failed';
     };
     LoginUpdatedEventDto: {
       /** @enum {string} */
@@ -658,6 +673,7 @@ export interface components {
       timezone?: string;
     };
     MessageMetadataResponseDto: {
+      secureEntryRequestId?: string;
       timezone?: string;
     };
     MessageReplySummaryResponseDto: {
@@ -1204,6 +1220,27 @@ export interface operations {
       };
     };
   };
+  getLoginRequest: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LoginRequestDto'];
+        };
+      };
+    };
+  };
   cancelLoginRequest: {
     parameters: {
       query?: never;
@@ -1250,6 +1287,27 @@ export interface operations {
       };
     };
   };
+  retryLoginRequest: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LoginFinishedDto'];
+        };
+      };
+    };
+  };
   saveLoginRequest: {
     parameters: {
       query?: never;
@@ -1271,27 +1329,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['LoginFinishedDto'];
-        };
-      };
-    };
-  };
-  getLoginSnapshot: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        taskId: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['LoginSnapshotDto'];
         };
       };
     };

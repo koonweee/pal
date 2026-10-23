@@ -649,6 +649,7 @@ export function useChat() {
         commit({ connected: false });
       },
       onMalformed() {
+        commit({ loginRevision: (current.current.loginRevision ?? 0) + 1 });
         void controller.current.synchronize();
         void controller.current.synchronizeTasks();
         void refreshInstanceSettings();

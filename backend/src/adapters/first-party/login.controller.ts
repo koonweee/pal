@@ -30,19 +30,13 @@ class LoginRequestDto {
   @ApiProperty() id!: string;
   @ApiProperty() origin!: string;
   @ApiProperty({ enum: ['credentials', 'code'] }) kind!: 'credentials' | 'code';
-  @ApiProperty({ enum: ['pending', 'saved', 'filled', 'cancelled'] }) status!:
-    'pending' | 'saved' | 'filled' | 'cancelled';
-  @ApiProperty({ type: [LoginAccountDto] }) accounts!: LoginAccountDto[];
-}
-class LoginInspectionDto {
-  @ApiProperty() id!: string;
-  @ApiProperty() origin!: string;
-}
-class LoginSnapshotDto {
+  @ApiProperty({
+    enum: ['pending', 'saved', 'filled', 'cancelled', 'updating', 'failed'],
+  })
+  status!: string;
+  @ApiProperty({ nullable: true, type: String }) inspectionId!: string | null;
   @ApiProperty() configured!: boolean;
-  @ApiProperty({ type: [LoginRequestDto] }) requests!: LoginRequestDto[];
-  @ApiProperty({ type: [LoginInspectionDto] })
-  inspections!: LoginInspectionDto[];
+  @ApiProperty({ type: [LoginAccountDto] }) accounts!: LoginAccountDto[];
 }
 export class LoginUpdatedEventDto {
   @ApiProperty({ enum: ['login.updated'] }) event!: 'login.updated';
@@ -71,19 +65,20 @@ class SubmitCodeDto {
 }
 class LoginFinishedDto {
   @ApiProperty() id!: string;
-  @ApiProperty({ enum: ['saved', 'filled', 'cancelled'] }) status!: string;
+  @ApiProperty({ enum: ['saved', 'filled', 'cancelled', 'updating', 'failed'] })
+  status!: string;
 }
 
 @ApiTags('login')
 @Controller('login')
 export class FirstPartyLoginController {
   constructor(@Inject(LoginService) private readonly login: LoginService) {}
-  @Get('tasks/:taskId')
+  @Get('requests/:id')
   @Header('Cache-Control', 'no-store')
-  @ApiOperation({ operationId: 'getLoginSnapshot' })
-  @ApiOkResponse({ type: LoginSnapshotDto })
-  snapshot(@Param('taskId', ParseUUIDPipe) taskId: string) {
-    return this.login.snapshot(taskId);
+  @ApiOperation({ operationId: 'getLoginRequest' })
+  @ApiOkResponse({ type: LoginRequestDto })
+  get(@Param('id', ParseUUIDPipe) id: string) {
+    return this.login.get(id);
   }
   @Get('inspections/:id/image')
   @Header('Cache-Control', 'no-store')
@@ -109,6 +104,13 @@ export class FirstPartyLoginController {
   @ApiCreatedResponse({ type: LoginFinishedDto })
   code(@Param('id', ParseUUIDPipe) id: string, @Body() input: SubmitCodeDto) {
     return this.login.submitCode(id, input.code);
+  }
+  @Post('requests/:id/retry')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ operationId: 'retryLoginRequest' })
+  @ApiCreatedResponse({ type: LoginFinishedDto })
+  retry(@Param('id', ParseUUIDPipe) id: string) {
+    return this.login.retry(id);
   }
   @Post('requests/:id/cancel')
   @Header('Cache-Control', 'no-store')

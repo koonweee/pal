@@ -18,7 +18,8 @@ const initialSafety: ReloadSafetyState = {
 
 interface ReloadSafetyContextValue {
   safety: ReloadSafetyState;
-  update(update: Partial<ReloadSafetyState>): void;
+  update(update: Partial<Omit<ReloadSafetyState, 'credentialEditing'>>): void;
+  beginCredentialEditing(): () => void;
 }
 
 const ReloadSafetyContext = createContext<ReloadSafetyContextValue | undefined>(
@@ -27,12 +28,24 @@ const ReloadSafetyContext = createContext<ReloadSafetyContextValue | undefined>(
 
 export function ReloadSafetyProvider({ children }: PropsWithChildren) {
   const [safety, setSafety] = useState(initialSafety);
+  const [credentialEditors, setCredentialEditors] = useState(0);
+  const beginCredentialEditing = useCallback(() => {
+    setCredentialEditors((count) => count + 1);
+    return () => setCredentialEditors((count) => count - 1);
+  }, []);
   const update = useCallback(
-    (next: Partial<ReloadSafetyState>) =>
+    (next: Partial<Omit<ReloadSafetyState, 'credentialEditing'>>) =>
       setSafety((current) => ({ ...current, ...next })),
     [],
   );
-  const value = useMemo(() => ({ safety, update }), [safety, update]);
+  const value = useMemo(
+    () => ({
+      safety: { ...safety, credentialEditing: credentialEditors > 0 },
+      update,
+      beginCredentialEditing,
+    }),
+    [safety, update, beginCredentialEditing, credentialEditors],
+  );
   return (
     <ReloadSafetyContext.Provider value={value}>
       {children}

@@ -1,12 +1,13 @@
+import { ChatService } from '../chat/chat.service.js';
 import { TasksService } from '../tasks/tasks.service.js';
 import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common';
 import { BrowserService } from '../browser/browser.service.js';
 import { EventsService } from '../events/events.service.js';
 import { ApplicationError } from '../application/contracts/errors.js';
 import { BitwardenService, type CredentialInput } from './bitwarden.service.js';
-import { LoginRepository } from './login.repository.js';
+import { LoginRepository, type LoginRequest } from './login.repository.js';
 import { LoginBrowser } from './login-browser.js';
-import type { SecureFields } from './login-fields.js';
+import { StaleSecureFieldsError, type SecureFields } from './login-fields.js';
 
 @Injectable()
 export class LoginService implements OnModuleDestroy {
@@ -33,6 +34,7 @@ export class LoginService implements OnModuleDestroy {
     @Inject(LoginRepository) private readonly repository: LoginRepository,
     @Inject(EventsService) private readonly events: EventsService,
     @Inject(TasksService) private readonly tasks: TasksService,
+    @Inject(ChatService) private readonly chat: ChatService,
   ) {}
   private owner(taskId: string, workerId?: string) {
     return taskId + ':' + (workerId ?? 'task');
@@ -42,7 +44,7 @@ export class LoginService implements OnModuleDestroy {
     if (this.timer) clearInterval(this.timer);
     this.timer = setInterval(() => {
       void this.flushNotifications();
-    }, 30_000);
+    }, 10_000);
     this.timer.unref();
     void this.flushNotifications();
   }
@@ -50,18 +52,55 @@ export class LoginService implements OnModuleDestroy {
     if (this.notifying || !this.notify) return;
     this.notifying = true;
     try {
-      await this.repository.cleanup();
+      for (const row of await this.repository.cleanup()) {
+        if (row.status === 'failed')
+          await this.tasks.update(row.taskId, { status: 'needs-input' });
+        this.events.publish({ event: 'login.updated', taskId: row.taskId });
+      }
       for (const [key, value] of this.attempts)
         if (Date.now() - value.at >= 10 * 60_000) this.attempts.delete(key);
+      for (const row of await this.repository.active()) {
+        await this.publishCard(row);
+        if ((await this.tasks.details(row.taskId)).status === 'completed') {
+          await this.repository.finish(row.id);
+          await this.repository.notified(row.id, 'cancelled');
+          this.events.publish({ event: 'login.updated', taskId: row.taskId });
+          continue;
+        }
+        if (
+          row.status === 'pending' &&
+          row.kind === 'code' &&
+          !this.inspector.live(
+            this.owner(row.taskId, row.workerId ?? undefined),
+            row.fields,
+          )
+        ) {
+          await this.recover(row.id);
+        }
+      }
       for (const row of await this.repository.notifications()) {
         try {
+          if ((await this.tasks.details(row.taskId)).status === 'completed') {
+            await this.repository.notified(row.id, row.status);
+            continue;
+          }
+          const next =
+            row.status === 'updating'
+              ? `Automatic recovery ${row.recoveryAttempts}/2: browser input references are stale. Inspect the browser again, choose fresh fields and call secure_entry_request to replace the inline form. Never ask the user to refresh. If login already completed, verify it and complete the task.`
+              : row.status === 'failed'
+                ? 'Automatic recovery stopped. Yield; the inline card lets the user retry. Do not create more requests until the user retries.'
+                : row.status === 'saved'
+                  ? 'The complete username and password are stored. Inspect again and use secure_fill with the saved account for subsequent login stages.'
+                  : row.status === 'filled'
+                    ? 'The verification code was filled directly in the browser. Check the page before continuing.'
+                    : 'The request was cancelled.';
           await this.notify(
             row.taskId,
-            `Secure entry request ${row.id} for ${row.origin} was ${row.status}. ${row.status === 'saved' ? 'The complete username and password are stored. Inspect again and use secure_fill with the saved account for subsequent login stages.' : row.status === 'filled' ? 'The verification code was filled directly in the browser. Check the page before continuing.' : 'No input was submitted.'} This notification can be delivered more than once.`,
+            `Secure entry request ${row.id} for ${row.origin} is ${row.status}. ${next} This notification can be delivered more than once.`,
           );
-          await this.repository.notified(row.id);
+          await this.repository.notified(row.id, row.status);
         } catch {
-          /* Retry metadata notification, never the vault write. */
+          /* Retry metadata notification, never the secret submission. */
         }
       }
     } catch {
@@ -107,6 +146,7 @@ export class LoginService implements OnModuleDestroy {
         origin,
         result.inputs,
         result.image,
+        result.inspectionId,
       );
       this.events.publish({ event: 'login.updated', taskId });
       return {
@@ -163,9 +203,11 @@ export class LoginService implements OnModuleDestroy {
       taskId,
       target.origin,
       kind,
-      kind === 'code' ? fields : undefined,
+      fields,
       workerId,
+      target.inspectionId,
     );
+    await this.publishCard(row);
     await this.tasks.update(taskId, { status: 'needs-input' });
     this.events.publish({ event: 'login.updated', taskId });
     return {
@@ -246,20 +288,53 @@ export class LoginService implements OnModuleDestroy {
       }
     }
   }
-  async snapshot(taskId: string) {
-    const snapshot = await this.repository.snapshot(taskId);
-    const requests = await Promise.all(
-      snapshot.requests.map(async (row) => ({
-        ...row,
-        accounts:
-          row.status === 'pending' &&
-          row.kind === 'credentials' &&
-          this.vault.configured
-            ? await this.accounts(row.origin).catch(() => [])
-            : [],
-      })),
+  private async publishCard(row: LoginRequest) {
+    const text =
+      row.kind === 'code'
+        ? 'Enter the verification code securely.'
+        : 'Enter your sign-in details securely.';
+    const metadata = { secureEntryRequestId: row.cardId };
+    await this.chat.publish(
+      {
+        role: 'assistant',
+        taskId: row.taskId,
+        phase: 'commentary',
+        text,
+        metadata,
+      },
+      'secure-entry:' + row.cardId,
     );
-    return { ...snapshot, requests, configured: this.vault.configured };
+  }
+  async get(id: string) {
+    const row = await this.repository.current(id);
+    return {
+      id: row.id,
+      origin: row.origin,
+      kind: row.kind,
+      status: row.status,
+      inspectionId: row.status === 'pending' ? row.inspectionId : null,
+      configured: this.vault.configured,
+      accounts:
+        row.status === 'pending' &&
+        row.kind === 'credentials' &&
+        this.vault.configured
+          ? await this.accounts(row.origin).catch(() => [])
+          : [],
+    };
+  }
+  private async recover(id: string, retry = false) {
+    const row = await this.repository.recover(id, retry);
+    if (row.status === 'updating')
+      await this.tasks.update(row.taskId, { status: 'in-progress' });
+    else if (row.status === 'failed')
+      await this.tasks.update(row.taskId, { status: 'needs-input' });
+    this.events.publish({ event: 'login.updated', taskId: row.taskId });
+    return { id: row.id, status: row.status };
+  }
+  async retry(id: string) {
+    const result = await this.recover(id, true);
+    void this.flushNotifications();
+    return result;
   }
   async accounts(origin: string) {
     return (await this.vault.matching(origin)).map((item) => ({
@@ -294,26 +369,25 @@ export class LoginService implements OnModuleDestroy {
     try {
       const row = await this.repository.finish(id, 'code', async (row) => {
         if (!row.fields || !('code' in row.fields))
-          throw new ApplicationError(
-            'conflict',
-            'Verification selection expired; inspect again',
-          );
+          throw new StaleSecureFieldsError();
         const owner = this.owner(row.taskId, row.workerId ?? undefined);
-        const page = await this.browser.selectedPage(
-          row.taskId,
-          row.workerId ?? undefined,
-        );
+        const page = await this.browser
+          .selectedPage(row.taskId, row.workerId ?? undefined)
+          .catch(() => {
+            throw new StaleSecureFieldsError();
+          });
         const target = await this.inspector.select(page, owner, row.fields);
-        if (target.origin !== row.origin)
-          throw new ApplicationError(
-            'conflict',
-            'Verification selection changed; inspect again',
-          );
+        if (target.origin !== row.origin) throw new StaleSecureFieldsError();
         await this.inspector.fill(page, owner, row.fields, { code });
       });
       this.events.publish({ event: 'login.updated', taskId: row.taskId });
       void this.flushNotifications();
       return { id: row.id, status: row.status };
+    } catch (error) {
+      if (!(error instanceof StaleSecureFieldsError)) throw error;
+      const result = await this.recover(id);
+      void this.flushNotifications();
+      return result;
     } finally {
       code = '';
     }

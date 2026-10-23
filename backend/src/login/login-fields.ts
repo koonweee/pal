@@ -1,6 +1,17 @@
+import { ApplicationError } from '../application/contracts/errors.js';
+
 export type SecureFields =
   | { username?: string; password?: string; code?: never }
   | { code: string[]; username?: never; password?: never };
+export class StaleSecureFieldsError extends ApplicationError {
+  constructor() {
+    super(
+      'conflict',
+      'Secure field selection expired or changed; inspect again',
+    );
+  }
+}
+
 export type SecureRole = 'username' | 'password' | 'code';
 export interface LoginInput {
   ref: string;
@@ -100,30 +111,45 @@ export function inputMetadata(el: HTMLInputElement) {
   };
 }
 
-export function selectedFields(fields: SecureFields): [SecureRole, string][] {
-  const keys = fields && typeof fields === 'object' ? Object.keys(fields) : [];
-  if (
-    !keys.length ||
-    keys.some((key) => !['username', 'password', 'code'].includes(key))
-  )
-    throw new Error('Invalid field selection');
-  if ('code' in fields) {
+/** Tool providers may emit null for an unused optional role. */
+export function selectedFields(fields: unknown): [SecureRole, string][] {
+  const invalid = () =>
+    new ApplicationError('invalid_input', 'Invalid secure field selection');
+  if (!fields || typeof fields !== 'object' || Array.isArray(fields))
+    throw invalid();
+  const entries = Object.entries(fields);
+  if (entries.some(([key]) => !['username', 'password', 'code'].includes(key)))
+    throw invalid();
+  const active = entries.filter(
+    ([, value]) => value !== null && value !== undefined,
+  );
+  if (!active.length) throw invalid();
+  const code = active.find(([key]) => key === 'code');
+  let result: [SecureRole, string][];
+  if (code) {
+    const refs = code[1];
     if (
-      keys.length !== 1 ||
-      !Array.isArray(fields.code) ||
-      !fields.code.length ||
-      fields.code.length > 64 ||
-      fields.code.some((ref) => typeof ref !== 'string' || !ref)
+      active.length !== 1 ||
+      !Array.isArray(refs) ||
+      !refs.length ||
+      refs.length > 64 ||
+      refs.some((ref) => typeof ref !== 'string' || !ref)
     )
-      throw new Error('Invalid code selection');
-    return fields.code.map((ref) => ['code', ref]);
+      throw invalid();
+    result = refs.map((ref) => ['code', ref]);
+  } else {
+    if (active.some(([, ref]) => typeof ref !== 'string' || !ref))
+      throw invalid();
+    result = active.map(([role, ref]) => [role as SecureRole, ref as string]);
   }
-  return (['username', 'password'] as const)
-    .filter((key) => keys.includes(key))
-    .map((key) => {
-      const role = key as 'username' | 'password';
-      if (typeof fields[role] !== 'string' || !fields[role])
-        throw new Error('Invalid credential selection');
-      return [role, fields[role]];
-    });
+  if (new Set(result.map(([, ref]) => ref)).size !== result.length)
+    throw invalid();
+  return result;
+}
+
+export function normalizeFields(fields: unknown): SecureFields {
+  const selected = selectedFields(fields);
+  return selected[0][0] === 'code'
+    ? { code: selected.map(([, ref]) => ref) }
+    : (Object.fromEntries(selected) as SecureFields);
 }
