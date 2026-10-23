@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Done
 
 ## Goal
 
@@ -27,7 +27,7 @@ Exit criteria:
 - A new flow can open private entry despite a matching saved login.
 - Two saved accounts remain distinct and staged filling uses the selected account.
 
-### 2. Verification and development deployment
+### 2. Verification and development deployment — validated
 
 Implementation tasks:
 
@@ -61,4 +61,5 @@ Explicit valid entry requests display a form regardless of saved accounts. Accou
 
 - Passed: backend build, warning-free lint and adapter boundaries; seven login regressions and 12 login/client-contract integration cases.
 - The synthetic scenario collects another account despite an existing match, saves both separately, fills the chosen account across stages, explicitly switches stored accounts and checks secret-free public outputs and persistence.
-- Remaining: development backend rebuild and health/state verification.
+- Deployed `9e0a993` with `./scripts/dev-local rebuild`. All development services are healthy and the Tailnet PWA health check passes.
+- Preserved all seven login requests, 25 inspections and 1,237,604 preview bytes. The execution desktop container ID and start time are unchanged. No frontend update or schema migration was needed.

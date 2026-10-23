@@ -14,7 +14,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Different login entry](different-login-entry.md) | In Progress | Explicit new-login entry with saved accounts, selected-account continuity and simpler tool semantics. |
+| [Different login entry](different-login-entry.md) | Done | Explicit new-login entry with saved accounts, selected-account continuity and simpler tool semantics. |
 | [Secure entry in Main](main-secure-entry.md) | Done | Identical Main/Task cards, standard message width, cached-form gating and proactive credential correction. |
 | [Inline Secure Entry and Recovery](inline-secure-entry.md) | Done | Dense canonical request cards, null-safe tools and bounded automatic field recovery. |
 | [Model-Selected Secure Fields and Inline UI Prototypes](model-selected-secure-fields.md) | Done | Model-assigned credential/code fields, private destination checks and interactive inline PWA mockups. |
