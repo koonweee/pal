@@ -22,8 +22,8 @@ Implementation tasks:
 
 - [ ] Inspect production configuration, image/platform requirements, persistent storage, and required secret presence.
 - [x] Run backend integration/end-to-end and frontend component/browser/PWA checks.
-- [ ] Build and publish immutable AMD64 agent-service, execution, web and egress images from the validated revision.
-- [ ] Push completed commits to the repository.
+- [x] Build and publish immutable AMD64 agent-service, execution, web and egress images from the validated revision.
+- [x] Push completed commits to the repository.
 
 Exit criteria:
 
@@ -79,3 +79,7 @@ npm run test:pwa
 - The full browser suite reports 59/65 passing. All six failing layout/focus cases reproduce on the published `origin/main` baseline: mobile desktop focus, two standalone safe-area cases, two workbench cases and intermittent keyboard-anchor retention. The keyboard case also fails on an isolated current-source rerun and two of three additional baseline runs. These existing failures remain outside this release's changed scope.
 - AMD64 agent-service, execution, web and egress images build successfully with a shared application revision and production PWA identity.
 - Production cutover is waiting on operator-generated deployment metadata; production remains unchanged.
+
+## Published Artifacts
+
+All application commits are pushed to `origin/main`. Four AMD64 images from `73bc06e` are published and their immutable remote manifests are verified. Agent-service, execution and web use their existing package names with tag `73bc06e`; the router uses `pal:73bc06e-egress` because the registry rejected publishing a new router package. Immutable pins and staged runtime verification assets are retained privately for the pending production cutover.
