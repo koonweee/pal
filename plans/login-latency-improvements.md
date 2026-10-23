@@ -63,6 +63,19 @@ Exit criteria:
 - The vault becomes ready before a login request. Startup errors preserve API availability and existing on-demand recovery.
 - No new configuration, model controls or agent guidance is required.
 
+### 4. Detailed synthetic traces and recommendation
+
+Implementation tasks:
+
+- [x] Add reusable diagnostic markers for provider argument streaming, Mastra tool dispatch/completion, input processing and synthetic page readiness, with metadata-only output.
+- [x] Run all three natural-language synthetic flows and attribute time to model requests, dispatch, tools, navigation and preparing the next request.
+- [x] Propose the smallest concrete change and estimate savings from measured removable work; retain sampling limits and clean up diagnostics.
+
+Exit criteria:
+
+- Actual dev flows have correlated tool-call and browser readiness evidence. No agent behavior or tool contract changes are included in this profiling step.
+- The recommendation separates measured delays from estimated savings and preserves model-selected fields and private filling.
+
 ## Tests
 
 - Existing vault integration: concurrent initial sync, own-write visibility, hourly background refresh, cached reads after refresh failure and sanitized provider errors.
@@ -173,3 +186,11 @@ Reports render correctly in Chrome, including scenario filtering. Profiler metho
 - Backend build, type-aware lint/boundary checks and all eight focused browser/vault tests pass. The CLI fixture completes startup sync before any lookup; unconfigured startup and failed-prewarm retry are covered.
 - Dev API startup completes at 18:35:38.746 UTC; Password vault prewarmed is logged at 18:35:48.587 UTC without a login request. A subsequent private status check reports unlocked and a fresh sync timestamp; an empty-domain lookup takes 975ms. The execution desktop retains its container/start time and all dev services are healthy.
 - Requests arriving before prewarming completes wait for the remaining shared work. The earlier flow comparison remains a warm-vault measurement; no new three-flow latency comparison was needed for this startup-only change.
+
+## Detailed Trace Verification
+
+- The reusable `backend/scripts/login-latency/profile.py` harness captures provider argument streaming, actual tool execution, discovery processing and synthetic DOM readiness, restoring all runtime taps and cleaning exact-host fixtures automatically.
+- Six instrumented login flows pass across two traced runs, with 51 correlated tool executions and zero ambiguous matches. Syntax/compilation checks and Chrome rendering/filtering pass. One additional functionally successful run is excluded because a cached injector prevented fresh markers; cache eviction and trace reset are validated by the final repeat.
+- Combined medians: model request 4.361s; complete arguments to execution 0.172s; tool end to next request 0.020s. The recommendation and measured removable calls are in [Detailed login trace findings](login-latency-trace-findings.md).
+- Proposed follow-up: optional action-before-inspection on login_inspect, plus compact generation-specific refs. Neither change is implemented in this profiling milestone. Estimated action+inspection savings are 7–9s Apple, 6–8s Amazon and about 3s for the picker flow, with another hypothesized 1–2s for the six-ref OTP request after compacting refs.
+- Cleanup checks across nine fixture hosts find zero leftover credentials, actionable cards, fixture tabs, injector files or debugger endpoints. Dev remains healthy with its original execution desktop.
