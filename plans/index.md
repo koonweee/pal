@@ -14,7 +14,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Inline Secure Entry and Recovery](inline-secure-entry.md) | In Progress | Dense canonical request cards, null-safe tools and bounded automatic field recovery. |
+| [Inline Secure Entry and Recovery](inline-secure-entry.md) | Done | Dense canonical request cards, null-safe tools and bounded automatic field recovery. |
 | [Model-Selected Secure Fields and Inline UI Prototypes](model-selected-secure-fields.md) | Done | Model-assigned credential/code fields, private destination checks and interactive inline PWA mockups. |
 | [Secure Entry and Verification Codes](secure-entry-otp.md) | Done | Generic secure entry, transient OTP filling, staged credential reuse and one current preview. |
 | [External Password Vault and Browser Login](password-vault-login.md) | Done | Secure PWA collection, Bitwarden-backed filling and masked inspection; operator account acceptance is documented. |

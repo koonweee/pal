@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Done
 
 ## Goal
 
@@ -43,7 +43,7 @@ Exit criteria: direct API, recovery, retry, cancellation and metadata-only event
 
 ### 3. Dense PWA Forms
 
-Status: validated; development update pending.
+Status: validated and deployed to development.
 
 - Replace the Logins modal with inline cards using existing Pal components.
 - Show preview disclosure below the header only on active forms; clear drafts on completion, replacement or unmount and block reload while forms are active.
@@ -86,4 +86,4 @@ npm run trim
 - Twelve login/API/client-contract integration cases pass, covering fresh-vault staged reuse, direct OTP fill, canonical card reconciliation, bound previews, restart recovery, two-attempt cap, timeout, explicit retry, cancellation and Task completion.
 - Five focused frontend unit/policy tests and two desktop/mobile browser flows pass. Drafts survive reconnect/resize, replacement clears old input, previews are request-bound and active-form-only, multiple forms keep reload blocked, and private submissions never enter chat or browser storage.
 - Backend build/lint/boundaries/OpenAPI and frontend strict types/generated API/ownership/unused-code checks pass. Drizzle reports no schema drift. First-party contract version 5 is aligned across PWA and iOS headers; native iOS UI is outside this PWA scope.
-- Remaining work: commit implementation, update development backend/PWA and verify preserved execution and login data.
+- Implementation is committed as `39da12e`. Development backend migration and staged PWA update are complete and healthy. All four existing login requests, 15 previews and 727,028 image bytes are preserved; execution-container identity and start time are unchanged. The deployed parser accepts the reproduced null-role input, existing request views remain secret-free, and the staged bundle includes inline cards and recovery. The disposable test database container is removed.
