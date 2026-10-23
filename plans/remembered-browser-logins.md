@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Done
 
 ## Goal
 
@@ -48,7 +48,7 @@ Exit criteria:
 
 - Form and text preferences converge on the same stored intent; codes remain transient and do not show the checkbox.
 
-### 3. Verify and deploy to development
+### 3. Verify and deploy to development — validated
 
 Implementation tasks:
 
@@ -96,4 +96,7 @@ Login choice defaults require no configuration. Explicit overrides work. The age
 - Fixed a test-fixture race found during validation: detached fake replies now settle before database truncation/shutdown.
 - Per user direction, an open form owns its checkbox draft; text intent does not synchronize into an already-open form.
 - All 26 focused tests and relevant build, lint, type, ownership, generated API and unused-code checks pass.
-- Remaining: local commit, development migration/backend/PWA deployment and preservation/health checks.
+- Deployed implementation `4a07473` using `./scripts/dev-local rebuild` and `./scripts/dev-local pwa-up`; migration 0023 applied successfully. Development services and the Tailnet PWA health check pass.
+- The deployed production UI smoke used local fixture responses with login submissions blocked. It verified restored checkbox state, local draft preservation on resize and no mobile overflow.
+- Preserved seven requests, 25 previews and 1,237,604 preview bytes. The execution container ID and start time are unchanged. New preference/flow tables remain empty until actual use; previous saves/fills were not inferred as successful logins.
+- No remaining implementation or deployment work.
