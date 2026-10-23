@@ -15,6 +15,8 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [Browser login latency investigation](login-latency-investigation.md) | Done | Actual dev-agent timings across synthetic entry, verification, correction and account-selection flows. |
+| [Routed execution egress evaluation](routed-egress-gateway.md) | Done | Portable routed gateway, premade alternatives, restart safety, and native browser/desktop acceptance. |
+| [Squid gateway lifecycle](squid-lifecycle.md) | Done | Reliable proxy startup, child supervision, graceful shutdown, and targeted production recovery. |
 | [Exceptional login account picker](exceptional-login-picker.md) | Done | Inline saved-account choice for ambiguous matches and explicit switching; automatic remembered login reuse. |
 | [Remembered browser logins](remembered-browser-logins.md) | Done | Last successful account reuse, private Keep me signed in checkbox and conversational overrides. |
 | [Different login entry](different-login-entry.md) | Done | Explicit new-login entry with saved accounts, selected-account continuity and simpler tool semantics. |
