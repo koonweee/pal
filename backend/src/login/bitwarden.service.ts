@@ -33,6 +33,9 @@ export class BitwardenService implements OnModuleDestroy {
   private starting?: Promise<void>;
   private ready = false;
   private closing = false;
+  private syncing?: Promise<void>;
+  private synced = false;
+  private syncTimer?: ReturnType<typeof setInterval>;
   constructor(@Inject(ConfigService) private readonly config: ConfigService) {}
   get configured() {
     return [
@@ -125,11 +128,15 @@ export class BitwardenService implements OnModuleDestroy {
         );
         this.child = child;
         child.on('error', () => {
-          if (this.child === child) this.ready = false;
+          if (this.child === child) {
+            this.ready = false;
+            this.synced = false;
+          }
         });
         child.on('exit', () => {
           if (this.child === child) {
             this.ready = false;
+            this.synced = false;
             this.child = undefined;
           }
         });
@@ -157,6 +164,7 @@ export class BitwardenService implements OnModuleDestroy {
       .catch(() => {
         this.child?.kill();
         this.ready = false;
+        this.synced = false;
         throw new ApplicationError(
           'unavailable',
           'Password vault could not be unlocked',
@@ -167,10 +175,31 @@ export class BitwardenService implements OnModuleDestroy {
       });
     return this.starting;
   }
+  private sync() {
+    if (this.syncing) return this.syncing;
+    this.syncing = this.request('/sync', 'POST')
+      .then(() => {
+        this.synced = true;
+        if (!this.syncTimer && !this.closing) {
+          this.syncTimer = setInterval(() => {
+            void this.ensureReady()
+              .then(() => this.sync())
+              .catch(() => {
+                // Keep using the local vault; the next hourly refresh can retry.
+              });
+          }, 3600_000);
+          this.syncTimer.unref();
+        }
+      })
+      .finally(() => {
+        this.syncing = undefined;
+      });
+    return this.syncing;
+  }
   async matching(url: string) {
     if (new URL(url).protocol !== 'https:') return [];
     await this.ensureReady();
-    await this.request('/sync', 'POST');
+    if (!this.synced) await this.sync();
     const result = await this.request<{ data: VaultItem[] }>(
       '/list/object/items?url=' + encodeURIComponent(url),
     );
@@ -214,6 +243,7 @@ export class BitwardenService implements OnModuleDestroy {
   }
   onModuleDestroy() {
     this.closing = true;
+    if (this.syncTimer) clearInterval(this.syncTimer);
     this.child?.kill();
   }
 }

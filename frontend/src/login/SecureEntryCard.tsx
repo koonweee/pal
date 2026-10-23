@@ -73,7 +73,9 @@ export function SecureEntryCard({ requestId }: { requestId: string }) {
       ? 'Login saved'
       : current.status === 'selected'
         ? 'Account selected'
-        : 'Code filled'
+        : current.kind === 'code'
+          ? 'Code filled'
+          : 'Login filled'
     : cancelled
       ? 'Request cancelled'
       : current?.kind === 'code'

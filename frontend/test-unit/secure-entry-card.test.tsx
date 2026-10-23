@@ -234,8 +234,8 @@ test('offers saved accounts and new entry, keeps checkbox drafts local, and sele
   };
   vi.mocked(getLoginRequest).mockImplementation(async () => current);
   vi.mocked(selectLoginAccount).mockImplementation(async () => {
-    current = { ...current, status: 'selected', inspectionId: null };
-    return { id: 'request', status: 'selected' };
+    current = { ...current, status: 'filled', inspectionId: null };
+    return { id: 'request', status: 'filled' };
   });
   const { rerender } = render(view());
   expect(await screen.findByText('Choose an account')).toBeInTheDocument();
@@ -268,7 +268,7 @@ test('offers saved accounts and new entry, keeps checkbox drafts local, and sele
       keepMeSignedIn: false,
     }),
   );
-  expect(await screen.findByText('Account selected')).toBeInTheDocument();
+  expect(await screen.findByText('Login filled')).toBeInTheDocument();
   expect(screen.queryByRole('radio')).not.toBeInTheDocument();
   expect(saveLoginRequest).not.toHaveBeenCalled();
   expect(await screen.findByText('Reload safe')).toBeInTheDocument();

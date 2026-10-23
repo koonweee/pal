@@ -332,10 +332,17 @@ it('uses the supported vault routes, reconciles repeated saves, and sanitizes pr
   const items: VaultItem[] = [];
   let server: Server;
   const seen: string[] = [];
+  let failList = false;
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
   server = createServer(async (req, res) => {
     const url = new URL(req.url!, 'http://localhost');
     seen.push(url.pathname);
     let data: unknown = {};
+    if (url.pathname === '/list/object/items' && failList) {
+      res.writeHead(500);
+      res.end('SECRET_PROVIDER_ERROR');
+      return;
+    }
     if (url.pathname === '/list/object/items') {
       expect(url.searchParams.get('url')).toBe('https://login.example.test');
       data = { data: items };
@@ -401,12 +408,25 @@ it('uses the supported vault routes, reconciles repeated saves, and sanitizes pr
         'https://login.example.test',
       ),
     ).rejects.toThrow('Password vault needs configuration');
+    expect(seen.filter((path) => path === '/sync')).toHaveLength(1);
+    expect(
+      (await vault.matching('https://login.example.test'))[0].login!.password,
+    ).toBe('updated-dummy');
     items.push(items[0]);
+    // The hourly refresh can fail while cached vault reads remain available.
+    await vi.advanceTimersByTimeAsync(3600_000);
+    await vi.waitFor(() =>
+      expect(seen.filter((path) => path === '/sync')).toHaveLength(2),
+    );
+    expect(await vault.matching('https://login.example.test')).toHaveLength(2);
+    failList = true;
     await expect(vault.matching('https://login.example.test')).rejects.toThrow(
       'Password vault is unavailable',
     );
     expect(seen.filter((path) => path === '/object/item')).toHaveLength(1);
   } finally {
+    vault.onModuleDestroy();
+    vi.useRealTimers();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
@@ -447,6 +467,7 @@ if (command === 'serve') {
       let body=''; for await (const chunk of req) body += chunk;
       assert.equal(JSON.parse(body).password,'fixture-master'); locked=false; record('api-unlock');
     }
+    if (req.url === '/sync') record('api-sync');
     if (req.url.startsWith('/list/object/items')) data = {data:[]};
     res.setHeader('content-type','application/json');res.end(JSON.stringify({success:true,data}));
   });
@@ -488,6 +509,7 @@ if (command === 'serve') {
       'unlock',
       'serve',
       'api-unlock',
+      'api-sync',
     ]);
   } finally {
     vault.onModuleDestroy();

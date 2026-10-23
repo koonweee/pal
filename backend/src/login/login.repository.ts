@@ -194,7 +194,9 @@ export class LoginRepository {
     completion?: {
       kind: 'credentials' | 'code';
       status: 'saved' | 'filled' | 'selected';
-      submit: (row: LoginRequest) => Promise<string | void>;
+      submit: (
+        row: LoginRequest,
+      ) => Promise<{ accountId?: string; filled?: boolean } | void>;
       keepMeSignedIn?: boolean;
     },
   ) {
@@ -230,11 +232,15 @@ export class LoginRepository {
           'invalid_input',
           'This request is not an account picker',
         );
-      const accountId = completion ? await completion.submit(row) : undefined;
+      const result: { accountId?: string; filled?: boolean } =
+        (completion ? await completion.submit(row) : undefined) ?? {};
+      const accountId = result.accountId;
       const [updated] = await tx
         .update(loginRequests)
         .set({
-          status: completion?.status ?? 'cancelled',
+          status: result.filled
+            ? 'filled'
+            : (completion?.status ?? 'cancelled'),
           accountId: accountId ?? null,
           keepMeSignedIn: completion?.keepMeSignedIn ?? row.keepMeSignedIn,
           notifiedAt: null,

@@ -200,6 +200,16 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
       })
       .expect(201);
     outputs.push(result.body);
+    expect(result.body.status).toBe('filled');
+    expect(await page.locator('#user').inputValue()).toBe(
+      'SYNTHETIC_PRIVATE_USER',
+    );
+    await page.locator('#user').fill('');
+    await request(fixture.url)
+      .post('/login/requests/' + pending.requestId + '/save')
+      .send({ username: 'ignored', password: 'ignored', label: 'Ignored' })
+      .expect(201);
+    expect(await page.locator('#user').inputValue()).toBe('');
     // Save succeeded even though the task delivery failed; recovery only retries notification.
     await login.flushNotifications();
     deliver = true;
@@ -532,11 +542,15 @@ it('remembers verified accounts and session intent across callers and restarts w
       .post(`/login/requests/${ambiguous.requestId}/select`)
       .send({ accountId: items[0].id, keepMeSignedIn: true })
       .expect(201);
-    expect(selection.body.status).toBe('selected');
+    expect(selection.body.status).toBe('filled');
+    expect(await page.locator('input[type=password]').inputValue()).toBe(
+      'PRIVATE_PASSWORD_Personal',
+    );
+    await page.locator('input[type=password]').fill('');
     outputs.push(selection.body);
     await until(async () => {
       await original.flushNotifications();
-      return notifications.some((text) => text.includes('is selected.'));
+      return notifications.some((text) => text.includes('is filled.'));
     });
     outputs.push(notifications);
     // A duplicate selection cannot switch the account or checkbox after completion.
@@ -544,6 +558,7 @@ it('remembers verified accounts and session intent across callers and restarts w
       .post(`/login/requests/${ambiguous.requestId}/select`)
       .send({ accountId: items[1].id, keepMeSignedIn: false })
       .expect(201);
+    expect(await page.locator('input[type=password]').inputValue()).toBe('');
     expect(await repository.selection(a.id)).toMatchObject({
       accountId: items[0].id,
       keepMeSignedIn: true,
@@ -677,6 +692,19 @@ it('remembers verified accounts and session intent across callers and restarts w
     await expect(resumed.fill(d.id, fourth, items[2].id)).rejects.toMatchObject(
       { code: 'conflict' },
     );
+    const staleFields = fields(await resumed.inspect(d.id));
+    const staleEntry = await resumed.request(d.id, staleFields);
+    await page.goto('https://accounts.example.test/changed');
+    const fallback = await resumed.finish(staleEntry.requestId, {
+      username: 'PRIVATE_LOGIN_FALLBACK',
+      password: 'PRIVATE_PASSWORD_FALLBACK',
+      label: 'Fallback',
+    });
+    expect(fallback.status).toBe('saved');
+    expect(await page.locator('input[type=password]').inputValue()).toBe('');
+    expect(await repository.selection(d.id)).toMatchObject({
+      accountId: items.at(-1)!.id,
+    });
     // A pre-existing authenticated session can remember text intent without inventing an account choice.
     await page.goto('https://store.example.test/account');
     const existing = await tasks.create({

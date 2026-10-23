@@ -80,11 +80,13 @@ export class LoginService implements OnModuleDestroy {
                   : row.status === 'selected'
                     ? 'The user selected a saved account. Inspect again and use secure_fill without accountId to continue this selected flow.'
                     : row.status === 'filled'
-                      ? 'The verification code was filled directly in the browser. Check the page before continuing.'
+                      ? row.kind === 'code'
+                        ? 'The verification code was filled directly in the browser. Continue with the known submit control; inspect again if the page advanced automatically.'
+                        : `The complete username and password are stored. The selected ${Object.keys(row.fields ?? {}).join('/')} fields were filled directly in the browser. Continue with the known submit control; do not refill or inspect only to confirm filling. Inspect and use secure_fill for additional fields on later pages.`
                       : 'The request was cancelled.';
           await this.notify(
             row.taskId,
-            `Secure entry request ${row.id} for ${row.origin} is ${row.status}. ${next}${row.status === 'saved' || row.status === 'selected' ? ` Keep me signed in preference: ${row.keepMeSignedIn ? 'on' : 'off'}. Inspect website persistence options and honor this preference; do not claim it was applied unless you selected an applicable option.` : ''} This notification can be delivered more than once.`,
+            `Secure entry request ${row.id} for ${row.origin} is ${row.status}. ${next}${row.kind === 'credentials' && ['saved', 'selected', 'filled'].includes(row.status) ? ` Keep me signed in preference: ${row.keepMeSignedIn ? 'on' : 'off'}. Inspect website persistence options and honor this preference; do not claim it was applied unless you selected an applicable option.` : ''} This notification can be delivered more than once.`,
           );
           await this.repository.notified(row.id, row.status);
         } catch {
@@ -350,7 +352,18 @@ export class LoginService implements OnModuleDestroy {
         ? {
             kind: 'credentials',
             status: 'saved',
-            submit: (row) => this.vault.save(row.origin, input, row.id),
+            submit: async (row) => {
+              const accountId = await this.vault.save(
+                row.origin,
+                input,
+                row.id,
+              );
+              const filled = await this.fillRequest(row, input).then(
+                () => true,
+                () => false,
+              );
+              return { accountId, filled };
+            },
             keepMeSignedIn: input.keepMeSignedIn,
           }
         : undefined,
@@ -365,21 +378,58 @@ export class LoginService implements OnModuleDestroy {
       status: 'selected',
       keepMeSignedIn,
       submit: async (row) => {
-        if (
-          !(await this.vault.matching(row.origin)).some(
-            (item) => item.id === accountId,
-          )
-        )
+        const account = (await this.vault.matching(row.origin)).find(
+          (item) => item.id === accountId,
+        );
+        if (!account)
           throw new ApplicationError(
             'invalid_input',
             'Account does not match this website',
           );
-        return accountId;
+        try {
+          const filled = await this.fillRequest(
+            row,
+            account.login ?? {},
+            accountId,
+          ).then(
+            () => true,
+            () => false,
+          );
+          return { accountId, filled };
+        } finally {
+          if (account.login) {
+            account.login.username = undefined;
+            account.login.password = undefined;
+          }
+        }
       },
     });
     this.events.publish({ event: 'login.updated', taskId: row.taskId });
     void this.flushNotifications();
     return { id: row.id, status: row.status };
+  }
+  private async fillRequest(
+    row: LoginRequest,
+    values: Parameters<LoginBrowser['fill']>[3],
+    accountId?: string,
+  ) {
+    if (!row.fields) throw new StaleSecureFieldsError();
+    const owner = loginOwner(row.taskId, row.workerId ?? undefined);
+    const page = await this.browser
+      .selectedPage(row.taskId, row.workerId ?? undefined)
+      .catch(() => {
+        throw new StaleSecureFieldsError();
+      });
+    const target = await this.inspector.select(page, owner, row.fields);
+    if (target.origin !== row.origin) throw new StaleSecureFieldsError();
+    if (
+      accountId &&
+      !(await this.vault.matching(target.url)).some(
+        (item) => item.id === accountId,
+      )
+    )
+      throw new StaleSecureFieldsError();
+    await this.inspector.fill(page, owner, row.fields, values);
   }
   async submitCode(id: string, code: string) {
     try {
@@ -389,15 +439,7 @@ export class LoginService implements OnModuleDestroy {
         submit: async (row) => {
           if (!row.fields || !('code' in row.fields))
             throw new StaleSecureFieldsError();
-          const owner = loginOwner(row.taskId, row.workerId ?? undefined);
-          const page = await this.browser
-            .selectedPage(row.taskId, row.workerId ?? undefined)
-            .catch(() => {
-              throw new StaleSecureFieldsError();
-            });
-          const target = await this.inspector.select(page, owner, row.fields);
-          if (target.origin !== row.origin) throw new StaleSecureFieldsError();
-          await this.inspector.fill(page, owner, row.fields, { code });
+          await this.fillRequest(row, { code });
         },
       });
       this.events.publish({ event: 'login.updated', taskId: row.taskId });
