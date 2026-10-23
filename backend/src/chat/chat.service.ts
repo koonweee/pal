@@ -72,6 +72,10 @@ export class ChatService implements ChatViewPort {
       throw new ApplicationError('not_found', 'Task not found');
     const taskId = input.taskId ?? null;
     const phase = input.role === 'assistant' ? (input.phase ?? null) : null;
+    const secureEntryRequestId =
+      input.role === 'assistant' && taskId
+        ? input.metadata?.secureEntryRequestId
+        : undefined;
     const resolved =
       input.role === 'assistant' && !taskId
         ? await this.destinations.resolve(
@@ -119,13 +123,10 @@ export class ChatService implements ChatViewPort {
           ...(input.metadata?.timezone
             ? { timezone: input.metadata.timezone }
             : {}),
-          ...(input.role === 'assistant' &&
-          taskId &&
-          input.metadata?.secureEntryRequestId
-            ? { secureEntryRequestId: input.metadata.secureEntryRequestId }
-            : {}),
+          ...(secureEntryRequestId ? { secureEntryRequestId } : {}),
         },
         taskId,
+        mainVisible: !!secureEntryRequestId,
         phase,
         actions: input.actions ?? null,
       },

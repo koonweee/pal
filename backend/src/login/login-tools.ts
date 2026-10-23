@@ -97,7 +97,7 @@ export function loginTools(service: LoginService) {
     secure_entry_request: createTool({
       id: 'secure_entry_request',
       description:
-        'Show an inline secure-entry card in the owning Task conversation. Login entry collects the complete username/password once and saves it; use secure_fill for later stages. Verification entry collects only a code and fills it immediately without saving. Pass either username/password input refs or an ordered code-ref array from login_inspect. The selected roles determine the PWA form. If credentials_available is returned, use secure_fill. Tell the user to use the inline form. Yield while awaiting input; workers report to their parent Task. The owning Task receives completion notification.',
+        'Show one secure-entry card in Main and the owning Task conversation. Login entry collects the complete username/password once and saves it; use secure_fill for later stages. Verification entry collects only a code and fills it immediately without saving. Pass either username/password input refs or an ordered code-ref array from login_inspect. The selected roles determine the PWA form. If credentials_available is returned, use secure_fill. Tell the user to use the inline form. Yield while awaiting input; workers report to their parent Task. The owning Task receives completion notification.',
       inputSchema: jsonSchema<{ fields: FieldInput }>({
         type: 'object',
         properties: { fields: fieldsSchema },

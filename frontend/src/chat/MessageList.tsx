@@ -25,11 +25,15 @@ const MessageRow = memo(
     onNavigate,
     onReply,
     highlighted,
+    taskTitle,
+    onOpenTask,
   }: {
     view: MessageView;
     onNavigate(id: string): void;
     onReply(message: MessageView['message']): void;
     highlighted: boolean;
+    taskTitle?: string;
+    onOpenTask?(id: string): void;
   }) {
     const { settings } = useInstanceSettings();
     const { message, persisted, receiptSlot, showQuote, read } = view;
@@ -65,7 +69,7 @@ const MessageRow = memo(
           </span>
         )}
         <article
-          className={`message ${message.role}${message.metadata.secureEntryRequestId ? ' secure-entry-message' : ''}${receiptSlot ? ' message-receipt-slot' : ''}${highlighted ? ' quote-highlight' : ''}`}
+          className={`message ${message.role}${persisted && message.metadata.secureEntryRequestId ? ' secure-entry-message' : ''}${receiptSlot ? ' message-receipt-slot' : ''}${highlighted ? ' quote-highlight' : ''}`}
           data-message-id={message.id}
           aria-label={message.role === 'user' ? 'You' : settings.agentName}
         >
@@ -94,11 +98,20 @@ const MessageRow = memo(
                 <span>{message.replyTo.textPreview || 'Message'}</span>
               </UnstyledButton>
             )}
-            {message.role === 'assistant' &&
+            {persisted &&
+            message.role === 'assistant' &&
             message.metadata.secureEntryRequestId ? (
               <SecureEntryCard
                 key={message.metadata.secureEntryRequestId}
                 requestId={message.metadata.secureEntryRequestId}
+                task={
+                  message.taskId && onOpenTask
+                    ? {
+                        title: taskTitle ?? 'Open task',
+                        onOpen: () => onOpenTask(message.taskId!),
+                      }
+                    : undefined
+                }
               />
             ) : message.role === 'assistant' ? (
               <AssistantMarkdown text={message.text} />
@@ -177,7 +190,9 @@ const MessageRow = memo(
     previous.view.read === next.view.read &&
     previous.onNavigate === next.onNavigate &&
     previous.onReply === next.onReply &&
-    previous.highlighted === next.highlighted,
+    previous.highlighted === next.highlighted &&
+    previous.taskTitle === next.taskTitle &&
+    previous.onOpenTask === next.onOpenTask,
 );
 
 export function MessageList({
@@ -188,6 +203,8 @@ export function MessageList({
   scrollMargin,
   highlightedMessage,
   showFirstDateSeparator,
+  taskRows,
+  onOpenTask,
 }: {
   messages: MessageView[];
   onNavigate(id: string): void;
@@ -196,6 +213,8 @@ export function MessageList({
   scrollMargin: number;
   highlightedMessage?: string;
   showFirstDateSeparator: boolean;
+  taskRows: ReadonlyMap<string, { title: string }>;
+  onOpenTask?(id: string): void;
 }) {
   const now = new Date();
   return (
@@ -234,6 +253,12 @@ export function MessageList({
             )}
             <MessageRow
               view={view}
+              taskTitle={
+                view.message.taskId
+                  ? taskRows.get(view.message.taskId)?.title
+                  : undefined
+              }
+              onOpenTask={onOpenTask}
               onNavigate={onNavigate}
               onReply={onReply}
               highlighted={highlightedMessage === view.message.id}

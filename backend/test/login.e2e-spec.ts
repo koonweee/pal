@@ -13,6 +13,7 @@ import { EventsService } from '../dist/events/events.service.js';
 import { TasksService } from '../dist/tasks/tasks.service.js';
 import request from 'supertest';
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { startTestApp, until } from './helpers.js';
 import { LoginRepository } from '../dist/login/login.repository.js';
 import { BitwardenService } from '../dist/login/bitwarden.service.js';
@@ -149,6 +150,39 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
     if (!('requestId' in pending))
       throw new Error('Expected secure entry request');
     outputs.push(pending);
+    const chat = fixture.app.get(ChatService);
+    const card = (await chat.history({ taskId: task.id })).messages.find(
+      (m) => m.metadata.secureEntryRequestId === pending.requestId,
+    )!;
+    expect(card).toMatchObject({ taskId: task.id, mainVisible: true });
+    expect((await chat.history({})).messages).toContainEqual(card);
+    const ordinary = await chat.publish({
+      role: 'assistant',
+      taskId: task.id,
+      text: 'Private task progress',
+    });
+    expect((await chat.history({})).messages.map((m) => m.id)).not.toContain(
+      ordinary.id,
+    );
+    // Existing cards are promoted without copying them or exposing ordinary Task messages.
+    await fixture.database.pool.query(
+      'update messages set main_visible=false where id=$1',
+      [card.id],
+    );
+    await fixture.database.pool.query(
+      await readFile('migrations/0022_main_secure_entry.sql', 'utf8'),
+    );
+    expect(
+      (await chat.history({})).messages.find((m) => m.id === card.id),
+    ).toMatchObject({
+      taskId: task.id,
+      mainVisible: true,
+      version: card.version + 1,
+    });
+    expect((await chat.history({})).messages.map((m) => m.id)).not.toContain(
+      ordinary.id,
+    );
+
     expect((await fixture.app.get(TasksService).details(task.id)).status).toBe(
       'needs-input',
     );
@@ -198,9 +232,16 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
     expect(await page.locator('#pass').inputValue()).toBe(
       'SYNTHETIC_PRIVATE_PASSWORD',
     );
-    // Once tried, replacement remains available for a rejected saved password.
+    // The model sees rejection, inspects fresh fields and can request corrected credentials.
+    await page.locator('form').evaluate((form) => {
+      const error = document.createElement('p');
+      error.textContent =
+        'Check the account information you entered and try again.';
+      form.append(error);
+    });
+    const rejected = await login.inspect(task.id);
     const replacement = await login.request(task.id, {
-      password: passwordStage.inputs[0].ref,
+      password: rejected.inputs[0].ref,
     });
     expect(replacement.status).toBe('awaiting_user');
     await login.finish(replacement.requestId!);

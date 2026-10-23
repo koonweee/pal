@@ -44,12 +44,16 @@ for (const width of [900, 390]) {
     const card = (id: string): Message => ({
       ...backend.message('Enter securely.'),
       taskId: task.id,
+      mainVisible: true,
       phase: 'commentary',
       metadata: { secureEntryRequestId: id },
     });
-    backend.rows.push(card('login-root'));
+    const loginCard = card('login-root');
+    backend.rows.push(loginCard);
+    backend.holdNextHistory = true;
     let credentialSubmissions = 0,
-      codeSubmissions = 0;
+      codeSubmissions = 0,
+      requestLoads = 0;
     const update = () =>
       backend.emit('login.updated', {
         event: 'login.updated',
@@ -64,7 +68,10 @@ for (const width of [900, 390]) {
         });
       const match = path.match(/\/requests\/([^/]+)(?:\/([^/]+))?$/)!;
       const [id, action] = match.slice(1);
-      if (!action) return route.fulfill({ json: rows.get(id!) });
+      if (!action) {
+        requestLoads++;
+        return route.fulfill({ json: rows.get(id!) });
+      }
       const root = [...rows.keys()].find((key) => rows.get(key)!.id === id)!;
       const current = rows.get(root)!;
       if (action === 'save') {
@@ -92,12 +99,27 @@ for (const width of [900, 390]) {
       });
     });
     try {
+      await page.addInitScript((message) => {
+        localStorage.setItem(
+          'pal-main-history-v1',
+          JSON.stringify({
+            schema: 1,
+            savedAt: new Date().toISOString(),
+            messages: [message],
+          }),
+        );
+      }, loginCard);
       await page.goto(baseURL!);
-      await page.locator('#thread-open').click();
-      await page
-        .locator('#task-list')
-        .getByRole('button', { name: /Store sign-in/ })
-        .click();
+      await expect(
+        page.getByText('Enter securely.', { exact: true }),
+      ).toBeVisible();
+      await expect.poll(() => Boolean(backend.releaseHistory)).toBe(true);
+      expect(requestLoads).toBe(0);
+      await expect(page.getByLabel(/^Password/)).toHaveCount(0);
+      backend.releaseHistory!();
+      await expect(
+        page.getByRole('button', { name: 'Open task: Store sign-in' }),
+      ).toBeVisible();
       const password = page.getByLabel(/^Password/);
       await expect(password).toBeVisible();
       await expect(page.getByRole('button', { name: /Logins/ })).toHaveCount(0);
@@ -129,6 +151,23 @@ for (const width of [900, 390]) {
       await expect(
         page.getByRole('button', { name: /browser preview/ }),
       ).toHaveCount(0);
+      // The Task shows the same canonical card and status after completion in Main.
+      await page
+        .getByRole('button', { name: 'Open task: Store sign-in' })
+        .click();
+      await expect(
+        page
+          .locator(`[data-message-id="${loginCard.id}"]`)
+          .getByText('Login saved', { exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole('button', { name: 'Open task: Store sign-in' }),
+      ).toHaveCount(0);
+      await page.locator('#thread-open').click();
+      await page.locator('#main-chat').click();
+      await expect(
+        page.getByText('Login saved', { exact: true }),
+      ).toBeVisible();
       rows.set('code-root', {
         ...rows.get('login-root')!,
         id: 'code-root',
@@ -154,8 +193,18 @@ for (const width of [900, 390]) {
       });
       update();
       await expect(code).toHaveValue('');
+      await page
+        .getByRole('button', { name: 'Open task: Store sign-in' })
+        .last()
+        .click();
+      await expect(code).toHaveValue('');
       await code.fill('731946');
       await page.getByRole('button', { name: 'Fill code' }).click();
+      await expect(
+        page.getByText('Code filled', { exact: true }),
+      ).toBeVisible();
+      await page.locator('#thread-open').click();
+      await page.locator('#main-chat').click();
       await expect(
         page.getByText('Code filled', { exact: true }),
       ).toBeVisible();

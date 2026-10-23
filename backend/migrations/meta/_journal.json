@@ -155,6 +155,13 @@
       "when": 1792736454140,
       "tag": "0021_inline_secure_entry",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792738388916,
+      "tag": "0022_main_secure_entry",
+      "breakpoints": true
     }
   ]
 }
