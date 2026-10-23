@@ -92,4 +92,4 @@ PLAYWRIGHT_CHANNEL=chrome npm test -- test/secure-entry.spec.ts
 
 Main and Task use identical secure-entry cards without Task navigation inside the card. Cards retain their compact preferred width and inherit the standard message maximum width. Removed the unused attribution props and styles. Responsive coverage compares rendered card bounds with ordinary messages in both conversations, including a narrow desktop pane. The card unit test waits for asynchronous reload-safety cleanup before asserting the released state.
 
-Validated with frontend type/ownership/unused-code checks, three card unit tests and two responsive browser flows. Development PWA update pending.
+Validated with frontend type/ownership/unused-code checks, three card unit tests and two responsive browser flows. Deployed `8ac1e1d` with `./scripts/dev-local pwa-up`; a mobile smoke check confirms identical markup for three cards in Main and Task, no Task links and no horizontal overflow.
