@@ -13,6 +13,19 @@ export class LoginService implements OnModuleDestroy {
   private notify?: (taskId: string, text: string) => Promise<void>;
   private timer?: ReturnType<typeof setInterval>;
   private notifying = false;
+  // Remembers which fields the selected account has actually been tried on.
+  // This also retains the account choice across staged forms, without secrets.
+  private readonly attempts = new Map<
+    string,
+    { accountId: string; fields: Set<string>; at: number }
+  >();
+  private attempt(owner: string, origin: string) {
+    const key = owner + ':' + origin;
+    const attempt = this.attempts.get(key);
+    if (attempt && Date.now() - attempt.at < 10 * 60_000) return attempt;
+    this.attempts.delete(key);
+    return undefined;
+  }
   constructor(
     @Inject(BrowserService) private readonly browser: BrowserService,
     @Inject(BitwardenService) private readonly vault: BitwardenService,
@@ -37,11 +50,13 @@ export class LoginService implements OnModuleDestroy {
     this.notifying = true;
     try {
       await this.repository.cleanup();
+      for (const [key, value] of this.attempts)
+        if (Date.now() - value.at >= 10 * 60_000) this.attempts.delete(key);
       for (const row of await this.repository.notifications()) {
         try {
           await this.notify(
             row.taskId,
-            `Login request ${row.id} for ${row.origin} was ${row.status}. Inspect the current page again before filling. This notification can be delivered more than once.`,
+            `Secure entry request ${row.id} for ${row.origin} was ${row.status}. ${row.status === 'saved' ? 'The complete username and password are stored. Inspect again and use secure_fill with the saved account for subsequent login stages.' : row.status === 'filled' ? 'The verification code was filled directly in the browser. Check the page before continuing.' : 'No input was submitted.'} This notification can be delivered more than once.`,
           );
           await this.repository.notified(row.id);
         } catch {
@@ -69,9 +84,14 @@ export class LoginService implements OnModuleDestroy {
       let vaultStatus = this.vault.configured ? 'ready' : 'not_configured';
       if (this.vault.configured) {
         try {
-          for (const target of result.targets)
+          for (const target of result.targets.filter(
+            (t) => !t.fields.includes('code'),
+          ))
             for (const item of await this.vault.matching(
-              this.inspector.url(this.owner(taskId, workerId), target.loginRef),
+              this.inspector.url(
+                this.owner(taskId, workerId),
+                target.targetRef,
+              ),
             ))
               accounts.set(item.id, {
                 id: item.id,
@@ -105,62 +125,132 @@ export class LoginService implements OnModuleDestroy {
       );
     }
   }
-  async request(taskId: string, loginRef: string, workerId?: string) {
+  async request(taskId: string, targetRef: string, workerId?: string) {
     const target = this.inspector.target(
       this.owner(taskId, workerId),
-      loginRef,
+      targetRef,
     );
     await this.inspector.assertCurrent(
       await this.browser.selectedPage(taskId, workerId),
       this.owner(taskId, workerId),
-      loginRef,
+      targetRef,
     );
-    const row = await this.repository.request(taskId, target.origin);
+    const kind = target.fields.includes('code') ? 'code' : 'credentials';
+    if (kind === 'credentials' && this.vault.configured) {
+      const accounts = await this.vault.matching(
+        this.inspector.url(this.owner(taskId, workerId), targetRef),
+      );
+      const complete = accounts.filter((account) =>
+        target.fields.every(
+          (field) => !!account.login?.[field as 'username' | 'password'],
+        ),
+      );
+      const tried = this.attempt(this.owner(taskId, workerId), target.origin);
+      if (
+        complete.length &&
+        !(
+          tried &&
+          complete.some((account) => account.id === tried.accountId) &&
+          target.fields.every((field) => tried.fields.has(field))
+        )
+      ) {
+        return {
+          status: 'credentials_available' as const,
+          accounts: complete.map((account) => ({
+            id: account.id,
+            label: account.name,
+          })),
+          message:
+            'The complete login is already stored. Use secure_fill for this stage; no new entry is needed.',
+        };
+      }
+    }
+    const row = await this.repository.request(
+      taskId,
+      target.origin,
+      kind,
+      kind === 'code' ? targetRef : undefined,
+      workerId,
+    );
     await this.tasks.update(taskId, { status: 'needs-input' });
     this.events.publish({ event: 'login.updated', taskId });
-    return { status: 'awaiting_user', requestId: row.id, origin: row.origin };
+    return {
+      status: 'awaiting_user' as const,
+      requestId: row.id,
+      origin: row.origin,
+      kind,
+    };
   }
+
   async fill(
     taskId: string,
-    loginRef: string,
+    targetRef: string,
     accountId?: string,
     workerId?: string,
   ) {
     const target = this.inspector.target(
       this.owner(taskId, workerId),
-      loginRef,
+      targetRef,
     );
     const page = await this.browser.selectedPage(taskId, workerId);
     await this.inspector.assertCurrent(
       page,
       this.owner(taskId, workerId),
-      loginRef,
+      targetRef,
     );
+    if (target.fields.includes('code'))
+      return {
+        status: 'input_required' as const,
+        message:
+          'Request secure PWA verification-code entry with secure_entry_request.',
+      };
     const matches = await this.vault.matching(
-      this.inspector.url(this.owner(taskId, workerId), target.loginRef),
+      this.inspector.url(this.owner(taskId, workerId), target.targetRef),
     );
+    const preferredId =
+      accountId ??
+      this.attempt(this.owner(taskId, workerId), target.origin)?.accountId;
     const account = accountId
       ? matches.find((item) => item.id === accountId)
-      : matches.length === 1
-        ? matches[0]
-        : undefined;
+      : preferredId && matches.some((item) => item.id === preferredId)
+        ? matches.find((item) => item.id === preferredId)
+        : matches.length === 1
+          ? matches[0]
+          : undefined;
     if (!account)
       throw new ApplicationError(
         'conflict',
         'Select a matching account, or request credentials',
       );
-    if (target.fields.some((field) => !account.login?.[field]))
+    if (
+      target.fields.some(
+        (field) => !account.login?.[field as 'username' | 'password'],
+      )
+    )
       throw new ApplicationError(
         'conflict',
         'Matching account is missing required login fields; request credentials',
       );
     try {
-      return await this.inspector.fill(
+      const result = await this.inspector.fill(
         page,
         this.owner(taskId, workerId),
-        loginRef,
+        targetRef,
         account.login!,
       );
+      const previous = this.attempt(
+        this.owner(taskId, workerId),
+        target.origin,
+      );
+      this.attempts.set(this.owner(taskId, workerId) + ':' + target.origin, {
+        accountId: account.id,
+        fields: new Set([
+          ...(previous?.accountId === account.id ? previous.fields : []),
+          ...target.fields,
+        ]),
+        at: Date.now(),
+      });
+      return result;
     } finally {
       if (account.login) {
         account.login.password = undefined;
@@ -174,7 +264,9 @@ export class LoginService implements OnModuleDestroy {
       snapshot.requests.map(async (row) => ({
         ...row,
         accounts:
-          row.status === 'pending' && this.vault.configured
+          row.status === 'pending' &&
+          row.kind === 'credentials' &&
+          this.vault.configured
             ? await this.accounts(row.origin).catch(() => [])
             : [],
       })),
@@ -191,12 +283,56 @@ export class LoginService implements OnModuleDestroy {
     return this.repository.preview(id);
   }
   async finish(id: string, input?: CredentialInput) {
-    const row = await this.repository.finish(id, input, (origin, input, id) =>
-      this.vault.save(origin, input, id),
+    const row = await this.repository.finish(
+      id,
+      input ? 'credentials' : undefined,
+      input ? (row) => this.vault.save(row.origin, input, row.id) : undefined,
     );
+    if (input && row.status === 'saved' && row.accountId) {
+      this.attempts.set(
+        this.owner(row.taskId, row.workerId ?? undefined) + ':' + row.origin,
+        {
+          accountId: row.accountId,
+          fields: new Set(),
+          at: Date.now(),
+        },
+      );
+    }
     this.events.publish({ event: 'login.updated', taskId: row.taskId });
     void this.flushNotifications();
     return { id: row.id, status: row.status };
+  }
+  async submitCode(id: string, code: string) {
+    try {
+      const row = await this.repository.finish(id, 'code', async (row) => {
+        if (!row.targetRef)
+          throw new ApplicationError(
+            'conflict',
+            'Verification target expired; inspect again',
+          );
+        const owner = this.owner(row.taskId, row.workerId ?? undefined);
+        const target = this.inspector.target(owner, row.targetRef);
+        if (!target.fields.includes('code') || target.origin !== row.origin)
+          throw new ApplicationError(
+            'conflict',
+            'Verification target changed; inspect again',
+          );
+        await this.inspector.fill(
+          await this.browser.selectedPage(
+            row.taskId,
+            row.workerId ?? undefined,
+          ),
+          owner,
+          row.targetRef,
+          { code },
+        );
+      });
+      this.events.publish({ event: 'login.updated', taskId: row.taskId });
+      void this.flushNotifications();
+      return { id: row.id, status: row.status };
+    } finally {
+      code = '';
+    }
   }
   onModuleDestroy() {
     if (this.timer) clearInterval(this.timer);

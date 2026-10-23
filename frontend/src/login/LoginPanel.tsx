@@ -15,6 +15,7 @@ import {
   getLoginSnapshot,
   loginPreviewUrl,
   saveLoginRequest,
+  submitLoginCode,
   type LoginSnapshot,
 } from '../api/client';
 import { useReloadSafety } from '../pwa/ReloadSafetyProvider';
@@ -72,20 +73,22 @@ export function LoginPanel({
               <Button onClick={() => setRefresh((n) => n + 1)}>Retry</Button>
             </Alert>
           )}
-          {snapshot && !snapshot.configured && (
-            <Alert color="yellow">
-              Bitwarden needs setup before credentials can be saved or filled.
-            </Alert>
-          )}
+          {snapshot &&
+            !snapshot.configured &&
+            pending.some((request) => request.kind === 'credentials') && (
+              <Alert color="yellow">
+                Bitwarden needs setup before credentials can be saved or filled.
+              </Alert>
+            )}
           {opened && pending[0] && (
-            <CredentialForm
+            <SecureEntryForm
               key={pending[0].id}
               request={pending[0]}
               configured={snapshot?.configured ?? false}
               onSaved={() => setRefresh((n) => n + 1)}
             />
           )}
-          {snapshot?.inspections.map((inspection) => (
+          {snapshot?.inspections.slice(0, 1).map((inspection) => (
             <Stack key={inspection.id} gap="xs">
               <Text fw={600}>{inspection.origin}</Text>
               <img
@@ -104,7 +107,7 @@ export function LoginPanel({
   );
 }
 
-function CredentialForm({
+function SecureEntryForm({
   request,
   configured,
   onSaved,
@@ -113,6 +116,8 @@ function CredentialForm({
   configured: boolean;
   onSaved(): void;
 }) {
+  const isCode = request.kind === 'code';
+  const [code, setCode] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [label, setLabel] = useState('Personal');
@@ -129,6 +134,7 @@ function CredentialForm({
     setError('');
     try {
       if (cancel) await cancelLoginRequest(request.id);
+      else if (isCode) await submitLoginCode(request.id, code);
       else
         await saveLoginRequest(request.id, {
           username,
@@ -136,6 +142,7 @@ function CredentialForm({
           label,
           ...(accountId ? { accountId } : {}),
         });
+      setCode('');
       setUsername('');
       setPassword('');
       onSaved();
@@ -143,7 +150,9 @@ function CredentialForm({
       setError(
         cancel
           ? 'Could not cancel the request.'
-          : 'Could not save credentials. Check vault setup and try again.',
+          : isCode
+            ? 'Could not fill the code. Check it or ask Pal to inspect the page again.'
+            : 'Could not save credentials. Check vault setup and try again.',
       );
     } finally {
       setBusy(false);
@@ -158,47 +167,68 @@ function CredentialForm({
     >
       <Stack>
         <Text fw={600}>{request.origin}</Text>
-        {!!request.accounts.length && (
-          <Select
-            label="Save to"
-            value={accountId ?? 'new'}
-            onChange={(value) => setAccountId(value === 'new' ? null : value)}
-            data={[
-              { value: 'new', label: 'New account' },
-              ...request.accounts.map((account) => ({
-                value: account.id,
-                label: account.label,
-              })),
-            ]}
+        {isCode ? (
+          <TextInput
+            label="Verification code"
+            value={code}
+            onChange={(event) => setCode(event.currentTarget.value)}
+            autoComplete="one-time-code"
+            autoCapitalize="off"
+            spellCheck={false}
+            required
+            maxLength={64}
           />
+        ) : (
+          <>
+            {!!request.accounts.length && (
+              <Select
+                label="Save to"
+                value={accountId ?? 'new'}
+                onChange={(value) =>
+                  setAccountId(value === 'new' ? null : value)
+                }
+                data={[
+                  { value: 'new', label: 'New account' },
+                  ...request.accounts.map((account) => ({
+                    value: account.id,
+                    label: account.label,
+                  })),
+                ]}
+              />
+            )}
+            <TextInput
+              label="Account label"
+              value={label}
+              onChange={(event) => setLabel(event.currentTarget.value)}
+              required
+              maxLength={80}
+            />
+            <TextInput
+              label="Username"
+              autoComplete="off"
+              value={username}
+              onChange={(event) => setUsername(event.currentTarget.value)}
+              required
+              maxLength={1024}
+            />
+            <PasswordInput
+              label="Password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(event) => setPassword(event.currentTarget.value)}
+              required
+              maxLength={4096}
+            />
+          </>
         )}
-        <TextInput
-          label="Account label"
-          value={label}
-          onChange={(event) => setLabel(event.currentTarget.value)}
-          required
-          maxLength={80}
-        />
-        <TextInput
-          label="Username"
-          autoComplete="off"
-          value={username}
-          onChange={(event) => setUsername(event.currentTarget.value)}
-          required
-          maxLength={1024}
-        />
-        <PasswordInput
-          label="Password"
-          autoComplete="new-password"
-          value={password}
-          onChange={(event) => setPassword(event.currentTarget.value)}
-          required
-          maxLength={4096}
-        />
         {error && <Alert color="red">{error}</Alert>}
         <Group>
-          <Button type="submit" loading={busy} disabled={!configured}>
-            Save
+          <Button
+            type="submit"
+            loading={busy}
+            disabled={!isCode && !configured}
+          >
+            {isCode ? 'Fill code' : 'Save'}
           </Button>
           <Button
             variant="subtle"

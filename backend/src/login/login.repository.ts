@@ -1,21 +1,26 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, lt, gt, ne, isNull } from 'drizzle-orm';
+import { and, desc, eq, lt, gt, ne, isNull, or } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service.js';
 import { loginInspections, loginRequests } from '../database/schema.js';
 import { ApplicationError } from '../application/contracts/errors.js';
 import type { LoginTarget } from './login-browser.js';
-import type { CredentialInput } from './bitwarden.service.js';
 
 @Injectable()
 export class LoginRepository {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
   ) {}
-  async request(taskId: string, origin: string) {
+  async request(
+    taskId: string,
+    origin: string,
+    kind: 'credentials' | 'code' = 'credentials',
+    targetRef?: string,
+    workerId?: string,
+  ): Promise<typeof loginRequests.$inferSelect> {
     await this.cleanup();
     const [created] = await this.database.db
       .insert(loginRequests)
-      .values({ taskId, origin })
+      .values({ taskId, origin, kind, targetRef, workerId })
       .onConflictDoNothing()
       .returning();
     if (created) return created;
@@ -27,8 +32,23 @@ export class LoginRepository {
           eq(loginRequests.taskId, taskId),
           eq(loginRequests.origin, origin),
           eq(loginRequests.status, 'pending'),
+          eq(loginRequests.kind, kind),
         ),
       );
+    // A changed target gets a new request ID so an in-progress user draft
+    // cannot silently move to another verification form.
+    if (kind === 'code' && existing.targetRef !== targetRef) {
+      await this.database.db
+        .update(loginRequests)
+        .set({ status: 'cancelled', notifiedAt: new Date() })
+        .where(
+          and(
+            eq(loginRequests.id, existing.id),
+            eq(loginRequests.status, 'pending'),
+          ),
+        );
+      return this.request(taskId, origin, kind, targetRef, workerId);
+    }
     return existing;
   }
   async inspection(
@@ -51,6 +71,7 @@ export class LoginRepository {
         id: loginRequests.id,
         origin: loginRequests.origin,
         status: loginRequests.status,
+        kind: loginRequests.kind,
       })
       .from(loginRequests)
       .where(eq(loginRequests.taskId, taskId))
@@ -70,7 +91,7 @@ export class LoginRepository {
         ),
       )
       .orderBy(desc(loginInspections.createdAt))
-      .limit(3);
+      .limit(1);
     return { requests, inspections };
   }
   async preview(id: string) {
@@ -84,12 +105,8 @@ export class LoginRepository {
   }
   async finish(
     id: string,
-    input: CredentialInput | undefined,
-    save: (
-      origin: string,
-      input: CredentialInput,
-      id: string,
-    ) => Promise<string>,
+    kind?: 'credentials' | 'code',
+    submit?: (row: typeof loginRequests.$inferSelect) => Promise<string | void>,
   ) {
     return this.database.transaction(async (tx) => {
       const [row] = await tx
@@ -98,14 +115,33 @@ export class LoginRepository {
         .where(eq(loginRequests.id, id))
         .for('update');
       if (!row)
-        throw new ApplicationError('not_found', 'Login request not found');
+        throw new ApplicationError(
+          'not_found',
+          'Secure entry request not found',
+        );
+      if (kind && row.kind !== kind)
+        throw new ApplicationError(
+          'conflict',
+          'Secure entry request has a different input type',
+        );
       if (row.status !== 'pending') return row;
-      if (input && Date.now() - row.createdAt.getTime() > 24 * 3600_000)
-        throw new ApplicationError('conflict', 'Login request expired');
-      const accountId = input ? await save(row.origin, input, row.id) : null;
+      const lifetime = row.kind === 'code' ? 10 * 60_000 : 24 * 3600_000;
+      if (submit && Date.now() - row.createdAt.getTime() > lifetime)
+        throw new ApplicationError(
+          'conflict',
+          'Secure entry request expired; inspect again',
+        );
+      const accountId = submit ? await submit(row) : undefined;
       const [updated] = await tx
         .update(loginRequests)
-        .set({ status: input ? 'saved' : 'cancelled', accountId })
+        .set({
+          status: submit
+            ? row.kind === 'code'
+              ? 'filled'
+              : 'saved'
+            : 'cancelled',
+          accountId: accountId ?? null,
+        })
         .where(eq(loginRequests.id, id))
         .returning();
       return updated;
@@ -134,7 +170,13 @@ export class LoginRepository {
       .where(
         and(
           eq(loginRequests.status, 'pending'),
-          lt(loginRequests.createdAt, cutoff),
+          or(
+            lt(loginRequests.createdAt, cutoff),
+            and(
+              eq(loginRequests.kind, 'code'),
+              lt(loginRequests.createdAt, new Date(Date.now() - 10 * 60_000)),
+            ),
+          ),
         ),
       );
   }

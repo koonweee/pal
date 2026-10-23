@@ -134,6 +134,13 @@
       "when": 1792726404378,
       "tag": "0018_mighty_vulture",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792731871356,
+      "tag": "0019_secure_entry",
+      "breakpoints": true
     }
   ]
 }

@@ -424,6 +424,15 @@ export function saveLoginRequest(
     }),
   );
 }
+export function submitLoginCode(id: string, code: string) {
+  return unwrap(
+    client.POST('/login/requests/{id}/code', {
+      params: { path: { id } },
+      body: { code },
+      signal: requestSignal(),
+    }),
+  );
+}
 export function cancelLoginRequest(id: string) {
   return unwrap(
     client.POST('/login/requests/{id}/cancel', {

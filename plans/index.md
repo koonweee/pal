@@ -14,6 +14,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Secure Entry and Verification Codes](secure-entry-otp.md) | Done | Generic secure entry, transient OTP filling, staged credential reuse and one current preview. |
 | [External Password Vault and Browser Login](password-vault-login.md) | Done | Secure PWA collection, Bitwarden-backed filling and masked inspection; operator account acceptance is documented. |
 | [Agent Service and Persistent Execution Container](agent-service-execution-split.md) | Done | Persistent execution split, dev/production migration, and compatibility cleanup verified. |
 | [PWA Cold-Start Cache](pwa-cold-start-cache.md) | Done | Restore cached appearance and a bounded display-only Main snapshot before authoritative network synchronization. |

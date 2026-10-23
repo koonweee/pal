@@ -388,6 +388,7 @@
           "status": {
             "enum": [
               "saved",
+              "filled",
               "cancelled"
             ],
             "type": "string"
@@ -432,6 +433,13 @@
           "id": {
             "type": "string"
           },
+          "kind": {
+            "enum": [
+              "credentials",
+              "code"
+            ],
+            "type": "string"
+          },
           "origin": {
             "type": "string"
           },
@@ -439,6 +447,7 @@
             "enum": [
               "pending",
               "saved",
+              "filled",
               "cancelled"
             ],
             "type": "string"
@@ -447,6 +456,7 @@
         "required": [
           "id",
           "origin",
+          "kind",
           "status",
           "accounts"
         ],
@@ -485,15 +495,15 @@
             },
             "type": "array"
           },
-          "loginRef": {
+          "origin": {
             "type": "string"
           },
-          "origin": {
+          "targetRef": {
             "type": "string"
           }
         },
         "required": [
-          "loginRef",
+          "targetRef",
           "origin",
           "fields"
         ],
@@ -1366,6 +1376,20 @@
         ],
         "type": "object"
       },
+      "SubmitCodeDto": {
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
       "TaskDetailsEnvelopeResponseDto": {
         "properties": {
           "task": {
@@ -2105,6 +2129,47 @@
             }
           }
         ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginFinishedDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "login"
+        ]
+      }
+    },
+    "/login/requests/{id}/code": {
+      "post": {
+        "operationId": "submitLoginCode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitCodeDto"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "201": {
             "content": {

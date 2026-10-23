@@ -23,7 +23,7 @@ import type { Response } from 'express';
 import { LoginService } from '../../login/login.service.js';
 
 class LoginTargetDto {
-  @ApiProperty() loginRef!: string;
+  @ApiProperty() targetRef!: string;
   @ApiProperty() origin!: string;
   @ApiProperty({ type: [String] }) fields!: string[];
 }
@@ -34,8 +34,9 @@ class LoginAccountDto {
 class LoginRequestDto {
   @ApiProperty() id!: string;
   @ApiProperty() origin!: string;
-  @ApiProperty({ enum: ['pending', 'saved', 'cancelled'] }) status!:
-    'pending' | 'saved' | 'cancelled';
+  @ApiProperty({ enum: ['credentials', 'code'] }) kind!: 'credentials' | 'code';
+  @ApiProperty({ enum: ['pending', 'saved', 'filled', 'cancelled'] }) status!:
+    'pending' | 'saved' | 'filled' | 'cancelled';
   @ApiProperty({ type: [LoginAccountDto] }) accounts!: LoginAccountDto[];
 }
 class LoginInspectionDto {
@@ -68,9 +69,15 @@ class SaveLoginDto {
   label!: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() accountId?: string;
 }
+class SubmitCodeDto {
+  @ApiProperty({ minLength: 1, maxLength: 64, writeOnly: true })
+  @IsString()
+  @Length(1, 64)
+  code!: string;
+}
 class LoginFinishedDto {
   @ApiProperty() id!: string;
-  @ApiProperty({ enum: ['saved', 'cancelled'] }) status!: string;
+  @ApiProperty({ enum: ['saved', 'filled', 'cancelled'] }) status!: string;
 }
 
 @ApiTags('login')
@@ -101,6 +108,13 @@ export class FirstPartyLoginController {
   @ApiCreatedResponse({ type: LoginFinishedDto })
   save(@Param('id', ParseUUIDPipe) id: string, @Body() input: SaveLoginDto) {
     return this.login.finish(id, input);
+  }
+  @Post('requests/:id/code')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ operationId: 'submitLoginCode' })
+  @ApiCreatedResponse({ type: LoginFinishedDto })
+  code(@Param('id', ParseUUIDPipe) id: string, @Body() input: SubmitCodeDto) {
+    return this.login.submitCode(id, input.code);
   }
   @Post('requests/:id/cancel')
   @Header('Cache-Control', 'no-store')

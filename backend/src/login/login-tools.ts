@@ -40,7 +40,7 @@ export function loginTools(service: LoginService) {
     login_inspect: createTool({
       id: 'login_inspect',
       description:
-        'Foreground and inspect your selected browser tab for login targets and matching accounts. Returns metadata and a masked annotated screenshot. Never read existing credential values. Call again after navigation or stale targets.',
+        'Foreground and inspect your selected browser tab for login or verification-code targets and matching accounts. Returns metadata and a masked annotated screenshot. Never read existing credential values. Call again after navigation or stale targets.',
       inputSchema: jsonSchema<Record<string, never>>({
         type: 'object',
         properties: {},
@@ -67,37 +67,37 @@ export function loginTools(service: LoginService) {
         };
       },
     }),
-    login_request: createTool({
-      id: 'login_request',
+    secure_entry_request: createTool({
+      id: 'secure_entry_request',
       description:
-        'Request secure PWA entry for a detected login target. The user submits directly to the backend. Return control while awaiting input; workers report the request to their parent Task. The owning Task receives saved/cancelled notification.',
-      inputSchema: jsonSchema<{ loginRef: string }>({
+        'Open secure entry under the owning Task’s Logins button in the PWA. Login entry collects the complete username/password once and saves it; use secure_fill for later stages. Verification entry collects only a code and fills it immediately without saving. The backend chooses the form from targetRef. If credentials_available is returned, use secure_fill. Yield while awaiting input; workers report to their parent Task. The owning Task receives completion notification.',
+      inputSchema: jsonSchema<{ targetRef: string }>({
         type: 'object',
-        properties: { loginRef: { type: 'string' } },
-        required: ['loginRef'],
+        properties: { targetRef: { type: 'string' } },
+        required: ['targetRef'],
         additionalProperties: false,
       }),
-      execute: ({ loginRef }, context) => {
+      execute: ({ targetRef }, context) => {
         const { taskId, workerId } = identity(context);
-        return safe(() => service.request(taskId, loginRef, workerId));
+        return safe(() => service.request(taskId, targetRef, workerId));
       },
     }),
-    login_fill: createTool({
-      id: 'login_fill',
+    secure_fill: createTool({
+      id: 'secure_fill',
       description:
-        'Fill a fresh detected login target from Bitwarden without seeing credential values. Omit accountId only when exactly one account matches. Does not submit or prove login success.',
-      inputSchema: jsonSchema<{ loginRef: string; accountId?: string }>({
+        'Fill a fresh inspected target from the matching vault account without seeing values. Reuse the same saved account across username/password stages; both credentials were collected together. Omit accountId when one account matches or this browser flow already selected it. For verification codes, input_required means call secure_entry_request. Does not click submit or prove login success.',
+      inputSchema: jsonSchema<{ targetRef: string; accountId?: string }>({
         type: 'object',
         properties: {
-          loginRef: { type: 'string' },
+          targetRef: { type: 'string' },
           accountId: { type: 'string' },
         },
-        required: ['loginRef'],
+        required: ['targetRef'],
         additionalProperties: false,
       }),
-      execute: ({ loginRef, accountId }, context) => {
+      execute: ({ targetRef, accountId }, context) => {
         const { taskId, workerId } = identity(context);
-        return safe(() => service.fill(taskId, loginRef, accountId, workerId));
+        return safe(() => service.fill(taskId, targetRef, accountId, workerId));
       },
     }),
   };

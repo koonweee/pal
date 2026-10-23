@@ -58,7 +58,7 @@ try {
   }
   const result = await inspector.inspect(a, first);
   assert.equal(result.targets.length, 1);
-  const reference = result.targets[0].loginRef;
+  const reference = result.targets[0].targetRef;
   await assert.rejects(
     inspector.fill(b, first, reference, { password: 'dummy' }),
   );
@@ -75,8 +75,31 @@ try {
   assert.ok(
     !JSON.stringify({ targets: result.targets, filled }).includes('SYNTHETIC'),
   );
+  await a.setContent(
+    '<form>' +
+      Array.from(
+        { length: 6 },
+        (_, i) =>
+          `<input type="tel" aria-label="Verification Code Digit ${i + 1}">`,
+      ).join('') +
+      '</form>',
+  );
+  const code = await inspector.inspect(a, first);
+  assert.deepEqual(code.targets[0].fields, ['code']);
+  const codeFilled = await inspector.fill(a, first, code.targets[0].targetRef, {
+    code: '731946',
+  });
+  assert.equal(
+    await a
+      .locator('input')
+      .evaluateAll((es) => es.map((e) => e.value).join('')),
+    '731946',
+  );
+  assert.ok(
+    !JSON.stringify({ targets: code.targets, codeFilled }).includes('731946'),
+  );
   console.log(
-    'PASS real execution Chrome: pinned worker tabs, deterministic inspection, private fill, unrelated fields untouched, secret-free results',
+    'PASS real execution Chrome: verification digit group filled privately; pinned worker tabs, deterministic inspection, private fill, unrelated fields untouched, secret-free results',
   );
 } finally {
   await service.closeGroup(id).catch(() => {});

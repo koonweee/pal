@@ -388,19 +388,26 @@ export const loginRequests = pgTable(
       .references(() => tasks.id, { onDelete: 'cascade' }),
     origin: text('origin').notNull(),
     status: text('status')
-      .$type<'pending' | 'saved' | 'cancelled'>()
+      .$type<'pending' | 'saved' | 'filled' | 'cancelled'>()
       .notNull()
       .default('pending'),
+    kind: text('kind')
+      .$type<'credentials' | 'code'>()
+      .notNull()
+      .default('credentials'),
+    targetRef: text('target_ref'),
+    workerId: text('worker_id'),
     accountId: text('account_id'),
     notifiedAt: timestamp('notified_at', { withTimezone: true }),
   },
   (t) => [
     uniqueIndex('login_request_pending_idx')
-      .on(t.taskId, t.origin)
+      .on(t.taskId, t.origin, t.kind)
       .where(sql`${t.status} = 'pending'`),
+    check('login_request_kind', sql`${t.kind} in ('credentials','code')`),
     check(
       'login_request_status',
-      sql`${t.status} in ('pending','saved','cancelled')`,
+      sql`${t.status} in ('pending','saved','filled','cancelled')`,
     ),
   ],
 );
@@ -414,9 +421,9 @@ export const loginInspections = pgTable('login_inspections', {
   targets: jsonb('targets')
     .$type<
       {
-        loginRef: string;
+        targetRef: string;
         origin: string;
-        fields: ('username' | 'password')[];
+        fields: ('username' | 'password' | 'code')[];
       }[]
     >()
     .notNull(),

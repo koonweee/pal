@@ -27,7 +27,7 @@ Let Task and Worker agents discover matching credentials, request secure entry i
 - Inspection foregrounds the caller's pinned tab for reliable headful capture and returns structured targets/accounts plus a masked annotated viewport screenshot by default. Labels correspond to backend-issued targets. Temporary overlays have no layout/focus effect and are removed in finally. Mask detected credential inputs even if populated. Store previews privately and expose them through a no-store PWA endpoint; bound retention. No automatic screenshot publication or incoming-file materialization.
 - PWA credential submission goes directly to the backend, never chat. Saved/cancelled events carry only request IDs, origin and status. Notify the owning Task and resume with fresh inspection; workers report pending input to their parent. Reuse pending requests, return stable completion results for retries, and reject expired pending submissions.
 - Saved credentials may fill without repeated user approval. Filling does not submit or assert authentication; existing browser tools navigate, click Next/Sign in, and assess results.
-- Full vault management remains in Bitwarden. Initial PWA supports collecting and replacing a matching credential. MFA, passkeys, signup/password generation and broad site-specific rules are deferred.
+- Full vault management remains in Bitwarden. Initial PWA supports collecting and replacing a matching credential. Vault TOTP generation, push approval, passkeys, signup/password generation and broad site-specific rules are deferred. PWA verification-code entry and staged-login reuse are specified in [Secure Entry and Verification Codes](secure-entry-otp.md).
 
 ## Target Data Shape
 
@@ -35,7 +35,7 @@ Let Task and Worker agents discover matching credentials, request secure entry i
 - Private inspection metadata: inspection reference, owner, verified origin, target/field roles, screenshot reference and expiry. DOM handles are ephemeral and invalid after backend/browser restart; retained previews remain display-only.
 - Minimal first-party endpoints: list pending requests/recent inspections for the active task, get masked preview, submit username/password/label for an existing request, cancel request. Use existing origin guard and first-party OpenAPI conventions. Credential request bodies are never stored as general idempotency payloads or echoed by validation.
 - Metadata-only `login.updated` event invalidates PWA snapshots. Task notification uses existing runtime handoff mechanisms and can be retried without repeating the vault write.
-- Tools: `login_inspect()`; `login_request({loginRef})`; `login_fill({loginRef, accountId?})`. Runtime supplies identity. Return bounded error/status codes and opaque account references with safe labels. No general vault-read/export tools.
+- Tools: `login_inspect()`; `secure_entry_request({targetRef})`; `secure_fill({targetRef, accountId?})`. Runtime supplies identity. Return bounded error/status codes and opaque account references with safe labels. No general vault-read/export tools.
 
 ## Milestones
 

@@ -1,11 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import type { ElementHandle, Frame, Page } from 'playwright-core';
 import { ApplicationError } from '../application/contracts/errors.js';
+import {
+  isEligibleInput,
+  hasUsernameHint,
+  codeInput,
+  codeDigit,
+} from './login-fields.js';
 
 export interface LoginTarget {
-  loginRef: string;
+  targetRef: string;
   origin: string;
-  fields: ('username' | 'password')[];
+  fields: ('username' | 'password' | 'code')[];
 }
 interface BoundTarget {
   view: LoginTarget;
@@ -15,98 +21,7 @@ interface BoundTarget {
   document: ElementHandle<HTMLHtmlElement>;
   username?: ElementHandle<HTMLInputElement>;
   password?: ElementHandle<HTMLInputElement>;
-}
-// These self-contained functions are serialized by Playwright into the page.
-function isEligibleInput(
-  el: HTMLInputElement,
-  role: 'any' | 'username' | 'password',
-) {
-  if (
-    !el.isConnected ||
-    el.disabled ||
-    el.readOnly ||
-    el.type === 'hidden' ||
-    !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
-  )
-    return false;
-  const purposes = el.autocomplete.toLowerCase().split(/\s+/);
-  if (
-    role === 'password' &&
-    (el.type !== 'password' ||
-      purposes.some(
-        (purpose) =>
-          purpose === 'new-password' ||
-          purpose === 'one-time-code' ||
-          purpose.startsWith('cc-'),
-      ))
-  )
-    return false;
-  if (
-    role === 'username' &&
-    (!['text', 'email', 'tel'].includes(el.type) ||
-      purposes.some(
-        (purpose) =>
-          ['new-password', 'current-password', 'one-time-code'].includes(
-            purpose,
-          ) || purpose.startsWith('cc-'),
-      ))
-  )
-    return false;
-  const rect = el.getBoundingClientRect();
-  let left = rect.left,
-    right = rect.right,
-    top = rect.top,
-    bottom = rect.bottom;
-  // checkVisibility does not account for an input clipped by a collapsed ancestor.
-  let ancestor: Element | null =
-    el.parentElement ??
-    (el.getRootNode() instanceof ShadowRoot
-      ? (el.getRootNode() as ShadowRoot).host
-      : null);
-  while (ancestor) {
-    const style = getComputedStyle(ancestor),
-      bounds = ancestor.getBoundingClientRect();
-    if (['hidden', 'clip'].includes(style.overflowX)) {
-      left = Math.max(left, bounds.left);
-      right = Math.min(right, bounds.right);
-    }
-    if (['hidden', 'clip'].includes(style.overflowY)) {
-      top = Math.max(top, bounds.top);
-      bottom = Math.min(bottom, bounds.bottom);
-    }
-    ancestor =
-      ancestor.parentElement ??
-      (ancestor.getRootNode() instanceof ShadowRoot
-        ? (ancestor.getRootNode() as ShadowRoot).host
-        : null);
-  }
-  return right > left && bottom > top;
-}
-function hasUsernameHint(el: HTMLInputElement) {
-  if (!['text', 'email', 'tel'].includes(el.type)) return false;
-  const purposes = el.autocomplete.toLowerCase().split(/\s+/);
-  if (purposes.includes('username')) return true;
-  const identifier = [el.name, el.id].some((value) =>
-    /(^|[_-])(email|user[_-]?name|account([_-]?(name|id))?|identifier|login|phone)([_-]|$)/i.test(
-      value,
-    ),
-  );
-  const root = el.getRootNode() as Document | ShadowRoot;
-  const label = [...(el.labels ?? [])]
-    .map((label) => label.textContent ?? '')
-    .concat(
-      el.getAttribute('aria-label') ?? '',
-      ...(el.getAttribute('aria-labelledby') ?? '')
-        .split(/\s+/)
-        .filter(Boolean)
-        .map((id) => root.getElementById(id)?.textContent ?? ''),
-    )
-    .join(' ');
-  return (
-    identifier &&
-    (purposes.includes('webauthn') ||
-      /email|user\s*name|account|phone/i.test(label))
-  );
+  code?: ElementHandle<HTMLInputElement>[];
 }
 /** Short-lived DOM references never contain input values. */
 export class LoginBrowser {
@@ -132,6 +47,7 @@ export class LoginBrowser {
           value.target.document.dispose(),
           value.target.username?.dispose(),
           value.target.password?.dispose(),
+          ...(value.target.code ?? []).map((input) => input.dispose()),
         ]);
         this.targets.delete(ref);
       }
@@ -170,15 +86,20 @@ export class LoginBrowser {
       }
       const passwords: ElementHandle<HTMLInputElement>[] = [];
       for (const input of candidates)
-        if (await input.evaluate(isEligibleInput, 'password' as const))
+        if (
+          !(await input.evaluate(codeInput)) &&
+          (await input.evaluate(isEligibleInput, 'password' as const))
+        )
           passwords.push(input);
       const pairs: {
         username?: ElementHandle<HTMLInputElement>;
         password?: ElementHandle<HTMLInputElement>;
+        code?: ElementHandle<HTMLInputElement>[];
       }[] = [];
       for (const password of passwords) {
         const possible = [];
         for (const input of candidates) {
+          if (await input.evaluate(codeInput)) continue;
           if (
             await input.evaluate(
               (el, { pw, hinted }) =>
@@ -227,6 +148,7 @@ export class LoginBrowser {
       }
       if (!passwords.length) {
         for (const username of candidates) {
+          if (await username.evaluate(codeInput)) continue;
           if (
             !usernameHints.has(username) ||
             !(await username.evaluate(isEligibleInput, 'username' as const))
@@ -278,18 +200,67 @@ export class LoginBrowser {
             pairs.push({ username });
         }
       }
+      const declaredCodes: ElementHandle<HTMLInputElement>[] = [];
+      for (const input of candidates)
+        if (await input.evaluate(codeInput)) declaredCodes.push(input);
+      // Split inputs may declare one-time-code only on the first digit. Require
+      // single-digit semantics and the same form/root as the declared anchor.
+      if (declaredCodes.length) {
+        const anchor = declaredCodes[0];
+        const codes: ElementHandle<HTMLInputElement>[] = [];
+        for (const input of candidates) {
+          if (
+            declaredCodes.includes(input) ||
+            ((await input.evaluate(codeDigit)) &&
+              (await input.evaluate(
+                (el, first) =>
+                  el.form === first.form &&
+                  el.getRootNode() === first.getRootNode(),
+                anchor,
+              )))
+          )
+            codes.push(input);
+        }
+        if (codes.length === 1 && !(await codes[0].evaluate(codeDigit)))
+          pairs.push({ code: codes });
+        else if (codes.length >= 4 && codes.length <= 10) {
+          const valid = await Promise.all(
+            codes.map((input, index) =>
+              input.evaluate(
+                (el, { first, index }) => {
+                  const digit = (el.getAttribute('aria-label') ?? '').match(
+                    /digit\s*(\d+)/i,
+                  );
+                  return (
+                    el.form === first.form &&
+                    el.getRootNode() === first.getRootNode() &&
+                    (digit
+                      ? Number(digit[1]) === index + 1
+                      : el.maxLength === 1)
+                  );
+                },
+                { first: anchor, index },
+              ),
+            ),
+          );
+          if (valid.every(Boolean)) pairs.push({ code: codes });
+        }
+        // Mask semantic candidates even when grouping is unsupported.
+        mask.push(...codes);
+      }
       for (const pair of pairs) {
         const view: LoginTarget = {
-          loginRef: randomUUID(),
+          targetRef: randomUUID(),
           origin: url.origin,
           fields: [
             ...(pair.username ? ['username' as const] : []),
             ...(pair.password ? ['password' as const] : []),
+            ...(pair.code ? ['code' as const] : []),
           ],
         };
         const html = await frame.$('html');
         if (!html) continue;
-        this.targets.set(view.loginRef, {
+        this.targets.set(view.targetRef, {
           owner,
           at: Date.now(),
           target: {
@@ -303,14 +274,16 @@ export class LoginBrowser {
         });
         targets.push(view);
         for (const role of view.fields) {
-          const element = pair[role]!;
-          mask.push(element);
-          const box = await element.boundingBox();
-          if (box)
-            labels.push({
-              ...box,
-              text: 'Login ' + targets.length + ' · ' + role,
-            });
+          const elements = role === 'code' ? pair.code! : [pair[role]!];
+          for (const element of elements) {
+            mask.push(element);
+            const box = await element.boundingBox();
+            if (box)
+              labels.push({
+                ...box,
+                text: 'Target ' + targets.length + ' · ' + role,
+              });
+          }
         }
       }
       await document.dispose();
@@ -376,6 +349,7 @@ export class LoginBrowser {
         [...this.targets.values()].flatMap(({ target }) => [
           target.username,
           target.password,
+          ...(target.code ?? []),
         ]),
       );
       await Promise.all(
@@ -415,7 +389,7 @@ export class LoginBrowser {
     page: Page,
     owner: string,
     ref: string,
-    values: { username?: string; password?: string },
+    values: { username?: string; password?: string; code?: string },
   ) {
     const target = this.bound(owner, ref);
     const validate = async () => {
@@ -432,6 +406,85 @@ export class LoginBrowser {
     };
     try {
       await validate();
+      if (target.code) {
+        const code = values.code?.trim() ?? '';
+        if (
+          !code ||
+          code.length > 64 ||
+          /\s/.test(code) ||
+          (target.code.length > 1 &&
+            !new RegExp('^\\d{' + target.code.length + '}$').test(code))
+        )
+          throw new ApplicationError(
+            'conflict',
+            'Enter a complete verification code',
+          );
+        if (
+          !(
+            await Promise.all(
+              target.code.map((input) => input.evaluate(codeInput)),
+            )
+          ).some(Boolean)
+        )
+          throw new Error();
+        // Validate every handle before writing any digit; never follow focus.
+        for (const [index, input] of target.code.entries()) {
+          if (
+            !(await input.evaluate(
+              (el, { first, index }) => {
+                const digit = (el.getAttribute('aria-label') ?? '').match(
+                  /digit\s*(\d+)/i,
+                );
+                return (
+                  el.form === first.form &&
+                  el.getRootNode() === first.getRootNode() &&
+                  (!digit || Number(digit[1]) === index + 1)
+                );
+              },
+              { first: target.code[0], index },
+            ))
+          )
+            throw new Error();
+          if (
+            !(await input.evaluate(isEligibleInput, 'any' as const)) ||
+            (!(await input.evaluate(codeInput)) &&
+              !(target.code.length > 1 && (await input.evaluate(codeDigit))))
+          )
+            throw new Error();
+          if (target.code.length > 1 && !(await input.evaluate(codeDigit)))
+            throw new Error();
+          if (target.code.length === 1) {
+            const max = await input.evaluate((el) => el.maxLength);
+            if (max > 0 && code.length > max)
+              throw new ApplicationError(
+                'conflict',
+                'Enter a complete verification code',
+              );
+          }
+        }
+        for (const [index, input] of target.code.entries()) {
+          await validate();
+          if (
+            !(await input.evaluate(
+              (el, first) =>
+                el.form === first.form &&
+                el.getRootNode() === first.getRootNode(),
+              target.code[0],
+            ))
+          )
+            throw new Error();
+          if (
+            !(await input.evaluate(isEligibleInput, 'any' as const)) ||
+            (!(await input.evaluate(codeInput)) &&
+              !(target.code.length > 1 && (await input.evaluate(codeDigit))))
+          )
+            throw new Error();
+          await input.fill(target.code.length === 1 ? code : code[index], {
+            timeout: 3000,
+          });
+        }
+        return { status: 'filled' as const, fields: target.view.fields };
+      }
       if (
         target.password &&
         !(await target.password.evaluate(isEligibleInput, 'password' as const))
@@ -460,10 +513,11 @@ export class LoginBrowser {
         await target.password.fill(values.password ?? '', { timeout: 3000 });
       }
       return { status: 'filled' as const, fields: target.view.fields };
-    } catch {
+    } catch (error) {
+      if (error instanceof ApplicationError) throw error;
       throw new ApplicationError(
         'conflict',
-        'Login target changed or cannot be filled; inspect again',
+        'Secure entry target changed or cannot be filled; inspect again',
       );
     }
   }

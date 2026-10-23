@@ -47,11 +47,11 @@ it('fills bound login fields, masks existing values, and never chooses comments 
   expect(await page.locator('[data-pal-login-mask]').count()).toBe(0);
   expect(await page.locator('[id^="pal-login-"]').count()).toBe(0);
   await expect(
-    service.fill(page, 'task:b', second.targets[0].loginRef, {
+    service.fill(page, 'task:b', second.targets[0].targetRef, {
       password: 'dummy',
     }),
   ).rejects.toThrow();
-  await service.fill(page, 'task:a', second.targets[0].loginRef, {
+  await service.fill(page, 'task:a', second.targets[0].targetRef, {
     username: 'dummy-user',
     password: 'dummy-pass',
   });
@@ -61,7 +61,7 @@ it('fills bound login fields, masks existing values, and never chooses comments 
   expect(await page.locator('#signup').inputValue()).toBe('');
   await page.evaluate(() => history.pushState({}, '', '/changed'));
   await expect(
-    service.fill(page, 'task:a', second.targets[0].loginRef, {
+    service.fill(page, 'task:a', second.targets[0].targetRef, {
       password: 'dummy',
     }),
   ).rejects.toThrow();
@@ -71,7 +71,7 @@ it('rejects replaced or unmasked password targets and refreshes across login sta
   const inspected = await service.inspect(page, 'a');
   await page.locator('#pass').evaluate((el) => el.setAttribute('type', 'text'));
   await expect(
-    service.fill(page, 'a', inspected.targets[0].loginRef, {
+    service.fill(page, 'a', inspected.targets[0].targetRef, {
       password: 'dummy',
     }),
   ).rejects.toThrow();
@@ -83,16 +83,16 @@ it('rejects replaced or unmasked password targets and refreshes across login sta
   await page.setContent('<input autocomplete="username" id="first">');
   const first = await service.inspect(page, 'a');
   expect(first.targets[0].fields).toEqual(['username']);
-  await service.fill(page, 'a', first.targets[0].loginRef, {
+  await service.fill(page, 'a', first.targets[0].targetRef, {
     username: 'dummy',
   });
   await page.setContent('<input type="password" id="second">');
   await expect(
-    service.fill(page, 'a', first.targets[0].loginRef, { username: 'dummy' }),
+    service.fill(page, 'a', first.targets[0].targetRef, { username: 'dummy' }),
   ).rejects.toThrow();
   const second = await service.inspect(page, 'a');
   expect(second.targets[0].fields).toEqual(['password']);
-  await service.fill(page, 'a', second.targets[0].loginRef, {
+  await service.fill(page, 'a', second.targets[0].targetRef, {
     password: 'dummy',
   });
   expect(await page.locator('#second').inputValue()).toBe('dummy');
@@ -111,7 +111,7 @@ it('keeps iframe origin boundaries and rejects references after navigation', asy
   expect(result.targets[0].origin).toBe('https://frame.example.test');
   await page.goto('https://login.example.test/other');
   await expect(
-    service.fill(page, 'a', result.targets[0].loginRef, { password: 'dummy' }),
+    service.fill(page, 'a', result.targets[0].targetRef, { password: 'dummy' }),
   ).rejects.toThrow();
 });
 
@@ -205,7 +205,7 @@ it('requires authentication hints for sparse username-first forms', async () => 
   );
   const result = await service.inspect(page, 'sparse');
   expect(result.targets.map((target) => target.fields)).toEqual([['username']]);
-  await service.fill(page, 'sparse', result.targets[0].loginRef, {
+  await service.fill(page, 'sparse', result.targets[0].targetRef, {
     username: 'dummy',
   });
   expect(await page.locator('[autocomplete="webauthn"]').inputValue()).toBe(
@@ -298,20 +298,22 @@ if (command === 'serve') {
   }
 });
 
-it('refuses declared signup, one-time-code and card-security password inputs', async () => {
+it('separates verification targets from signup and card-security password inputs', async () => {
   await page.setContent(
     '<form><input type="password" autocomplete="NEW-PASSWORD"></form><form><input type="password" autocomplete="one-time-code"></form><form><input type="password" autocomplete="cc-csc"></form>',
   );
-  expect((await new LoginBrowser().inspect(page, 'purposes')).targets).toEqual(
-    [],
-  );
+  expect(
+    (await new LoginBrowser().inspect(page, 'purposes')).targets.map(
+      (t) => t.fields,
+    ),
+  ).toEqual([['code']]);
   await page.setContent(
     '<form><input id="otp" autocomplete="one-time-code"><input type="password"></form>',
   );
   const service = new LoginBrowser();
   const result = await service.inspect(page, 'otp');
   expect(result.targets[0].fields).toEqual(['password']);
-  await service.fill(page, 'otp', result.targets[0].loginRef, {
+  await service.fill(page, 'otp', result.targets[0].targetRef, {
     username: 'dummy',
     password: 'dummy',
   });
@@ -326,7 +328,7 @@ it('recognizes an accessible username-first stage and refuses a password clipped
   const service = new LoginBrowser();
   const first = await service.inspect(page, 'clipped');
   expect(first.targets.map((target) => target.fields)).toEqual([['username']]);
-  await service.fill(page, 'clipped', first.targets[0].loginRef, {
+  await service.fill(page, 'clipped', first.targets[0].targetRef, {
     username: 'dummy-user',
     password: 'dummy-pass',
   });
@@ -343,9 +345,107 @@ it('recognizes an accessible username-first stage and refuses a password clipped
   ]);
   await page.locator('#next-stage').evaluate((el) => (el.style.height = '0'));
   await expect(
-    service.fill(page, 'clipped', combined.targets[0].loginRef, {
+    service.fill(page, 'clipped', combined.targets[0].targetRef, {
       password: 'dummy-pass',
     }),
   ).rejects.toThrow();
   expect(await page.locator('#password').inputValue()).toBe('');
+});
+
+it('binds and masks single and Apple-style split verification inputs, refusing ambiguous or repurposed fields', async () => {
+  const service = new LoginBrowser();
+  await page.setContent(
+    '<form><label>Verification code<input id="code" autocomplete="one-time-code" maxlength="6"></label></form><input id="comment"><input id="card" autocomplete="cc-csc">',
+  );
+  const single = await service.inspect(page, 'codes');
+  expect(single.targets.map((t) => t.fields)).toEqual([['code']]);
+  const result = await service.fill(
+    page,
+    'codes',
+    single.targets[0].targetRef,
+    { code: '731946' },
+  );
+  expect(result).toEqual({ status: 'filled', fields: ['code'] });
+  expect(await page.locator('#code').inputValue()).toBe('731946');
+  expect(await page.locator('#comment').inputValue()).toBe('');
+  expect(await page.locator('#card').inputValue()).toBe('');
+  await page.locator('#code').blur();
+  expect(
+    (await service.inspect(page, 'codes')).image.equals(single.image),
+  ).toBe(true);
+  const split = () =>
+    '<form>' +
+    Array.from(
+      { length: 6 },
+      (_, i) =>
+        `<input type="tel" aria-label="Verification Code Digit ${i + 1}" id="digit${i}">`,
+    ).join('') +
+    '</form>';
+  await page.setContent(split());
+  const inspection = await service.inspect(page, 'codes');
+  expect(inspection.targets.map((t) => t.fields)).toEqual([['code']]);
+  await expect(
+    service.fill(page, 'other', inspection.targets[0].targetRef, {
+      code: '731946',
+    }),
+  ).rejects.toThrow(/expired/);
+  await expect(
+    service.fill(page, 'codes', inspection.targets[0].targetRef, {
+      code: '73194',
+    }),
+  ).rejects.toThrow(/complete/);
+  expect(
+    await page
+      .locator('input')
+      .evaluateAll((es) => es.every((e) => e.value === '')),
+  ).toBe(true);
+  await page.locator('#digit5').evaluate((el) => (el.autocomplete = 'cc-csc'));
+  await expect(
+    service.fill(page, 'codes', inspection.targets[0].targetRef, {
+      code: '731946',
+    }),
+  ).rejects.toThrow(/changed/);
+  expect(await page.locator('#digit0').inputValue()).toBe('');
+  await page.setContent(split());
+  const fresh = await service.inspect(page, 'codes');
+  await service.fill(page, 'codes', fresh.targets[0].targetRef, {
+    code: '731946',
+  });
+  expect(
+    await page
+      .locator('input')
+      .evaluateAll((es) => es.map((e) => e.value).join('')),
+  ).toBe('731946');
+  expect((await service.inspect(page, 'codes')).image.equals(fresh.image)).toBe(
+    true,
+  );
+  await page.setContent(
+    '<form><input autocomplete="one-time-code"></form><form><input autocomplete="one-time-code"></form>',
+  );
+  expect((await service.inspect(page, 'codes')).targets).toEqual([]);
+  await page.setContent(
+    '<form>' +
+      Array.from(
+        { length: 6 },
+        (_, i) =>
+          `<input maxlength="1" inputmode="numeric" ${i === 0 ? 'autocomplete="one-time-code"' : ''}>`,
+      ).join('') +
+      '</form>',
+  );
+  const grouped = await service.inspect(page, 'codes');
+  expect(grouped.targets.map((t) => t.fields)).toEqual([['code']]);
+  await service.fill(page, 'codes', grouped.targets[0].targetRef, {
+    code: '731946',
+  });
+  expect(
+    await page
+      .locator('input')
+      .evaluateAll((es) => es.map((e) => e.value).join('')),
+  ).toBe('731946');
+  await page.goto('https://login.example.test/changed');
+  await expect(
+    service.fill(page, 'codes', grouped.targets[0].targetRef, {
+      code: '731946',
+    }),
+  ).rejects.toThrow(/changed/);
 });

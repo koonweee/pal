@@ -74,7 +74,7 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
   await page.route('https://example.test/**', (route) =>
     route.fulfill({
       contentType: 'text/html',
-      body: '<form><input autocomplete="username" id="user"><input type="password" id="pass"><button>Sign in</button></form><textarea id="comment"></textarea>',
+      body: '<form><input autocomplete="username" id="user"><button>Next</button></form><textarea id="comment"></textarea>',
     }),
   );
   await page.goto('https://example.test/login');
@@ -92,6 +92,7 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
   const matching = vi
     .spyOn(vault, 'matching')
     .mockImplementation(async () => (item ? [structuredClone(item)] : []));
+  const configured = vi.spyOn(vault, 'configured', 'get').mockReturnValue(true);
   const save = vi
     .spyOn(vault, 'save')
     .mockImplementation(async (_origin, input) => {
@@ -116,7 +117,7 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
   try {
     const inspection = await login.inspect(task.id);
     outputs.push(inspection);
-    expect(inspection.targets[0].fields).toEqual(['username', 'password']);
+    expect(inspection.targets[0].fields).toEqual(['username']);
     const preview = await request(fixture.url)
       .get('/login/inspections/' + inspection.inspectionId + '/image')
       .expect(200);
@@ -124,7 +125,7 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
     expect(preview.headers['content-type']).toContain('image/png');
     const pending = await login.request(
       task.id,
-      inspection.targets[0].loginRef,
+      inspection.targets[0].targetRef,
     );
     outputs.push(pending);
     expect((await fixture.app.get(TasksService).details(task.id)).status).toBe(
@@ -150,27 +151,120 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
     expect(save).toHaveBeenCalledTimes(1);
     const fresh = await login.inspect(task.id);
     outputs.push(fresh);
-    outputs.push(await login.fill(task.id, fresh.targets[0].loginRef));
+    expect(
+      (await login.request(task.id, fresh.targets[0].targetRef)).status,
+    ).toBe('credentials_available');
+    outputs.push(await login.fill(task.id, fresh.targets[0].targetRef));
     expect(await page.locator('#user').inputValue()).toBe(
       'SYNTHETIC_PRIVATE_USER',
     );
+    await page.setContent(
+      '<form><input id="pass" type="password" autocomplete="current-password"></form><textarea id="comment"></textarea>',
+    );
+    const passwordStage = await login.inspect(task.id);
+    expect(
+      (await login.request(task.id, passwordStage.targets[0].targetRef)).status,
+    ).toBe('credentials_available');
+    expect(
+      (await login.snapshot(task.id)).requests.filter(
+        (r) => r.status === 'pending',
+      ),
+    ).toHaveLength(0);
+    outputs.push(await login.fill(task.id, passwordStage.targets[0].targetRef));
     expect(await page.locator('#pass').inputValue()).toBe(
       'SYNTHETIC_PRIVATE_PASSWORD',
     );
+    // Once tried, replacement remains available for a rejected saved password.
+    const replacement = await login.request(
+      task.id,
+      passwordStage.targets[0].targetRef,
+    );
+    expect(replacement.status).toBe('awaiting_user');
+    await login.finish(replacement.requestId!);
     expect(await page.locator('#comment').inputValue()).toBe('');
     expect(JSON.stringify({ outputs, notifications })).not.toContain(
       'SYNTHETIC_PRIVATE',
     );
+    await page.setContent(
+      '<form>' +
+        Array.from(
+          { length: 6 },
+          (_, i) =>
+            `<input type="tel" aria-label="Verification Code Digit ${i + 1}">`,
+        ).join('') +
+        '</form>',
+    );
+    const otp = await login.inspect(task.id);
+    expect(otp.targets[0].fields).toEqual(['code']);
+    expect((await login.fill(task.id, otp.targets[0].targetRef)).status).toBe(
+      'input_required',
+    );
+    const codeRequest = await login.request(task.id, otp.targets[0].targetRef);
+    expect(codeRequest.kind).toBe('code');
+    const snapshot = (
+      await request(fixture.url).get(`/login/tasks/${task.id}`).expect(200)
+    ).body;
+    expect(snapshot.inspections).toHaveLength(1);
+    expect(snapshot.requests[0].kind).toBe('code');
+    const code = '731946';
+    const first = await request(fixture.url)
+      .post(`/login/requests/${codeRequest.requestId}/code`)
+      .send({ code })
+      .expect(201);
+    outputs.push(first.body);
+    expect(first.body.status).toBe('filled');
+    expect(
+      await page
+        .locator('input')
+        .evaluateAll((es) => es.map((e) => e.value).join('')),
+    ).toBe(code);
+    await page
+      .locator('input')
+      .evaluateAll((es) => es.forEach((e) => (e.value = '')));
+    await request(fixture.url)
+      .post(`/login/requests/${codeRequest.requestId}/code`)
+      .send({ code })
+      .expect(201);
+    expect(
+      await page
+        .locator('input')
+        .evaluateAll((es) => es.every((e) => e.value === '')),
+    ).toBe(true);
+    expect(save).toHaveBeenCalledTimes(1);
+    const staleRequest = await login.request(task.id, otp.targets[0].targetRef);
+    await page.goto('https://example.test/other');
+    const stale = await request(fixture.url)
+      .post(`/login/requests/${staleRequest.requestId}/code`)
+      .send({ code })
+      .expect(409);
+    expect(JSON.stringify(stale.body)).not.toContain(code);
+    await fixture.database.pool.query(
+      "update login_requests set created_at=now()-interval '11 minutes' where id=$1",
+      [staleRequest.requestId],
+    );
+    await request(fixture.url)
+      .post(`/login/requests/${staleRequest.requestId}/code`)
+      .send({ code })
+      .expect(409);
+    await login.flushNotifications();
+    expect(
+      (await login.snapshot(task.id)).requests.find(
+        (r) => r.id === staleRequest.requestId,
+      )?.status,
+    ).toBe('cancelled');
+    expect(JSON.stringify({ outputs, notifications })).not.toContain(code);
     const persisted = await fixture.database.pool.query(
       'select row_to_json(r) as value from login_requests r union all select row_to_json(i) from login_inspections i',
     );
     expect(JSON.stringify(persisted.rows)).not.toContain('SYNTHETIC_PRIVATE');
+    expect(JSON.stringify(persisted.rows)).not.toContain(code);
   } finally {
     subscription.unsubscribe();
     login.onModuleDestroy();
     selected.mockRestore();
     matching.mockRestore();
     save.mockRestore();
+    configured.mockRestore();
     await browser.close();
   }
 });

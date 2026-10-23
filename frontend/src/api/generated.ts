@@ -175,6 +175,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/login/requests/{id}/code': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['submitLoginCode'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/login/requests/{id}/save': {
     parameters: {
       query?: never;
@@ -550,7 +566,7 @@ export interface components {
     LoginFinishedDto: {
       id: string;
       /** @enum {string} */
-      status: 'saved' | 'cancelled';
+      status: 'saved' | 'filled' | 'cancelled';
     };
     LoginInspectionDto: {
       id: string;
@@ -560,9 +576,11 @@ export interface components {
     LoginRequestDto: {
       accounts: components['schemas']['LoginAccountDto'][];
       id: string;
+      /** @enum {string} */
+      kind: 'credentials' | 'code';
       origin: string;
       /** @enum {string} */
-      status: 'pending' | 'saved' | 'cancelled';
+      status: 'pending' | 'saved' | 'filled' | 'cancelled';
     };
     LoginSnapshotDto: {
       configured: boolean;
@@ -571,8 +589,8 @@ export interface components {
     };
     LoginTargetDto: {
       fields: string[];
-      loginRef: string;
       origin: string;
+      targetRef: string;
     };
     LoginUpdatedEventDto: {
       /** @enum {string} */
@@ -796,6 +814,9 @@ export interface components {
       /** Format: uuid */
       taskId?: string;
       text: string;
+    };
+    SubmitCodeDto: {
+      code: string;
     };
     TaskDetailsEnvelopeResponseDto: {
       task: components['schemas']['TaskDetailsResponseDto'];
@@ -1199,6 +1220,31 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LoginFinishedDto'];
+        };
+      };
+    };
+  };
+  submitLoginCode: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SubmitCodeDto'];
+      };
+    };
     responses: {
       201: {
         headers: {
