@@ -1,12 +1,13 @@
 # Deployment
 
-Docker Compose 2.36 or later runs four services:
+Docker Engine 28.1 or later and Compose 2.36 or later run five services:
 
 | Service | Responsibility |
 | --- | --- |
 | agent-service | NestJS, Mastra orchestration, model authentication, integration clients, API/SSE, and database access |
 | execution | One persistent Debian/Xfce desktop, Chromium, shell/code execution, and agent files |
-| web | PWA static assets, API/desktop gateway, private CDP forwarding, and Squid egress proxy |
+| web | PWA static assets, API/desktop gateway, and private CDP forwarding |
+| egress | IPv4 routing, private destination filtering, and source NAT for execution |
 | postgres | Application and Mastra schemas |
 
 The development overlay adds Vite and isolated local database/PWA ports. Production and development use separate Compose projects and volumes. Host-side builds and tests are supported; runtime execution uses Docker.
@@ -25,11 +26,15 @@ Native filesystem operations delegate to LocalFilesystem inside execution throug
 
 ## Network Boundaries
 
-Execution joins an internal Docker network. Its configured HTTP(S) proxy runs in web, permits public web destinations, and denies private, loopback, link-local, and Tailnet destination addresses. Chromium uses this proxy; command tools receive proxy environment variables. Software that ignores proxy configuration has no direct internet route.
+Execution joins a dedicated transit bridge. Docker's [inhibit_ipv4 bridge option](https://docs.docker.com/engine/network/drivers/bridge/#skip-bridge-ip-address-configuration) leaves its gateway address unassigned on the host. The separate egress container connects transit to an uplink network, installs nftables policy atomically, and then claims the transit gateway address. Public IPv4 destinations accept ordinary application traffic on any port. Policy denies private, loopback, link-local, Tailnet, multicast and reserved high-address ranges. Execution and egress disable IPv6.
 
-Web rejects gateway requests originating from the execution subnet, derived from its Compose-named palexec0 interface. Additional ingress networks do not change this boundary. Agent-service and PostgreSQL are on the separate service network. The only published production port is the loopback-bound PWA gateway. The CDP-forwarding listener and egress proxy are private Docker endpoints.
+Egress has its own network namespace, a read-only filesystem and NET_ADMIN/NET_RAW capabilities for routing and gateway ARP announcements. It receives no agent home, service credentials or Docker socket. Execution has neither capability and cannot change the router's policy. Packaged nftables, iproute2 and arping provide the network implementation.
 
-The gateway clears its previous Squid PID file at startup and terminates if either Squid or Nginx exits. Compose restarts the gateway. Squid drains connections for one second during shutdown, within the container stop timeout.
+Before policy readiness, execution has no usable internet route. If egress stops, outbound connections stop while the desktop remains running. Docker's restart policy recovers a failed router; its gratuitous ARP announcement refreshes execution's cached gateway after replacement. Existing connections may need to reconnect when NAT state is lost. Execution and egress can restart independently.
+
+`PAL_EXECUTION_NETWORK_PREFIX` selects the transit /24 using three IPv4 octets (default `172.30.235`). Compose derives the subnet, gateway `.1` and router `.2` from it. Dynamic clients use the upper half of the /24 so startup order cannot consume the router address. Choose a prefix that does not overlap existing Docker, LAN or routed networks. Isolated smoke tests use a separate prefix.
+
+Web rejects gateway requests originating from the execution subnet, derived from its Compose-named palexec0 interface. Additional ingress networks do not change this boundary. Web's default route uses the service network. Agent-service and PostgreSQL are on the separate service network. The only published production port is the loopback-bound PWA gateway. CDP forwarding remains a private Docker endpoint.
 
 Pal remains Tailscale-only. Do not expose its gateway to the public internet.
 
@@ -44,6 +49,10 @@ Use `./scripts/dev-local` from the repository root:
 - `pwa-up` rebuilds the production-style PWA and announces an available update.
 - `serve` and `unserve` manage the scoped private Tailscale Serve route.
 - `status`, `logs`, and `down` inspect or stop the stack.
+
+The first upgrade from the proxy layout replaces the execution network and execution container. In development, run `./scripts/dev-local down` followed by `./scripts/dev-local up`; named volumes and browser profile persist, and running desktop applications stop. Ordinary backend rebuilds preserve execution after that migration.
+
+A production network migration needs reviewed immutable web, execution and egress images, updated deployment Compose and health checks, and a coordinated replacement of the execution network. Validate the production architecture/kernel and a full Docker-daemon or VM reboot before accepting that release. Keep the existing paired application state and previous image/network definitions available for rollback.
 
 Database migrations remain explicit deployment steps, run from agent-service before the application starts. Production supplies a shared opaque `PAL_RELEASE_ID` to backend and frontend builds. The development web build uses the `Pal Dev` installation identity.
 

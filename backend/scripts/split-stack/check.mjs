@@ -11,6 +11,8 @@ const config = new ConfigService({
   PAL_DESKTOP_ENABLED: true,
 });
 const execution = new ExecutionService(config);
+const smokeUrl = process.env.PAL_SMOKE_BROWSER_URL ?? 'https://example.com';
+const smokeTitle = process.env.PAL_SMOKE_BROWSER_TITLE ?? 'Example Domain';
 const browser = new BrowserService(
   config,
   {
@@ -24,14 +26,14 @@ const browser = new BrowserService(
   execution,
 );
 try {
-  const opened = await browser.command('split-check', [
-    'open',
-    'https://example.com',
-  ]);
+  const opened = await browser.command('split-check', ['open', smokeUrl]);
   assert.equal(opened.success, true, JSON.stringify(opened));
   const title = await browser.command('split-check', ['get', 'title']);
   assert.equal(title.success, true, JSON.stringify(title));
-  assert.match(JSON.stringify(title.data), /Example Domain/);
+  assert.ok(
+    JSON.stringify(title.data).includes(smokeTitle),
+    JSON.stringify(title.data),
+  );
   const screenshot = await browser.screenshot('split-check', false);
   assert.equal(
     Buffer.from(screenshot.data, 'base64').subarray(1, 4).toString(),
@@ -65,7 +67,7 @@ try {
   assert.equal(desktop.data.subarray(1, 4).toString(), 'PNG');
   await browser.command(
     'split-check',
-    ['open', 'https://example.com'],
+    ['open', smokeUrl],
     undefined,
     'split-worker',
   );

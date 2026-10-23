@@ -2,7 +2,7 @@
 
 ## Security
 
-The first-party API uses private Tailnet ingress. Execution has no direct backend/database route; the web gateway rejects execution-subnet requests and its egress proxy denies private destinations. Service credentials and canonical files remain in service-private storage.
+The first-party API uses private Tailnet ingress. Execution has no direct backend/database route; the web gateway rejects execution-subnet requests and a separate routed egress container filters private destinations. Service credentials and canonical files remain in service-private storage.
 
 ## Implementation
 

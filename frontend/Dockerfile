@@ -13,13 +13,11 @@ COPY src/ src/
 RUN npm run build
 
 FROM nginx:1.29.2-alpine@sha256:61e01287e546aac28a3f56839c136b31f590273f3b41187a36f46f6a03bbfe22
-RUN apk add --no-cache squid iproute2
-COPY gateway/squid.conf /etc/squid/squid.conf
+RUN apk add --no-cache iproute2
 COPY gateway/execution-boundary.sh /docker-entrypoint.d/40-execution-boundary.sh
-COPY gateway/start.sh /usr/local/bin/pal-gateway
-RUN chmod +x /docker-entrypoint.d/40-execution-boundary.sh /usr/local/bin/pal-gateway
+RUN chmod +x /docker-entrypoint.d/40-execution-boundary.sh
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /opt/pal-web/dist/ /usr/share/nginx/html/
 EXPOSE 8080
 
-CMD ["/usr/local/bin/pal-gateway"]
+CMD ["nginx", "-g", "daemon off;"]

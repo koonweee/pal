@@ -1,0 +1,26 @@
+table inet pal_gateway {
+  set private_v4 {
+    type ipv4_addr; flags interval;
+    elements = { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4 }
+  }
+  chain input {
+    type filter hook input priority filter; policy drop;
+    iifname "lo" accept
+    ct state established,related accept
+    counter reject
+  }
+  chain forward {
+    type filter hook forward priority filter; policy drop;
+    ct state invalid drop
+    iifname "palexec0" ip daddr @private_v4 counter reject
+    ct state established,related accept
+    iifname "palexec0" oifname "palwan0" counter accept
+    counter reject
+  }
+}
+table ip pal_nat {
+  chain postrouting {
+    type nat hook postrouting priority srcnat; policy accept;
+    iifname "palexec0" oifname "palwan0" masquerade
+  }
+}

@@ -135,10 +135,25 @@ publish_pwa_update() {
   fi
 }
 
+require_routed_network() {
+  local current_policy
+  if current_policy="$(docker network inspect "${compose_project}_execution" \
+      --format '{{index .Options "com.docker.network.bridge.inhibit_ipv4"}}' 2>/dev/null)"; then
+    if [[ "$current_policy" != true ]]; then
+      echo "The existing execution network needs a one-time upgrade." >&2
+      echo "Run ./scripts/dev-local down, then ./scripts/dev-local up. Volumes persist; desktop applications stop." >&2
+      return 1
+    fi
+  fi
+}
+
 prepare() {
   require_command docker
   ensure_config
   load_serve_state
+  case "$command_name" in
+    up|rebuild|execution-rebuild|serve|unserve|pwa-up) require_routed_network ;;
+  esac
 }
 
 case "$command_name" in
@@ -155,7 +170,7 @@ case "$command_name" in
     ;;
   up)
     prepare
-    compose build agent-service execution web
+    compose build agent-service execution egress web
     compose up -d --wait postgres
     compose run --rm --no-deps agent-service node dist/database/migrate.js
     if ! compose run --rm --no-deps agent-service sh -c 'test -s "$PAL_AGENT_AUTH_PATH"'; then
@@ -163,7 +178,7 @@ case "$command_name" in
       echo "  ./scripts/dev-local login" >&2
       exit 2
     fi
-    compose up -d --wait execution agent-service web frontend
+    compose up -d --wait execution egress agent-service web frontend
     echo "Pal development is available at $local_url"
     ;;
   rebuild)
@@ -189,7 +204,7 @@ case "$command_name" in
     ;;
   logs)
     prepare
-    compose logs -f agent-service execution web frontend
+    compose logs -f agent-service execution egress web frontend
     ;;
   status)
     prepare

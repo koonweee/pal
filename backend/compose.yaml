@@ -56,21 +56,49 @@ services:
     environment:
       HOME: /home/pal
       TMPDIR: /home/pal/tmp
-      HTTP_PROXY: http://web:3128
-      HTTPS_PROXY: http://web:3128
-      http_proxy: http://web:3128
-      https_proxy: http://web:3128
-      NO_PROXY: localhost,127.0.0.1,::1
-      no_proxy: localhost,127.0.0.1,::1
-      NODE_USE_ENV_PROXY: "1"
     volumes:
       - agent_home:/home/pal
     networks: [execution]
-    cap_drop: [NET_RAW]
+    cap_drop: [NET_ADMIN, NET_RAW, SYS_ADMIN]
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: "1"
+      net.ipv6.conf.default.disable_ipv6: "1"
     security_opt:
       - seccomp:./desktop/seccomp.json
     healthcheck:
       test: ["CMD", "sh", "-c", "xprop -root _NET_SUPPORTING_WM_CHECK | grep -q 'window id'"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    logging: *app-logging
+    init: true
+    restart: unless-stopped
+
+  egress:
+    build:
+      context: ../network-gateway
+    image: pal-egress-local
+    environment:
+      PAL_EXECUTION_GATEWAY: ${PAL_EXECUTION_NETWORK_PREFIX:-172.30.235}.1
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, NET_RAW]
+    read_only: true
+    tmpfs: [/run]
+    sysctls:
+      net.ipv4.ip_forward: "1"
+      net.ipv4.conf.all.send_redirects: "0"
+      net.ipv4.conf.default.send_redirects: "0"
+      net.ipv6.conf.all.disable_ipv6: "1"
+      net.ipv6.conf.default.disable_ipv6: "1"
+    networks:
+      execution:
+        ipv4_address: ${PAL_EXECUTION_NETWORK_PREFIX:-172.30.235}.2
+        interface_name: palexec0
+      egress:
+        interface_name: palwan0
+        gw_priority: 1
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /run/gateway-ready && nft list table inet pal_gateway >/dev/null"]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -87,14 +115,17 @@ services:
     ports:
       - "127.0.0.1:${PAL_WEB_PORT:-8080}:8080"
     networks:
-      service: {}
+      service:
+        gw_priority: 1
       execution:
         interface_name: palexec0
+    sysctls:
+      net.ipv4.ip_forward: "0"
     depends_on:
       agent-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "sh", "-c", "wget -qO- http://127.0.0.1:8080/health >/dev/null && kill -0 $(cat /run/squid.pid)"]
+      test: ["CMD", "sh", "-c", "wget -qO- http://127.0.0.1:8080/health >/dev/null"]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -125,4 +156,12 @@ volumes:
 networks:
   service:
   execution:
-    internal: true
+    driver_opts:
+      com.docker.network.bridge.inhibit_ipv4: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+    ipam:
+      config:
+        - subnet: ${PAL_EXECUTION_NETWORK_PREFIX:-172.30.235}.0/24
+          gateway: ${PAL_EXECUTION_NETWORK_PREFIX:-172.30.235}.1
+          ip_range: ${PAL_EXECUTION_NETWORK_PREFIX:-172.30.235}.128/25
+  egress:

@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/.."
+export PAL_EXECUTION_NETWORK_PREFIX=172.30.234
 mode="${1:-all}"
 shift "$(( $# > 0 ? 1 : 0 ))"
 case "$mode" in all|browser|desktop|workers|files|mcp) ;; *) echo "Unknown smoke mode: $mode" >&2; exit 2 ;; esac
@@ -12,8 +13,8 @@ compose() {
 }
 cleanup() { compose down --volumes --remove-orphans; }
 trap cleanup EXIT INT TERM
-compose build agent-service execution web
-compose up -d --wait postgres execution
+compose build agent-service execution egress web
+compose up -d --wait postgres execution egress
 compose run --rm --no-deps agent-service node dist/database/migrate.js
 if [ -n "${PAL_SMOKE_AUTH_PATH:-}" ]; then
   compose run --rm --no-deps -T agent-service sh -c 'umask 077; cat > "$PAL_AGENT_AUTH_PATH"' < "$PAL_SMOKE_AUTH_PATH"
@@ -23,8 +24,8 @@ compose exec -T execution sh -eu -c '
   node --input-type=module -e "const response = await fetch(\"https://example.com\"); if (!response.ok) process.exit(1);"
   test "$(curl --max-time 20 -s -o /dev/null -w "%{http_code}" https://example.com)" = 200
   test "$(curl --max-time 5 --noproxy "*" -s -o /dev/null -w "%{http_code}" http://web:8080/api/health)" = 403
-  test "$(curl --max-time 5 -s -o /dev/null -w "%{http_code}" http://agent-service:3000/health)" = 403
-  test "$(curl --max-time 5 -s -o /dev/null -w "%{http_code}" http://100.64.0.1/)" = 403
+  if curl --max-time 3 -fs http://agent-service:3000/health >/dev/null 2>&1; then exit 1; fi
+  if curl --max-time 3 -fs http://100.64.0.1/ >/dev/null 2>&1; then exit 1; fi
   if curl --max-time 3 --noproxy "*" -fs http://host.docker.internal:14080/api/health >/dev/null 2>&1; then exit 1; fi
   test ! -S /var/run/docker.sock
   test ! -d /data/private

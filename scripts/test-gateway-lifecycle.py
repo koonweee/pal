@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Test real Squid/Nginx supervision in disposable Docker containers.
+"""Exercise production egress policy and independent lifecycle in disposable Docker resources.
 
-Run from the repository root after building pal-web-local (scripts/dev-local up):
-  python3 scripts/test-gateway-lifecycle.py [--image pal-web-local:latest]
-Requires Python 3 and Docker. Builds a temporary test image, starts containers with
-no published ports or application volumes, then removes only its own resources.
-The fixture replaces execution-boundary discovery; network policy is out of scope.
+Run from any directory: python3 scripts/test-gateway-lifecycle.py
+Requires Docker Engine >= 28.1, Compose >= 2.36, and free 172.30.233.0/24 + 203.0.114.0/24.
+Use --network-prefix to select another unused private /24. No application volumes
+or published ports are used. All test containers, networks and image tags are removed.
 """
 import argparse
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -16,114 +16,149 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
+PRIVATE = ["10.77.0.3", "100.64.77.3", "169.254.77.3", "192.168.77.3", "172.20.77.3"]
 
 
-def docker(*args, check=True):
-    result = subprocess.run(["docker", *args], capture_output=True, text=True, timeout=90)
+def run(*args, check=True, env=None, timeout=120):
+    result = subprocess.run(args, capture_output=True, text=True, env=env, timeout=timeout)
     if check and result.returncode:
-        raise RuntimeError(f"docker {args[0]} failed: {result.stderr.strip()}")
-    return (result.stdout + result.stderr if args[0] == "logs" else result.stdout).strip()
+        raise RuntimeError(" ".join(args[:3]) + " failed: " + result.stderr[-2000:])
+    return result
 
 
-def state(name):
-    return json.loads(docker("inspect", name))[0]
-
-
-def eventually(check, description, seconds=15):
-    until = time.monotonic() + seconds
-    while time.monotonic() < until:
+def eventually(check, description, seconds=25):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
         if check():
             return
-        time.sleep(0.1)
+        time.sleep(0.2)
     raise AssertionError(description)
-
-
-def ready(name):
-    return state(name)["State"]["Running"] and docker(
-        "exec", name, "sh", "-c",
-        'wget -qO- http://127.0.0.1:8080/health >/dev/null && '
-        'response=$(http_proxy=http://127.0.0.1:3128 wget -S -O /dev/null -T 2 '
-        'http://169.254.169.254/ 2>&1 || true); '
-        'case "$response" in *"403 Forbidden"*) echo ready;; esac', check=False,
-    ) == "ready"
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--image", default="pal-web-local:latest")
+    parser.add_argument("--network-prefix", default="172.30.233")
     args = parser.parse_args()
-    prefix = "pal-gateway-lifecycle-" + uuid.uuid4().hex[:10]
-    image = prefix + ":test"
-    containers = []
+    project = "pal-egress-test-" + uuid.uuid4().hex[:10]
+    router_image, fixture_image = project + ":router", project + ":fixture"
+    env = dict(os.environ, PAL_EXECUTION_NETWORK_PREFIX=args.network_prefix)
+    config = json.loads(run("docker", "compose", "-f", str(ROOT / "backend/compose.yaml"),
+                            "config", "--no-env-resolution", "--format", "json", env=env).stdout)
+    router = config["services"]["egress"]
+    router["image"] = router_image
+    router["stop_grace_period"] = "1s"
+    client = config["services"]["execution"]
+    client = {key: client[key] for key in ["cap_drop", "security_opt", "sysctls", "networks", "init"]}
+    client["security_opt"] = ["seccomp:" + str(ROOT / "backend/desktop/seccomp.json")]
+    client.update(image=fixture_image, command=["sleep", "infinity"], stop_grace_period="1s")
+    transit = config["networks"]["execution"]
+    transit.pop("name", None)
+    with tempfile.TemporaryDirectory(prefix=project) as directory:
+        path = Path(directory)
+        (path / "Dockerfile").write_text(
+            "FROM alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8\nRUN apk add --no-cache python3 py3-aiohttp curl iproute2 nftables util-linux\n"
+            "COPY fixture.py probe.py /test/\n")
+        for filename in ["fixture.py", "probe.py"]:
+            (path / filename).write_bytes((ROOT / "network-gateway/test" / filename).read_bytes())
+        fixture = dict(image=fixture_image, build=str(path), cap_add=["NET_ADMIN"],
+                       command=["python3", "/test/fixture.py"], stop_grace_period="1s",
+                       networks={"egress": {"ipv4_address": "203.0.114.3"}})
+        definition = dict(services=dict(egress=router, execution=client, fixture=fixture), networks={
+            "execution": transit, "egress": {"ipam": {"config": [{"subnet": "203.0.114.0/24"}]}}
+        })
+        compose_file = path / "compose.json"
+        compose_file.write_text(json.dumps(definition))
+        compose = ["docker", "compose", "-p", project, "-f", str(compose_file)]
 
-    def start(suffix, setup="", restart="no"):
-        name = prefix + "-" + suffix
-        containers.append(name)
-        docker("run", "-d", "--init", "--name", name, "--restart", restart,
-               "--entrypoint", "sh", image, "-c", setup + "exec /usr/local/bin/pal-gateway")
-        return name
+        def dc(*command, **kwargs):
+            return run(*compose, *command, **kwargs)
 
-    def exited(name):
-        eventually(lambda: not state(name)["State"]["Running"], name + " did not exit")
-        assert state(name)["State"]["ExitCode"] == 1, name + " did not report failure"
+        def execute(service, *command, **kwargs):
+            return dc("exec", "-T", service, *command, **kwargs)
 
-    try:
-        with tempfile.TemporaryDirectory(prefix=prefix) as directory:
-            context = Path(directory)
-            for filename in ("start.sh", "squid.conf"):
-                (context / filename).write_bytes((ROOT / "frontend/gateway" / filename).read_bytes())
-            (context / "boundary.sh").write_text(
-                "#!/bin/sh\nprintf '# lifecycle fixture\\n' > /etc/nginx/execution-deny.conf\n"
-            )
-            (context / "Dockerfile").write_text(
-                "ARG BASE\nFROM ${BASE}\n"
-                "COPY start.sh /usr/local/bin/pal-gateway\n"
-                "COPY squid.conf /etc/squid/squid.conf\n"
-                "COPY boundary.sh /docker-entrypoint.d/40-execution-boundary.sh\n"
-                "RUN chmod +x /docker-entrypoint.d/40-execution-boundary.sh /usr/local/bin/pal-gateway\n"
-            )
-            docker("build", "--build-arg", "BASE=" + args.image, "-t", image, directory)
+        def state(service):
+            name = dc("ps", "-a", "-q", service).stdout.strip()
+            return json.loads(run("docker", "inspect", name).stdout)[0]
 
-        name = start("restart", "echo 1 > /run/squid.pid; ")
-        eventually(lambda: ready(name), "stale PID startup failed")
-        docker("kill", "--signal", "KILL", name)
-        docker("start", name)
-        eventually(lambda: ready(name), "unclean container restart failed")
-        docker("stop", "--time", "5", name)
-        stop_code = state(name)["State"]["ExitCode"]
-        assert stop_code == 0, f"graceful stop failed: {stop_code}"
-        docker("start", name)
-        eventually(lambda: ready(name), "graceful container restart failed")
-        print("PASS stale PID, unclean restart, graceful stop and restart")
+        def ready():
+            return state("egress")["State"].get("Health", {}).get("Status") == "healthy"
 
-        name = start("squid-exit", restart="on-failure")
-        eventually(lambda: ready(name), "Squid-exit fixture did not start")
-        docker("exec", name, "sh", "-c", 'kill -KILL "$(cat /run/squid.pid)"')
-        eventually(lambda: state(name)["RestartCount"] >= 1 and ready(name),
-                   "Squid death did not restart the gateway")
-        print("PASS Squid death triggers automatic container recovery")
+        def routes():
+            for address in PRIVATE:
+                execute("egress", "ip", "route", "replace", address + "/32", "via", "203.0.114.3", "dev", "palwan0")
 
-        name = start("nginx-exit")
-        eventually(lambda: ready(name), "Nginx-exit fixture did not start")
-        docker("exec", name, "nginx", "-s", "stop")
-        exited(name)
-        print("PASS Nginx death terminates the gateway")
+        def probe():
+            result = json.loads(execute("execution", "python3", "/test/probe.py").stdout)
+            assert all(result[address] == "blocked" for address in PRIVATE), result
+            assert result["203.0.114.3"] == 200 and result["raw_tcp"] == "connected" and result["udp"] == "udp-ok", result
 
-        for service, setup in [
-            ("squid", "echo invalid_directive >> /etc/squid/squid.conf; "),
-            ("nginx", "echo invalid_directive >> /etc/nginx/nginx.conf; "),
-        ]:
-            name = start(service + "-startup", setup)
-            exited(name)
-            print("PASS immediate " + service + " startup failure terminates the gateway")
-    except Exception:
-        for name in containers:
-            print(docker("logs", "--tail", "20", name, check=False), flush=True)
-        raise
-    finally:
-        for name in containers:
-            docker("rm", "-f", name, check=False)
-        docker("image", "rm", image, check=False)
+        def denied(address):
+            result = execute("execution", "curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "1",
+                             "http://" + address + ":8443/", check=False)
+            assert result.returncode != 0, "Unexpected connection to " + address
+
+        def identity():
+            return execute("execution", "sh", "-c", "readlink /proc/self/ns/net; awk '{print $22}' /proc/1/stat").stdout
+
+        try:
+            dc("build", "egress", "fixture", timeout=240)
+            dc("up", "-d", "fixture", "execution")
+            before = identity()
+            denied("203.0.114.3")
+            denied(PRIVATE[0])
+            # Delay the real bootstrap to test execution starting before policy installation.
+            fixture_routes = "; ".join("ip route replace " + address + "/32 via 203.0.114.3 dev palwan0" for address in PRIVATE)
+            router["command"] = ["sh", "-c", fixture_routes + "; sleep 3; exec sh /opt/pal-egress/start.sh"]
+            compose_file.write_text(json.dumps(definition))
+            dc("up", "-d", "egress")
+            denied(PRIVATE[0])
+            eventually(ready, "Router did not become ready")
+            routes()
+            # Prove private fixture reachability from the uplink before asserting denial.
+            for address in PRIVATE:
+                assert execute("egress", "wget", "-T", "2", "-qO-", "http://" + address + ":8443/").stdout == "gateway-fixture-ok"
+            probe()
+            print("PASS proxy-unaware HTTP, raw TCP/UDP, custom ports, private/Tailnet/link-local policy and delayed bootstrap", flush=True)
+            for command in [
+                ["ip", "route", "replace", "default", "via", args.network_prefix + ".2"],
+                ["nft", "flush", "ruleset"],
+                ["python3", "-c", "import socket; socket.socket(socket.AF_PACKET,socket.SOCK_RAW)"],
+                ["unshare", "-Ur", "ip", "route", "replace", "default", "via", args.network_prefix + ".2"],
+                ["unshare", "-Urn", "python3", "-c", "import socket; socket.create_connection(('203.0.114.3',8443),timeout=1)"],
+                ["python3", "-c", "import socket; socket.create_connection(('::ffff:10.77.0.3',8443),timeout=1)"],
+            ]:
+                assert execute("execution", *command, check=False).returncode != 0, command
+            assert execute("execution", "cat", "/proc/sys/net/ipv6/conf/all/disable_ipv6").stdout.strip() == "1"
+            print("PASS root route/rule/raw-socket denial, user namespaces and disabled IPv6", flush=True)
+            dc("stop", "-t", "1", "egress")
+            denied("203.0.114.3")
+            denied(PRIVATE[0])
+            dc("start", "egress")
+            eventually(ready, "Router did not recover after stop")
+            routes()
+            probe()
+            assert identity() == before, "Execution restarted with the router"
+            router.pop("command")
+            compose_file.write_text(json.dumps(definition))
+            dc("up", "-d", "--no-deps", "--force-recreate", "--wait", "egress")
+            routes()
+            probe()
+            assert identity() == before, "Execution changed during router replacement"
+            main_pid = execute("egress", "pgrep", "-x", "sleep").stdout.strip()
+            execute("egress", "kill", "-KILL", main_pid)
+            eventually(lambda: state("egress")["RestartCount"] > 0 and ready(), "Automatic router recovery failed")
+            routes()
+            probe()
+            assert identity() == before, "Execution changed during automatic router recovery"
+            dc("restart", "-t", "1", "execution")
+            probe()
+            print("PASS fail-closed outage, router replacement/automatic recovery, unchanged execution and independent execution restart", flush=True)
+        except Exception:
+            print(dc("logs", "--tail", "15", check=False).stdout, flush=True)
+            raise
+        finally:
+            dc("down", "--volumes", "--remove-orphans", check=False)
+            run("docker", "image", "rm", router_image, fixture_image, check=False)
 
 
 if __name__ == "__main__":
