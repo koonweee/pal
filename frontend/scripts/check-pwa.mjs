@@ -93,6 +93,10 @@ if (!serviceWorker.includes('SKIP_WAITING'))
   throw new Error(
     'Service worker must expose explicit waiting-worker activation.',
   );
+if (!serviceWorkerSource.includes('event.waitUntil(self.skipWaiting())'))
+  throw new Error(
+    'Waiting-worker activation must extend the service-worker message event.',
+  );
 if (!serviceWorkerSource.includes('clientsClaim()'))
   throw new Error('Activated updates must claim open clients.');
 

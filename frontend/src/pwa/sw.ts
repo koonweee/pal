@@ -29,7 +29,7 @@ self.addEventListener('message', (event) => {
     event.data === 'SKIP_WAITING' ||
     (typeof event.data === 'object' && event.data?.type === 'SKIP_WAITING')
   )
-    void self.skipWaiting();
+    event.waitUntil(self.skipWaiting());
 });
 
 clientsClaim();

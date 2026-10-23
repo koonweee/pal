@@ -137,6 +137,7 @@ export function usePwaLifecycle(safety: ReloadSafetyState) {
     }
     reloadOnControl.current = true;
     waiting.postMessage({ type: 'SKIP_WAITING' });
+    window.setTimeout(() => location.reload(), 3000);
   }, [safety]);
 
   const canCountDown =

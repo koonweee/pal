@@ -161,6 +161,54 @@ test('automatic updates wait for safety and then reload', async ({ page }) => {
   }
 });
 
+test('reloads when an activating update does not emit controllerchange', async ({
+  page,
+}) => {
+  const workerPath = resolve('dist/sw.js');
+  const original = await readFile(workerPath, 'utf8');
+  await page.addInitScript(() => {
+    const container = navigator.serviceWorker;
+    Object.defineProperty(container, 'addEventListener', {
+      value(
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: boolean | AddEventListenerOptions,
+      ) {
+        if (type !== 'controllerchange')
+          EventTarget.prototype.addEventListener.call(
+            container,
+            type,
+            listener,
+            options,
+          );
+      },
+    });
+  });
+  try {
+    await page.goto('/');
+    await page.evaluate(async () => navigator.serviceWorker.ready);
+    await page.reload();
+    await writeFile(
+      workerPath,
+      `${original}\n// missing-controllerchange-test\n`,
+    );
+    await page.evaluate(async () => {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.update();
+    });
+
+    const update = page.locator('#pwa-update');
+    await expect(update).toBeVisible();
+    await Promise.all([
+      page.waitForEvent('load'),
+      update.getByRole('button', { name: 'Update', exact: true }).click(),
+    ]);
+    await expect(update).toBeHidden();
+  } finally {
+    await writeFile(workerPath, original);
+  }
+});
+
 test('discovers an update after the event stream reconnects', async ({
   page,
 }) => {
