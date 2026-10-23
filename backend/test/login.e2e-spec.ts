@@ -90,27 +90,26 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
   const selected = vi
     .spyOn(fixture.app.get(BrowserService), 'selectedPage')
     .mockResolvedValue(page);
-  let item:
-    | {
-        id: string;
-        name: string;
-        type: number;
-        login: { username: string; password: string };
-      }
-    | undefined;
+  const items: {
+    id: string;
+    name: string;
+    type: number;
+    login: { username: string; password: string };
+  }[] = [];
   const matching = vi
     .spyOn(vault, 'matching')
-    .mockImplementation(async () => (item ? [structuredClone(item)] : []));
+    .mockImplementation(async () => structuredClone(items));
   const configured = vi.spyOn(vault, 'configured', 'get').mockReturnValue(true);
   const save = vi
     .spyOn(vault, 'save')
     .mockImplementation(async (_origin, input) => {
-      item = {
+      const item = {
         id: randomUUID(),
         name: input.label,
         type: 1,
         login: { username: input.username, password: input.password },
       };
+      items.push(item);
       return item.id;
     });
   const outputs: unknown[] = [];
@@ -206,9 +205,6 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
     expect(save).toHaveBeenCalledTimes(1);
     const fresh = await login.inspect(task.id);
     outputs.push(fresh);
-    expect(
-      (await login.request(task.id, { username: fresh.inputs[0].ref })).status,
-    ).toBe('credentials_available');
     outputs.push(await login.fill(task.id, { username: fresh.inputs[0].ref }));
     expect(await page.locator('#user').inputValue()).toBe(
       'SYNTHETIC_PRIVATE_USER',
@@ -217,10 +213,6 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
       '<form><input id="pass" type="password" autocomplete="current-password"></form><textarea id="comment"></textarea>',
     );
     const passwordStage = await login.inspect(task.id);
-    expect(
-      (await login.request(task.id, { password: passwordStage.inputs[0].ref }))
-        .status,
-    ).toBe('credentials_available');
     expect(
       (await fixture.app.get(LoginRepository).active()).filter(
         (r) => r.taskId === task.id,
@@ -246,8 +238,74 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
     expect(replacement.status).toBe('awaiting_user');
     await login.finish(replacement.requestId!);
     expect(await page.locator('#comment').inputValue()).toBe('');
-    expect(JSON.stringify({ outputs, notifications })).not.toContain(
-      'SYNTHETIC_PRIVATE',
+    // A new flow can collect a different login despite an existing saved match.
+    const otherTask = await fixture.app.get(TasksService).create({
+      title: 'Different account',
+      goal: 'Sign in with new details',
+    });
+    await page.goto('https://example.test/another-login');
+    const otherInspection = await login.inspect(otherTask.id);
+    expect(otherInspection.accounts).toHaveLength(1);
+    const otherRequest = await loginTools(login).secure_entry_request.execute!(
+      { fields: { username: otherInspection.inputs[0].ref } },
+      {
+        requestContext: new RequestContext([
+          [MASTRA_THREAD_ID_KEY, 'pal-task:' + otherTask.id],
+        ]),
+        observe: noopObserve,
+      },
+    );
+    expect(otherRequest.status).toBe('awaiting_user');
+    if (
+      !('requestId' in otherRequest) ||
+      typeof otherRequest.requestId !== 'string'
+    )
+      throw new Error('Expected new login entry');
+    expect(otherRequest.requestId).not.toBe(pending.requestId);
+    await request(fixture.url)
+      .post(`/login/requests/${otherRequest.requestId}/save`)
+      .send({
+        username: 'SYNTHETIC_PRIVATE_OTHER_USER',
+        password: 'SYNTHETIC_PRIVATE_OTHER_PASSWORD',
+        label: 'Other',
+      })
+      .expect(201);
+    expect(items).toHaveLength(2);
+    outputs.push(otherRequest, await login.get(otherRequest.requestId));
+    const otherUsername = await login.inspect(otherTask.id);
+    outputs.push(
+      await login.fill(otherTask.id, { username: otherUsername.inputs[0].ref }),
+    );
+    expect(await page.locator('#user').inputValue()).toBe(
+      'SYNTHETIC_PRIVATE_OTHER_USER',
+    );
+    await page.setContent(
+      '<input type="password" id="pass" autocomplete="current-password">',
+    );
+    const otherPassword = await login.inspect(otherTask.id);
+    outputs.push(
+      await login.fill(otherTask.id, { password: otherPassword.inputs[0].ref }),
+    );
+    expect(await page.locator('#pass').inputValue()).toBe(
+      'SYNTHETIC_PRIVATE_OTHER_PASSWORD',
+    );
+    // Choosing another stored account explicitly changes the selected account.
+    outputs.push(
+      await login.fill(
+        otherTask.id,
+        { password: otherPassword.inputs[0].ref },
+        items[0].id,
+      ),
+    );
+    expect(await page.locator('#pass').inputValue()).toBe(
+      'SYNTHETIC_PRIVATE_PASSWORD',
+    );
+    const originalPassword = await login.inspect(task.id);
+    outputs.push(
+      await login.fill(task.id, { password: originalPassword.inputs[0].ref }),
+    );
+    expect(await page.locator('#pass').inputValue()).toBe(
+      'SYNTHETIC_PRIVATE_PASSWORD',
     );
     await page.setContent(
       '<form>' +
@@ -301,7 +359,7 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
         .locator('input')
         .evaluateAll((es) => es.every((e) => e.value === '')),
     ).toBe(true);
-    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledTimes(2);
     const staleRequest = await login.request(task.id, {
       code: otp.inputs.map((input) => input.ref),
     });
@@ -342,6 +400,9 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
       .send({ code })
       .expect(201);
     expect(await page.locator('#code').inputValue()).toBe(code);
+    expect(JSON.stringify({ outputs, notifications })).not.toContain(
+      'SYNTHETIC_PRIVATE',
+    );
     expect(JSON.stringify({ outputs, notifications })).not.toContain(code);
     const persisted = await fixture.database.pool.query(
       'select row_to_json(r) as value from login_requests r union all select row_to_json(i) from login_inspections i',

@@ -15,17 +15,16 @@ export class LoginService implements OnModuleDestroy {
   private notify?: (taskId: string, text: string) => Promise<void>;
   private timer?: ReturnType<typeof setInterval>;
   private notifying = false;
-  // Remembers which fields the selected account has actually been tried on.
-  // This also retains the account choice across staged forms, without secrets.
-  private readonly attempts = new Map<
+  // Retains the account choice across staged forms, without secrets.
+  private readonly selections = new Map<
     string,
-    { accountId: string; fields: Set<string>; at: number }
+    { accountId: string; at: number }
   >();
-  private attempt(owner: string, origin: string) {
+  private selection(owner: string, origin: string) {
     const key = owner + ':' + origin;
-    const attempt = this.attempts.get(key);
-    if (attempt && Date.now() - attempt.at < 10 * 60_000) return attempt;
-    this.attempts.delete(key);
+    const selection = this.selections.get(key);
+    if (selection && Date.now() - selection.at < 10 * 60_000) return selection;
+    this.selections.delete(key);
     return undefined;
   }
   constructor(
@@ -57,8 +56,8 @@ export class LoginService implements OnModuleDestroy {
           await this.tasks.update(row.taskId, { status: 'needs-input' });
         this.events.publish({ event: 'login.updated', taskId: row.taskId });
       }
-      for (const [key, value] of this.attempts)
-        if (Date.now() - value.at >= 10 * 60_000) this.attempts.delete(key);
+      for (const [key, value] of this.selections)
+        if (Date.now() - value.at >= 10 * 60_000) this.selections.delete(key);
       for (const row of await this.repository.active()) {
         await this.publishCard(row);
         if ((await this.tasks.details(row.taskId)).status === 'completed') {
@@ -172,33 +171,6 @@ export class LoginService implements OnModuleDestroy {
       fields,
     );
     const kind = target.roles.includes('code') ? 'code' : 'credentials';
-    if (kind === 'credentials' && this.vault.configured) {
-      const accounts = await this.vault.matching(target.url);
-      const complete = accounts.filter((account) =>
-        target.roles.every(
-          (field) => !!account.login?.[field as 'username' | 'password'],
-        ),
-      );
-      const tried = this.attempt(this.owner(taskId, workerId), target.origin);
-      if (
-        complete.length &&
-        !(
-          tried &&
-          complete.some((account) => account.id === tried.accountId) &&
-          target.roles.every((field) => tried.fields.has(field))
-        )
-      ) {
-        return {
-          status: 'credentials_available' as const,
-          accounts: complete.map((account) => ({
-            id: account.id,
-            label: account.name,
-          })),
-          message:
-            'The complete login is already stored. Use secure_fill for this stage; no new entry is needed.',
-        };
-      }
-    }
     const row = await this.repository.request(
       taskId,
       target.origin,
@@ -239,7 +211,7 @@ export class LoginService implements OnModuleDestroy {
     const matches = await this.vault.matching(target.url);
     const preferredId =
       accountId ??
-      this.attempt(this.owner(taskId, workerId), target.origin)?.accountId;
+      this.selection(this.owner(taskId, workerId), target.origin)?.accountId;
     const account = accountId
       ? matches.find((item) => item.id === accountId)
       : preferredId && matches.some((item) => item.id === preferredId)
@@ -268,16 +240,8 @@ export class LoginService implements OnModuleDestroy {
         fields,
         account.login!,
       );
-      const previous = this.attempt(
-        this.owner(taskId, workerId),
-        target.origin,
-      );
-      this.attempts.set(this.owner(taskId, workerId) + ':' + target.origin, {
+      this.selections.set(this.owner(taskId, workerId) + ':' + target.origin, {
         accountId: account.id,
-        fields: new Set([
-          ...(previous?.accountId === account.id ? previous.fields : []),
-          ...target.roles,
-        ]),
         at: Date.now(),
       });
       return result;
@@ -352,11 +316,10 @@ export class LoginService implements OnModuleDestroy {
       input ? (row) => this.vault.save(row.origin, input, row.id) : undefined,
     );
     if (input && row.status === 'saved' && row.accountId) {
-      this.attempts.set(
+      this.selections.set(
         this.owner(row.taskId, row.workerId ?? undefined) + ':' + row.origin,
         {
           accountId: row.accountId,
-          fields: new Set(),
           at: Date.now(),
         },
       );
