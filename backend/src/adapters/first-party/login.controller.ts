@@ -18,7 +18,13 @@ import {
   ApiTags,
   ApiProduces,
 } from '@nestjs/swagger';
-import { IsOptional, IsString, Length, IsUUID } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  Length,
+  IsUUID,
+  IsBoolean,
+} from 'class-validator';
 import type { Response } from 'express';
 import { LoginService } from '../../login/login.service.js';
 
@@ -36,6 +42,7 @@ class LoginRequestDto {
   status!: string;
   @ApiProperty({ nullable: true, type: String }) inspectionId!: string | null;
   @ApiProperty() configured!: boolean;
+  @ApiProperty() keepMeSignedIn!: boolean;
   @ApiProperty({ type: [LoginAccountDto] }) accounts!: LoginAccountDto[];
 }
 export class LoginUpdatedEventDto {
@@ -56,6 +63,7 @@ class SaveLoginDto {
   @Length(1, 80)
   label!: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() accountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() keepMeSignedIn?: boolean;
 }
 class SubmitCodeDto {
   @ApiProperty({ minLength: 1, maxLength: 64, writeOnly: true })

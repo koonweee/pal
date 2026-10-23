@@ -1,14 +1,25 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, lt, ne, isNull, inArray } from 'drizzle-orm';
-import { DatabaseService } from '../database/database.service.js';
-import { loginInspections, loginRequests } from '../database/schema.js';
+import { and, desc, eq, lt, gt, ne, isNull, inArray } from 'drizzle-orm';
+import {
+  DatabaseService,
+  type Executor,
+} from '../database/database.service.js';
+import {
+  loginInspections,
+  loginRequests,
+  loginSites,
+  loginFlows,
+} from '../database/schema.js';
 import { ApplicationError } from '../application/contracts/errors.js';
 import {
   StaleSecureFieldsError,
   type LoginInput,
   type SecureFields,
 } from './login-fields.js';
+
+export const loginOwner = (taskId: string, workerId?: string) =>
+  taskId + ':' + (workerId ?? 'task');
 
 export type LoginRequest = typeof loginRequests.$inferSelect;
 const active = ['pending', 'updating', 'failed'] as const;
@@ -25,8 +36,25 @@ export class LoginRepository {
     fields?: SecureFields,
     workerId?: string,
     inspectionId?: string,
+    keepMeSignedIn?: boolean,
   ): Promise<LoginRequest> {
     return this.database.transaction(async (tx) => {
+      const keep =
+        keepMeSignedIn ??
+        (await this.site(origin, tx))?.keepMeSignedIn ??
+        false;
+      if (keepMeSignedIn !== undefined) {
+        await this.keep(origin, keepMeSignedIn, tx);
+        await tx
+          .update(loginFlows)
+          .set({ keepMeSignedIn })
+          .where(
+            and(
+              eq(loginFlows.owner, loginOwner(taskId, workerId)),
+              eq(loginFlows.origin, origin),
+            ),
+          );
+      }
       const id = randomUUID();
       const [created] = await tx
         .insert(loginRequests)
@@ -39,6 +67,7 @@ export class LoginRepository {
           fields,
           workerId,
           inspectionId,
+          keepMeSignedIn: keep,
         })
         .onConflictDoNothing()
         .returning();
@@ -69,8 +98,17 @@ export class LoginRepository {
         existing.status === 'pending' &&
         (kind === 'credentials' ||
           JSON.stringify(existing.fields) === JSON.stringify(fields))
-      )
+      ) {
+        if (keepMeSignedIn !== undefined) {
+          const [updated] = await tx
+            .update(loginRequests)
+            .set({ keepMeSignedIn })
+            .where(eq(loginRequests.id, existing.id))
+            .returning();
+          return updated;
+        }
         return existing;
+      }
       // New bindings get a new ID: an old submitted draft cannot be retargeted.
       await tx
         .update(loginRequests)
@@ -85,6 +123,7 @@ export class LoginRepository {
           fields,
           workerId,
           inspectionId,
+          keepMeSignedIn: keep,
           cardId: existing.cardId,
           recoveryAttempts: existing.recoveryAttempts,
           createdAt: new Date(
@@ -150,6 +189,7 @@ export class LoginRepository {
     id: string,
     kind?: 'credentials' | 'code',
     submit?: (row: LoginRequest) => Promise<string | void>,
+    keepMeSignedIn?: boolean,
   ) {
     return this.database.transaction(async (tx) => {
       const [row] = await tx
@@ -188,10 +228,22 @@ export class LoginRepository {
               : 'saved'
             : 'cancelled',
           accountId: accountId ?? null,
+          keepMeSignedIn: keepMeSignedIn ?? row.keepMeSignedIn,
           notifiedAt: null,
         })
         .where(eq(loginRequests.id, id))
         .returning();
+      if (submit && row.kind === 'credentials' && accountId) {
+        await this.select(
+          row.taskId,
+          row.workerId ?? undefined,
+          row.origin,
+          accountId,
+          updated.keepMeSignedIn,
+          tx,
+        );
+        await this.keep(row.origin, updated.keepMeSignedIn, tx);
+      }
       return updated;
     });
   }
@@ -229,6 +281,113 @@ export class LoginRepository {
       return updated;
     });
   }
+  async site(origin: string, db: Executor = this.database.db) {
+    const [row] = await db
+      .select()
+      .from(loginSites)
+      .where(eq(loginSites.origin, origin));
+    return row;
+  }
+  async keep(
+    origin: string,
+    keepMeSignedIn: boolean,
+    db: Executor = this.database.db,
+  ) {
+    await db
+      .insert(loginSites)
+      .values({ origin, keepMeSignedIn })
+      .onConflictDoUpdate({
+        target: loginSites.origin,
+        set: { keepMeSignedIn },
+      });
+  }
+  async selection(taskId: string, workerId?: string) {
+    const [row] = await this.database.db
+      .select()
+      .from(loginFlows)
+      .where(
+        and(
+          eq(loginFlows.owner, loginOwner(taskId, workerId)),
+          gt(loginFlows.updatedAt, new Date(Date.now() - 24 * 3600_000)),
+        ),
+      );
+    return row;
+  }
+  async select(
+    taskId: string,
+    workerId: string | undefined,
+    origin: string,
+    accountId: string,
+    keepMeSignedIn: boolean,
+    db: Executor = this.database.db,
+  ) {
+    const row = {
+      owner: loginOwner(taskId, workerId),
+      taskId,
+      origin,
+      accountId,
+      keepMeSignedIn,
+      updatedAt: new Date(),
+      confirmedAt: null,
+    };
+    await db
+      .insert(loginFlows)
+      .values(row)
+      .onConflictDoUpdate({ target: loginFlows.owner, set: row });
+  }
+  async preference(
+    taskId: string,
+    workerId: string | undefined,
+    origin: string,
+    keepMeSignedIn: boolean,
+  ) {
+    await this.database.transaction(async (tx) => {
+      await this.keep(origin, keepMeSignedIn, tx);
+      await tx
+        .update(loginFlows)
+        .set({ keepMeSignedIn })
+        .where(
+          and(
+            eq(loginFlows.owner, loginOwner(taskId, workerId)),
+            eq(loginFlows.origin, origin),
+          ),
+        );
+    });
+  }
+  async complete(taskId: string, workerId?: string) {
+    return this.database.transaction(async (tx) => {
+      const [flow] = await tx
+        .select()
+        .from(loginFlows)
+        .where(
+          and(
+            eq(loginFlows.owner, loginOwner(taskId, workerId)),
+            gt(loginFlows.updatedAt, new Date(Date.now() - 24 * 3600_000)),
+          ),
+        )
+        .for('update');
+      if (!flow?.accountId) return undefined;
+      const keep = flow.keepMeSignedIn;
+      if (!flow.confirmedAt) {
+        await tx
+          .insert(loginSites)
+          .values({
+            origin: flow.origin,
+            lastAccountId: flow.accountId,
+            keepMeSignedIn: keep,
+          })
+          .onConflictDoUpdate({
+            target: loginSites.origin,
+            set: { lastAccountId: flow.accountId },
+          });
+        await tx
+          .update(loginFlows)
+          .set({ confirmedAt: new Date(), keepMeSignedIn: keep })
+          .where(eq(loginFlows.owner, flow.owner));
+      }
+      return { origin: flow.origin, keepMeSignedIn: keep };
+    });
+  }
   async notifications() {
     return this.database.db
       .select()
@@ -243,6 +402,9 @@ export class LoginRepository {
   }
   async cleanup() {
     const cutoff = new Date(Date.now() - 24 * 3600_000);
+    await this.database.db
+      .delete(loginFlows)
+      .where(lt(loginFlows.updatedAt, cutoff));
     await this.database.db
       .delete(loginInspections)
       .where(lt(loginInspections.createdAt, cutoff));

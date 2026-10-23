@@ -1,6 +1,7 @@
 import {
   Alert,
   Button,
+  Checkbox,
   Collapse,
   Group,
   Loader,
@@ -199,6 +200,7 @@ function SecureEntryForm({
   const [code, setCode] = useState('');
   const [label, setLabel] = useState('Personal');
   const [accountId, setAccountId] = useState<string | null>(null);
+  const [keepMeSignedIn, setKeepMeSignedIn] = useState(request.keepMeSignedIn);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const { beginCredentialEditing } = useReloadSafety();
@@ -215,6 +217,7 @@ function SecureEntryForm({
               username,
               password,
               label,
+              keepMeSignedIn,
               ...(accountId ? { accountId } : {}),
             });
       setUsername('');
@@ -338,6 +341,17 @@ function SecureEntryForm({
                 disabled={busy}
               />
             </>
+          )}
+          {!codeEntry && (
+            <Checkbox
+              className="secure-entry-remember"
+              label="Keep me signed in"
+              checked={keepMeSignedIn}
+              onChange={(event) =>
+                setKeepMeSignedIn(event.currentTarget.checked)
+              }
+              disabled={busy}
+            />
           )}
           {codeEntry && (
             <Text size="xs" c="dimmed" className="secure-entry-note">

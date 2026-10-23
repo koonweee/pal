@@ -63,6 +63,11 @@ export function loginTools(service: LoginService) {
       { required: ['code'] },
     ],
   };
+  const keepSchema: Parameters<typeof jsonSchema>[0] = {
+    type: ['boolean', 'null'],
+    description:
+      'Only supply when the user explicitly requests whether to stay signed in; otherwise reuse the stored website preference.',
+  };
   return {
     login_inspect: createTool({
       id: 'login_inspect',
@@ -98,36 +103,46 @@ export function loginTools(service: LoginService) {
       id: 'secure_entry_request',
       description:
         'Show one secure-entry card in Main and the owning Task conversation. Login entry collects the complete username/password once and saves it; use secure_fill for later stages. Verification entry collects only a code and fills it immediately without saving. Pass either username/password input refs or an ordered code-ref array from login_inspect. The selected roles determine the PWA form. Opens entry even when matching accounts exist; use it for a different login or corrected credentials. Tell the user to use the inline form. Yield while awaiting input; workers report to their parent Task. The owning Task receives completion notification.',
-      inputSchema: jsonSchema<{ fields: FieldInput }>({
+      inputSchema: jsonSchema<{
+        fields: FieldInput;
+        keepMeSignedIn?: boolean | null;
+      }>({
         type: 'object',
-        properties: { fields: fieldsSchema },
+        properties: { fields: fieldsSchema, keepMeSignedIn: keepSchema },
         required: ['fields'],
         additionalProperties: false,
       }),
-      execute: ({ fields }, context) => {
+      execute: ({ fields, keepMeSignedIn }, context) => {
         const { taskId, workerId } = identity(context);
         return safe(() =>
-          service.request(taskId, normalizeFields(fields), workerId),
+          service.request(
+            taskId,
+            normalizeFields(fields),
+            workerId,
+            keepMeSignedIn ?? undefined,
+          ),
         );
       },
     }),
     secure_fill: createTool({
       id: 'secure_fill',
       description:
-        'Assign username/password roles to inspected input refs in fields and fill from the matching vault account without seeing values. Password refs must identify password inputs. For code, pass an ordered array of refs; a single input uses a one-element array. Reuse the same saved account across username/password stages; both credentials were collected together. Omit accountId when one account matches or this browser flow already selected it. For verification codes, input_required means call secure_entry_request. Does not click submit or prove login success.',
+        'Assign username/password roles to inspected input refs in fields and fill from the matching vault account without seeing values. Password refs must identify password inputs. For code, pass an ordered array of refs; a single input uses a one-element array. Reuse the same saved account across username/password stages; both credentials were collected together. Omit accountId by default: reuses the current flow, then last successful matching account, then sole match. Supply accountId only for an explicit user account choice. For verification codes, input_required means call secure_entry_request. Returns the Keep me signed in preference for you to apply through website controls. Does not click submit or prove login success; call login_session with action complete after verifying authentication.',
       inputSchema: jsonSchema<{
         fields: FieldInput;
         accountId?: string | null;
+        keepMeSignedIn?: boolean | null;
       }>({
         type: 'object',
         properties: {
           fields: fieldsSchema,
           accountId: { type: ['string', 'null'] },
+          keepMeSignedIn: keepSchema,
         },
         required: ['fields'],
         additionalProperties: false,
       }),
-      execute: ({ fields, accountId }, context) => {
+      execute: ({ fields, accountId, keepMeSignedIn }, context) => {
         const { taskId, workerId } = identity(context);
         return safe(() =>
           service.fill(
@@ -135,6 +150,35 @@ export function loginTools(service: LoginService) {
             normalizeFields(fields),
             accountId ?? undefined,
             workerId,
+            keepMeSignedIn ?? undefined,
+          ),
+        );
+      },
+    }),
+    login_session: createTool({
+      id: 'login_session',
+      description:
+        "Use action complete only after verifying the website accepted this flow's login, including verification challenges; remembers its account for future logins. Saving/filling alone is not success. Use action preference with keepMeSignedIn for an explicit user instruction, including an existing authenticated session; this never marks an account successful. Preferences apply to this caller's login flow, or the selected HTTPS page if there is no flow. Inspect website persistence controls and honor the preference yourself; this tool neither operates them nor guarantees session persistence.",
+      inputSchema: jsonSchema<{
+        action: 'complete' | 'preference';
+        keepMeSignedIn?: boolean | null;
+      }>({
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['complete', 'preference'] },
+          keepMeSignedIn: keepSchema,
+        },
+        required: ['action'],
+        additionalProperties: false,
+      }),
+      execute: ({ action, keepMeSignedIn }, context) => {
+        const { taskId, workerId } = identity(context);
+        return safe(() =>
+          service.session(
+            taskId,
+            action,
+            workerId,
+            keepMeSignedIn ?? undefined,
           ),
         );
       },

@@ -589,6 +589,7 @@ export interface components {
       configured: boolean;
       id: string;
       inspectionId: string | null;
+      keepMeSignedIn: boolean;
       /** @enum {string} */
       kind: 'credentials' | 'code';
       origin: string;
@@ -797,6 +798,7 @@ export interface components {
     };
     SaveLoginDto: {
       accountId?: string;
+      keepMeSignedIn?: boolean;
       label: string;
       password: string;
       username: string;

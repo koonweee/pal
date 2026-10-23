@@ -63,6 +63,7 @@ export async function startTestApp(
     'postgresql://pal:pal@localhost:5433/pal_test';
   if (!new URL(url).pathname.endsWith('_test'))
     throw new Error('Test database name must end in _test');
+  const pendingReplies = new Set<Promise<void>>();
   const uploads = await mkdtemp(join(tmpdir(), 'pal-test-'));
   process.env.DATABASE_URL = url;
   process.env.PAL_UPLOAD_DIR = uploads;
@@ -157,15 +158,18 @@ export async function startTestApp(
           : {
               async submit(message: UserVisibleMessage) {
                 activity.setWorking(true);
-                void setTimeout(30).then(async () => {
-                  await chat.publish({
-                    role: 'assistant',
-                    text: `Test reply: ${message.text}`,
-                    taskId: message.taskId ?? undefined,
-                    phase: 'final_answer',
-                  });
-                  activity.setWorking(false);
-                });
+                const reply = setTimeout(30)
+                  .then(async () => {
+                    await chat.publish({
+                      role: 'assistant',
+                      text: `Test reply: ${message.text}`,
+                      taskId: message.taskId ?? undefined,
+                      phase: 'final_answer',
+                    });
+                    activity.setWorking(false);
+                  })
+                  .finally(() => pendingReplies.delete(reply));
+                pendingReplies.add(reply);
               },
             },
     })
@@ -173,9 +177,11 @@ export async function startTestApp(
   const database = module.get(DatabaseService);
   await migrate(database.db, { migrationsFolder: './migrations' });
   const reset = async () => {
+    // Detached fake replies must settle before truncation or connection shutdown.
+    await Promise.all(pendingReplies);
     module.get(AgentActivityService).reset();
     await database.pool.query(
-      'TRUNCATE web_push_installations, instance_settings, native_installations, notification_intents, preference_revisions, preferences, message_attachments, messages, tasks, attachments, idempotency, mcp_servers RESTART IDENTITY CASCADE',
+      'TRUNCATE login_sites, web_push_installations, instance_settings, native_installations, notification_intents, preference_revisions, preferences, message_attachments, messages, tasks, attachments, idempotency, mcp_servers RESTART IDENTITY CASCADE',
     );
   };
   await reset();
@@ -190,6 +196,7 @@ export async function startTestApp(
     reset,
     url: await app.getUrl(),
     close: async () => {
+      await Promise.all(pendingReplies);
       await app.close();
       await rm(uploads, { recursive: true, force: true });
     },

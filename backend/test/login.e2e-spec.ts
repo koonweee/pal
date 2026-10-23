@@ -420,6 +420,211 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
   }
 });
 
+it('remembers verified accounts and session intent across callers and restarts without promoting saves or fills', async () => {
+  const browser = await chromium.launch({
+    channel: 'chrome',
+    executablePath: process.env.TEST_CHROMIUM_PATH,
+    headless: true,
+  });
+  const page = await browser.newPage();
+  await page.route('https://accounts.example.test/**', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<input autocomplete="username"><input type="password" autocomplete="current-password">',
+    }),
+  );
+  await page.route('https://store.example.test/**', (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<p>Signed in</p>' }),
+  );
+  await page.goto('https://accounts.example.test/login');
+  const browserService = fixture.app.get(BrowserService);
+  const selected = vi
+    .spyOn(browserService, 'selectedPage')
+    .mockResolvedValue(page);
+  const vault = fixture.app.get(BitwardenService);
+  const repository = fixture.app.get(LoginRepository);
+  const original = fixture.app.get(LoginService);
+  const tasks = fixture.app.get(TasksService);
+  const [a, b, c, d] = await Promise.all(
+    ['A', 'B', 'C', 'D'].map((title) =>
+      tasks.create({ title, goal: 'Verify login defaults' }),
+    ),
+  );
+  const items = ['Personal', 'Work'].map((name) => ({
+    id: randomUUID(),
+    name,
+    type: 1,
+    login: {
+      username: 'PRIVATE_LOGIN_' + name,
+      password: 'PRIVATE_PASSWORD_' + name,
+    },
+  }));
+  const configured = vi.spyOn(vault, 'configured', 'get').mockReturnValue(true);
+  const matching = vi
+    .spyOn(vault, 'matching')
+    .mockImplementation(async () => structuredClone(items));
+  const save = vi
+    .spyOn(vault, 'save')
+    .mockImplementation(async (_origin, input) => {
+      const item = {
+        id: randomUUID(),
+        name: input.label,
+        type: 1,
+        login: { username: input.username, password: input.password },
+      };
+      items.push(item);
+      return item.id;
+    });
+  const restart = () =>
+    new LoginService(
+      browserService,
+      vault,
+      repository,
+      fixture.app.get(EventsService),
+      tasks,
+      fixture.app.get(ChatService),
+    );
+  const fields = (
+    inspection: Awaited<ReturnType<LoginService['inspect']>>,
+  ) => ({
+    username: inspection.inputs[0].ref,
+    password: inspection.inputs[1].ref,
+  });
+  const origin = 'https://accounts.example.test';
+  const outputs: unknown[] = [];
+  try {
+    await expect(original.session(a.id, 'preference')).rejects.toMatchObject({
+      code: 'invalid_input',
+    });
+    const first = fields(await original.inspect(a.id));
+    await expect(original.fill(a.id, first)).rejects.toMatchObject({
+      code: 'conflict',
+    });
+    outputs.push(
+      await original.fill(a.id, first, items[0].id, undefined, true),
+    );
+    expect((await repository.site(origin))?.lastAccountId).toBeNull();
+    // Success is an explicit agent report after website verification, independent of save/fill.
+    outputs.push(
+      await loginTools(original).login_session.execute!(
+        { action: 'complete', keepMeSignedIn: null },
+        {
+          requestContext: new RequestContext([
+            [MASTRA_THREAD_ID_KEY, 'pal-task:' + a.id],
+          ]),
+          observe: noopObserve,
+        },
+      ),
+    );
+    expect(await repository.site(origin)).toMatchObject({
+      lastAccountId: items[0].id,
+      keepMeSignedIn: true,
+    });
+    const restarted = restart();
+    const second = fields(await restarted.inspect(b.id));
+    expect(await restarted.fill(b.id, second)).toMatchObject({
+      accountId: items[0].id,
+      keepMeSignedIn: true,
+    });
+    expect(
+      await restarted.fill(b.id, second, items[1].id, undefined, false),
+    ).toMatchObject({ accountId: items[1].id, keepMeSignedIn: false });
+    expect((await repository.site(origin))?.lastAccountId).toBe(items[0].id);
+    await restarted.session(b.id, 'preference', undefined, true);
+    expect((await repository.site(origin))?.lastAccountId).toBe(items[0].id);
+    await restarted.session(b.id, 'preference', undefined, false);
+    await original.session(a.id, 'preference', undefined, true);
+    // Confirming an older intent must not overwrite a more recent preference choice.
+    outputs.push(await restarted.session(b.id, 'complete'));
+    await original.session(a.id, 'complete'); // A duplicate old report cannot replace the newer B choice.
+    expect(await repository.site(origin)).toMatchObject({
+      lastAccountId: items[1].id,
+      keepMeSignedIn: true,
+    });
+    const third = fields(await restarted.inspect(c.id));
+    expect(await restarted.fill(c.id, third)).toMatchObject({
+      accountId: items[1].id,
+    });
+    const entry = await restarted.request(c.id, third, undefined, true);
+    expect((await restarted.get(entry.requestId)).keepMeSignedIn).toBe(true);
+    // A private checkbox submission can override the preference supplied in user text.
+    await request(fixture.url)
+      .post(`/login/requests/${entry.requestId}/save`)
+      .send({
+        username: 'PRIVATE_LOGIN_NEW',
+        password: 'PRIVATE_PASSWORD_NEW',
+        label: 'New',
+        keepMeSignedIn: 'yes',
+      })
+      .expect(400);
+    await request(fixture.url)
+      .post(`/login/requests/${entry.requestId}/save`)
+      .send({
+        username: 'PRIVATE_LOGIN_NEW',
+        password: 'PRIVATE_PASSWORD_NEW',
+        label: 'New',
+        keepMeSignedIn: false,
+      })
+      .expect(201);
+    expect((await repository.site(origin))?.lastAccountId).toBe(items[1].id);
+    const resumed = restart();
+    const newFields = fields(await resumed.inspect(c.id));
+    expect(await resumed.fill(c.id, newFields)).toMatchObject({
+      accountId: items[2].id,
+      keepMeSignedIn: false,
+    });
+    expect(await page.locator('input[type=password]').inputValue()).toBe(
+      'PRIVATE_PASSWORD_NEW',
+    );
+    // Redirecting back to the merchant still confirms the original credential origin.
+    await page.goto('https://store.example.test/account');
+    outputs.push(await resumed.session(c.id, 'complete'));
+    await restarted.session(b.id, 'complete');
+    expect((await repository.site(origin))?.lastAccountId).toBe(items[2].id);
+    await resumed.session(c.id, 'preference', undefined, true); // Explicit text also updates the remembered intent.
+    expect((await repository.site(origin))?.keepMeSignedIn).toBe(true);
+    await page.goto('https://accounts.example.test/login');
+    const fourth = fields(await resumed.inspect(d.id));
+    // A removed or nonmatching remembered account must not bypass current vault matching.
+    matching.mockImplementation(async () => structuredClone(items.slice(0, 2)));
+    await expect(resumed.fill(d.id, fourth)).rejects.toMatchObject({
+      code: 'conflict',
+    });
+    matching.mockImplementation(async () => [structuredClone(items[0])]);
+    expect(await resumed.fill(d.id, fourth)).toMatchObject({
+      accountId: items[0].id,
+      keepMeSignedIn: true,
+    });
+    expect((await repository.site(origin))?.lastAccountId).toBe(items[2].id);
+    await expect(resumed.fill(d.id, fourth, items[2].id)).rejects.toMatchObject(
+      { code: 'conflict' },
+    );
+    // A pre-existing authenticated session can remember text intent without inventing an account choice.
+    await page.goto('https://store.example.test/account');
+    const existing = await tasks.create({
+      title: 'Existing session',
+      goal: 'Keep the session',
+    });
+    await resumed.session(existing.id, 'preference', undefined, true);
+    expect(await repository.site('https://store.example.test')).toMatchObject({
+      lastAccountId: null,
+      keepMeSignedIn: true,
+    });
+    const persisted = await fixture.database.pool.query(
+      'select row_to_json(s) as value from login_sites s union all select row_to_json(f) from login_flows f',
+    );
+    expect(JSON.stringify({ outputs, persisted: persisted.rows })).not.toMatch(
+      /PRIVATE_LOGIN|PRIVATE_PASSWORD/,
+    );
+  } finally {
+    selected.mockRestore();
+    configured.mockRestore();
+    matching.mockRestore();
+    save.mockRestore();
+    await browser.close();
+  }
+});
+
 it('recovers code requests after restart, bounds attempts, times out, and resumes only after explicit retry', async () => {
   const browser = await chromium.launch({
     channel: 'chrome',

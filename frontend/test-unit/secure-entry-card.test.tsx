@@ -57,6 +57,7 @@ const pending: LoginRequest = {
   status: 'pending',
   inspectionId: 'bound-preview',
   configured: true,
+  keepMeSignedIn: true,
   accounts: [],
 };
 function Safety() {
@@ -92,6 +93,10 @@ test('submits credentials privately, preserves drafts on updates and reconnect, 
   const { rerender } = render(view());
   expect(await screen.findByLabelText(/^Password/)).toHaveValue('');
   expect(screen.getByText('Reload blocked')).toBeInTheDocument();
+  expect(
+    screen.getByRole('checkbox', { name: 'Keep me signed in' }),
+  ).toBeChecked();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Keep me signed in' }));
   expect(screen.queryByRole('img')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Show browser preview' }));
   expect(await screen.findByRole('img')).toHaveAttribute(
@@ -107,6 +112,9 @@ test('submits credentials privately, preserves drafts on updates and reconnect, 
   rerender(view(1, ['request'], false));
   await waitFor(() => expect(getLoginRequest).toHaveBeenCalledTimes(2));
   expect(screen.getByLabelText(/^Password/)).toHaveValue('dummy-password');
+  expect(
+    screen.getByRole('checkbox', { name: 'Keep me signed in' }),
+  ).not.toBeChecked();
   rerender(view(1, ['request'], true));
   await waitFor(() => expect(getLoginRequest).toHaveBeenCalledTimes(3));
   vi.mocked(getLoginRequest).mockResolvedValue({
@@ -120,6 +128,7 @@ test('submits credentials privately, preserves drafts on updates and reconnect, 
       username: 'dummy-user',
       password: 'dummy-password',
       label: 'Personal',
+      keepMeSignedIn: false,
     }),
   );
   expect(await screen.findByText('Login saved')).toBeInTheDocument();
@@ -140,7 +149,11 @@ test('replaces stale code forms, discards codes, and offers retry only after aut
     return { id: 'request', status: 'updating' };
   });
   const { rerender } = render(view());
-  fireEvent.change(await screen.findByLabelText(/^Code/), {
+  await screen.findByLabelText(/^Code/);
+  expect(
+    screen.queryByRole('checkbox', { name: 'Keep me signed in' }),
+  ).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText(/^Code/), {
     target: { value: '731946' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Fill code' }));

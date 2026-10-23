@@ -420,6 +420,9 @@
             "nullable": true,
             "type": "string"
           },
+          "keepMeSignedIn": {
+            "type": "boolean"
+          },
           "kind": {
             "enum": [
               "credentials",
@@ -449,6 +452,7 @@
           "status",
           "inspectionId",
           "configured",
+          "keepMeSignedIn",
           "accounts"
         ],
         "type": "object"
@@ -1211,6 +1215,9 @@
         "properties": {
           "accountId": {
             "type": "string"
+          },
+          "keepMeSignedIn": {
+            "type": "boolean"
           },
           "label": {
             "maxLength": 80,

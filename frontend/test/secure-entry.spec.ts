@@ -39,6 +39,7 @@ for (const width of [900, 390]) {
       status: 'pending',
       inspectionId: 'login-preview',
       configured: true,
+      keepMeSignedIn: true,
       accounts: [],
     });
     const card = (id: string): Message => ({
@@ -88,6 +89,7 @@ for (const width of [900, 390]) {
           username: 'dummy-user',
           password: 'dummy-password',
           label: 'Personal',
+          keepMeSignedIn: true,
         });
         credentialSubmissions++;
         rows.set(root, { ...current, status: 'saved', inspectionId: null });
@@ -160,6 +162,9 @@ for (const width of [900, 390]) {
       };
       const password = page.getByLabel(/^Password/);
       await expect(password).toBeVisible();
+      await expect(
+        page.getByRole('checkbox', { name: 'Keep me signed in' }),
+      ).toBeChecked();
       await assertCardLayout();
       await expect(page.getByRole('button', { name: /Logins/ })).toHaveCount(0);
       await page.getByRole('button', { name: 'Show browser preview' }).click();
@@ -180,6 +185,9 @@ for (const width of [900, 390]) {
         ).toBeGreaterThanOrEqual(44);
         await page.setViewportSize({ width: 600, height: 900 });
         await expect(password).toHaveValue('dummy-password');
+        await expect(
+          page.getByRole('checkbox', { name: 'Keep me signed in' }),
+        ).toBeChecked();
         await page.setViewportSize({ width, height: 900 });
       }
       await page.getByRole('button', { name: 'Save login' }).click();
@@ -213,6 +221,10 @@ for (const width of [900, 390]) {
       });
       backend.publish(card('code-root'));
       const code = page.getByLabel(/^Code/);
+      await expect(code).toBeVisible();
+      await expect(
+        page.getByRole('checkbox', { name: 'Keep me signed in' }),
+      ).toHaveCount(0);
       await assertCardLayout();
       await code.fill('731946');
       await page.getByRole('button', { name: 'Fill code' }).click();

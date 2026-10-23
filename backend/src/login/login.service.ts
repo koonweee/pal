@@ -5,7 +5,11 @@ import { BrowserService } from '../browser/browser.service.js';
 import { EventsService } from '../events/events.service.js';
 import { ApplicationError } from '../application/contracts/errors.js';
 import { BitwardenService, type CredentialInput } from './bitwarden.service.js';
-import { LoginRepository, type LoginRequest } from './login.repository.js';
+import {
+  LoginRepository,
+  loginOwner,
+  type LoginRequest,
+} from './login.repository.js';
 import { LoginBrowser } from './login-browser.js';
 import { StaleSecureFieldsError, type SecureFields } from './login-fields.js';
 
@@ -15,18 +19,6 @@ export class LoginService implements OnModuleDestroy {
   private notify?: (taskId: string, text: string) => Promise<void>;
   private timer?: ReturnType<typeof setInterval>;
   private notifying = false;
-  // Retains the account choice across staged forms, without secrets.
-  private readonly selections = new Map<
-    string,
-    { accountId: string; at: number }
-  >();
-  private selection(owner: string, origin: string) {
-    const key = owner + ':' + origin;
-    const selection = this.selections.get(key);
-    if (selection && Date.now() - selection.at < 10 * 60_000) return selection;
-    this.selections.delete(key);
-    return undefined;
-  }
   constructor(
     @Inject(BrowserService) private readonly browser: BrowserService,
     @Inject(BitwardenService) private readonly vault: BitwardenService,
@@ -35,9 +27,6 @@ export class LoginService implements OnModuleDestroy {
     @Inject(TasksService) private readonly tasks: TasksService,
     @Inject(ChatService) private readonly chat: ChatService,
   ) {}
-  private owner(taskId: string, workerId?: string) {
-    return taskId + ':' + (workerId ?? 'task');
-  }
   bindNotifier(notify: (taskId: string, text: string) => Promise<void>) {
     this.notify = notify;
     if (this.timer) clearInterval(this.timer);
@@ -56,8 +45,6 @@ export class LoginService implements OnModuleDestroy {
           await this.tasks.update(row.taskId, { status: 'needs-input' });
         this.events.publish({ event: 'login.updated', taskId: row.taskId });
       }
-      for (const [key, value] of this.selections)
-        if (Date.now() - value.at >= 10 * 60_000) this.selections.delete(key);
       for (const row of await this.repository.active()) {
         await this.publishCard(row);
         if ((await this.tasks.details(row.taskId)).status === 'completed') {
@@ -70,7 +57,7 @@ export class LoginService implements OnModuleDestroy {
           row.status === 'pending' &&
           row.kind === 'code' &&
           !this.inspector.live(
-            this.owner(row.taskId, row.workerId ?? undefined),
+            loginOwner(row.taskId, row.workerId ?? undefined),
             row.fields,
           )
         ) {
@@ -95,7 +82,7 @@ export class LoginService implements OnModuleDestroy {
                     : 'The request was cancelled.';
           await this.notify(
             row.taskId,
-            `Secure entry request ${row.id} for ${row.origin} is ${row.status}. ${next} This notification can be delivered more than once.`,
+            `Secure entry request ${row.id} for ${row.origin} is ${row.status}. ${next}${row.status === 'saved' ? ` Keep me signed in preference: ${row.keepMeSignedIn ? 'on' : 'off'}. Inspect website persistence options and honor this preference; do not claim it was applied unless you selected an applicable option.` : ''} This notification can be delivered more than once.`,
           );
           await this.repository.notified(row.id, row.status);
         } catch {
@@ -113,7 +100,7 @@ export class LoginService implements OnModuleDestroy {
       const page = await this.browser.selectedPage(taskId, workerId);
       const result = await this.inspector.inspect(
         page,
-        this.owner(taskId, workerId),
+        loginOwner(taskId, workerId),
       );
       const origin = new URL(page.url()).origin;
       const accounts = new Map<
@@ -125,7 +112,7 @@ export class LoginService implements OnModuleDestroy {
         try {
           const urls = new Map(
             result.inputs.map((input) => [
-              this.inspector.url(this.owner(taskId, workerId), input.ref),
+              this.inspector.url(loginOwner(taskId, workerId), input.ref),
               input.origin,
             ]),
           );
@@ -164,10 +151,15 @@ export class LoginService implements OnModuleDestroy {
       );
     }
   }
-  async request(taskId: string, fields: SecureFields, workerId?: string) {
+  async request(
+    taskId: string,
+    fields: SecureFields,
+    workerId?: string,
+    keepMeSignedIn?: boolean,
+  ) {
     const target = await this.inspector.select(
       await this.browser.selectedPage(taskId, workerId),
-      this.owner(taskId, workerId),
+      loginOwner(taskId, workerId),
       fields,
     );
     const kind = target.roles.includes('code') ? 'code' : 'credentials';
@@ -178,6 +170,7 @@ export class LoginService implements OnModuleDestroy {
       fields,
       workerId,
       target.inspectionId,
+      keepMeSignedIn,
     );
     await this.publishCard(row);
     await this.tasks.update(taskId, { status: 'needs-input' });
@@ -187,6 +180,7 @@ export class LoginService implements OnModuleDestroy {
       requestId: row.id,
       origin: row.origin,
       kind,
+      keepMeSignedIn: row.keepMeSignedIn,
     };
   }
 
@@ -195,11 +189,12 @@ export class LoginService implements OnModuleDestroy {
     fields: SecureFields,
     accountId?: string,
     workerId?: string,
+    keepMeSignedIn?: boolean,
   ) {
     const page = await this.browser.selectedPage(taskId, workerId);
     const target = await this.inspector.select(
       page,
-      this.owner(taskId, workerId),
+      loginOwner(taskId, workerId),
       fields,
     );
     if (target.roles.includes('code'))
@@ -209,16 +204,22 @@ export class LoginService implements OnModuleDestroy {
           'Request secure PWA verification-code entry with secure_entry_request.',
       };
     const matches = await this.vault.matching(target.url);
+    const flow = await this.repository.selection(taskId, workerId);
+    const site = await this.repository.site(target.origin);
+    const activeFlow =
+      flow?.origin === target.origin && !flow.confirmedAt ? flow : undefined;
     const preferredId =
-      accountId ??
-      this.selection(this.owner(taskId, workerId), target.origin)?.accountId;
+      accountId ?? activeFlow?.accountId ?? site?.lastAccountId;
     const account = accountId
       ? matches.find((item) => item.id === accountId)
       : preferredId && matches.some((item) => item.id === preferredId)
         ? matches.find((item) => item.id === preferredId)
-        : matches.length === 1
-          ? matches[0]
-          : undefined;
+        : site?.lastAccountId &&
+            matches.some((item) => item.id === site.lastAccountId)
+          ? matches.find((item) => item.id === site.lastAccountId)
+          : matches.length === 1
+            ? matches[0]
+            : undefined;
     if (!account)
       throw new ApplicationError(
         'conflict',
@@ -236,15 +237,25 @@ export class LoginService implements OnModuleDestroy {
     try {
       const result = await this.inspector.fill(
         page,
-        this.owner(taskId, workerId),
+        loginOwner(taskId, workerId),
         fields,
         account.login!,
       );
-      this.selections.set(this.owner(taskId, workerId) + ':' + target.origin, {
-        accountId: account.id,
-        at: Date.now(),
-      });
-      return result;
+      const keep =
+        keepMeSignedIn ??
+        activeFlow?.keepMeSignedIn ??
+        site?.keepMeSignedIn ??
+        false;
+      if (keepMeSignedIn !== undefined)
+        await this.repository.keep(target.origin, keepMeSignedIn);
+      await this.repository.select(
+        taskId,
+        workerId,
+        target.origin,
+        account.id,
+        keep,
+      );
+      return { ...result, accountId: account.id, keepMeSignedIn: keep };
     } finally {
       if (account.login) {
         account.login.password = undefined;
@@ -278,6 +289,7 @@ export class LoginService implements OnModuleDestroy {
       status: row.status,
       inspectionId: row.status === 'pending' ? row.inspectionId : null,
       configured: this.vault.configured,
+      keepMeSignedIn: row.keepMeSignedIn,
       accounts:
         row.status === 'pending' &&
         row.kind === 'credentials' &&
@@ -309,21 +321,16 @@ export class LoginService implements OnModuleDestroy {
   preview(id: string) {
     return this.repository.preview(id);
   }
-  async finish(id: string, input?: CredentialInput) {
+  async finish(
+    id: string,
+    input?: CredentialInput & { keepMeSignedIn?: boolean },
+  ) {
     const row = await this.repository.finish(
       id,
       input ? 'credentials' : undefined,
       input ? (row) => this.vault.save(row.origin, input, row.id) : undefined,
+      input?.keepMeSignedIn,
     );
-    if (input && row.status === 'saved' && row.accountId) {
-      this.selections.set(
-        this.owner(row.taskId, row.workerId ?? undefined) + ':' + row.origin,
-        {
-          accountId: row.accountId,
-          at: Date.now(),
-        },
-      );
-    }
     this.events.publish({ event: 'login.updated', taskId: row.taskId });
     void this.flushNotifications();
     return { id: row.id, status: row.status };
@@ -333,7 +340,7 @@ export class LoginService implements OnModuleDestroy {
       const row = await this.repository.finish(id, 'code', async (row) => {
         if (!row.fields || !('code' in row.fields))
           throw new StaleSecureFieldsError();
-        const owner = this.owner(row.taskId, row.workerId ?? undefined);
+        const owner = loginOwner(row.taskId, row.workerId ?? undefined);
         const page = await this.browser
           .selectedPage(row.taskId, row.workerId ?? undefined)
           .catch(() => {
@@ -354,6 +361,50 @@ export class LoginService implements OnModuleDestroy {
     } finally {
       code = '';
     }
+  }
+  async session(
+    taskId: string,
+    action: 'complete' | 'preference',
+    workerId?: string,
+    keepMeSignedIn?: boolean,
+  ) {
+    if (action !== 'complete' && action !== 'preference')
+      throw new ApplicationError(
+        'invalid_input',
+        'Unknown login session action',
+      );
+    if (action === 'preference' && keepMeSignedIn === undefined)
+      throw new ApplicationError(
+        'invalid_input',
+        'Supply keepMeSignedIn to update the login preference',
+      );
+    if (keepMeSignedIn !== undefined) {
+      const flow = await this.repository.selection(taskId, workerId);
+      const origin =
+        flow?.origin ??
+        new URL((await this.browser.selectedPage(taskId, workerId)).url())
+          .origin;
+      if (new URL(origin).protocol !== 'https:')
+        throw new ApplicationError(
+          'invalid_input',
+          'Login preferences require HTTPS',
+        );
+      await this.repository.preference(
+        taskId,
+        workerId,
+        origin,
+        keepMeSignedIn,
+      );
+      if (action === 'preference')
+        return { status: 'recorded' as const, origin, keepMeSignedIn };
+    }
+    const flow = await this.repository.complete(taskId, workerId);
+    if (!flow)
+      throw new ApplicationError(
+        'conflict',
+        'No selected login is available to confirm',
+      );
+    return { status: 'recorded' as const, ...flow };
   }
   onModuleDestroy() {
     if (this.timer) clearInterval(this.timer);

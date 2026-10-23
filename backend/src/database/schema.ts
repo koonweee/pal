@@ -408,6 +408,7 @@ export const loginRequests = pgTable(
     recoveryAt: timestamp('recovery_at', { withTimezone: true }),
     workerId: text('worker_id'),
     accountId: text('account_id'),
+    keepMeSignedIn: boolean('keep_me_signed_in').notNull().default(false),
     notifiedAt: timestamp('notified_at', { withTimezone: true }),
   },
   (t) => [
@@ -433,4 +434,24 @@ export const loginInspections = pgTable('login_inspections', {
     .$type<{ inputs: LoginInput[] } | { targets: unknown[] }>()
     .notNull(),
   image: text('image').notNull(),
+});
+
+export const loginSites = pgTable('login_sites', {
+  origin: text('origin').primaryKey(),
+  lastAccountId: text('last_account_id'),
+  keepMeSignedIn: boolean('keep_me_signed_in').notNull().default(false),
+});
+
+export const loginFlows = pgTable('login_flows', {
+  owner: text('owner').primaryKey(),
+  taskId: uuid('task_id')
+    .notNull()
+    .references(() => tasks.id, { onDelete: 'cascade' }),
+  origin: text('origin').notNull(),
+  accountId: text('account_id').notNull(),
+  keepMeSignedIn: boolean('keep_me_signed_in').notNull().default(false),
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
