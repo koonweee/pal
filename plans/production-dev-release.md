@@ -20,7 +20,7 @@ Publish all validated dev changes to the repository and deploy the complete rele
 
 Implementation tasks:
 
-- [ ] Inspect production configuration, image/platform requirements, persistent storage, and required secret presence.
+- [x] Inspect production configuration, image/platform requirements, persistent storage, and required secret presence.
 - [x] Run backend integration/end-to-end and frontend component/browser/PWA checks.
 - [x] Build and publish immutable AMD64 agent-service, execution, web and egress images from the validated revision.
 - [x] Push completed commits to the repository.
@@ -78,7 +78,7 @@ npm run test:pwa
 - Frontend ownership checks, 27 component tests, strict production TypeScript/build checks and all 10 PWA tests pass. Both secure-entry browser cases pass.
 - The full browser suite reports 59/65 passing. All six failing layout/focus cases reproduce on the published `origin/main` baseline: mobile desktop focus, two standalone safe-area cases, two workbench cases and intermittent keyboard-anchor retention. The keyboard case also fails on an isolated current-source rerun and two of three additional baseline runs. These existing failures remain outside this release's changed scope.
 - AMD64 agent-service, execution, web and egress images build successfully with a shared application revision and production PWA identity.
-- Production cutover is waiting on operator-generated deployment metadata; production remains unchanged.
+- Production inventory is reviewed. The app-owned infrastructure revision `1a848eb` is pushed and validated. The owner selected the dev Pal vault, and its settings are stored in internal BWS. The existing zone secret-sync reader fails before applying variables; a terminal retry confirms the blocker. Production remains unchanged pending a protected host diagnosis and reader recovery.
 
 ## Published Artifacts
 
