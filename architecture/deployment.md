@@ -29,6 +29,8 @@ Execution joins an internal Docker network. Its configured HTTP(S) proxy runs in
 
 Web rejects gateway requests originating from the execution subnet, derived from its Compose-named palexec0 interface. Additional ingress networks do not change this boundary. Agent-service and PostgreSQL are on the separate service network. The only published production port is the loopback-bound PWA gateway. The CDP-forwarding listener and egress proxy are private Docker endpoints.
 
+The gateway clears its previous Squid PID file at startup and terminates if either Squid or Nginx exits. Compose restarts the gateway. Squid drains connections for one second during shutdown, within the container stop timeout.
+
 Pal remains Tailscale-only. Do not expose its gateway to the public internet.
 
 ## Development and Updates
