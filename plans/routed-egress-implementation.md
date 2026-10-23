@@ -10,7 +10,7 @@ Give every execution application public internet access through an independent r
 
 ## Current Behavior
 
-The [evaluation](routed-egress-gateway.md) validates an IPv4 Docker bridge with no host gateway address and a separate nftables router. The normal runtime uses Squid in web. Production's immediate Squid lifecycle hotfix is an independent deployment.
+The Compose runtime uses an IPv4 transit bridge with no host gateway address and a separate nftables router. Production continues to use its separately deployed Squid lifecycle hotfix. Development publishes its staged PWA through a single-network Nginx ingress; web retains service/transit connections for browser and desktop forwarding.
 
 ## Milestones
 
@@ -79,3 +79,25 @@ The normal development Compose render and isolated execution/web/egress image bu
 Implementation and local acceptance are complete on OrbStack ARM64, Engine 29.8.2 and Compose 5.5.0. Production continues to run the separately deployed Squid hotfix.
 
 A routed production release needs a manual egress image Build, reviewed immutable image pins, deployment Compose/health-check updates and an unused transit prefix. Migrate web, execution and the execution network together; home/browser data persist and running desktop applications stop. Validate native AMD64/production-kernel behavior and a full Docker-daemon or VM reboot. IPv6 is disabled. Preserve prior image/network definitions and paired application state for rollback.
+
+## Development Cutover and Ingress
+
+Implementation tasks:
+
+- Preserve persistent volumes and back up the stopped shared home, service data and PostgreSQL before replacing the old execution network.
+- Deploy current agent, desktop, PWA and router images through the supported development script.
+- Publish the dev PWA through a service-only Nginx ingress. OrbStack 2.2.4 forwards the dual-network web port directly to its isolated transit IP; Linux host port access works, while Mac localhost times out. Network priority and interface naming do not repair that platform behavior. The ingress preserves the existing loopback port and Tailnet URL, including Host headers, streaming, uploads and WebSockets. Production Compose is unchanged.
+- Have up/rebuild verify the actual published PWA health endpoint. Existing pwa-up owns staging/update notification.
+
+Exit criteria:
+
+- Native browser/desktop, shell/filesystem, public internet, private destination filtering and independent router recovery pass on the migrated dev stack.
+- Vite, local PWA and Tailnet API/SSE/noVNC access pass; data counts and private backups are verified.
+
+Development acceptance:
+
+- Current native authentication/login improvements and routed egress are deployed together. Shared home, service data and all checked row counts are preserved: 11 tasks, 510 public messages, 786 Mastra messages and 39 remembered login sites. Private rollback images and readable stopped-state backups are retained under `.local/dev-routed-cutover-20261023-144935/`.
+- Public Node fetch succeeds for IANA, Apple and Wikipedia. Execution-to-API requests receive 403; Tailnet/metadata requests fail; execution root lacks NET_ADMIN/NET_RAW. The native browser/desktop smoke passes using IANA because example.com rate-limited the initial request. Shell and native filesystem operations pass.
+- An independent router restart restores public access while execution identity/start time and Chromium PID remain unchanged. Native authentication skill discovery and vault initialization pass.
+- Vite, staged PWA and the existing Tailnet PWA URL pass real-browser API, manifest, SSE contract and noVNC HTTP/WebSocket checks. Normal `./scripts/dev-local up` and `pwa-up` pass without replacing the desktop; the PWA update notice is published. Startup/rebuild check the real published PWA health URL.
+- Dev uses seven services, including its Vite and PWA ingress. Production Compose remains five services. Disposable probe containers/networks are removed. The former local latency-only deployment helper is retired; supported dev commands own the routed stack.

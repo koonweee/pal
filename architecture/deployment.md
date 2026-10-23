@@ -10,7 +10,7 @@ Docker Engine 28.1 or later and Compose 2.36 or later run five services:
 | egress | IPv4 routing, private destination filtering, and source NAT for execution |
 | postgres | Application and Mastra schemas |
 
-The development overlay adds Vite and isolated local database/PWA ports. Production and development use separate Compose projects and volumes. Host-side builds and tests are supported; runtime execution uses Docker.
+The development overlay adds Vite, a service-only Nginx PWA ingress and isolated local database/PWA ports. The ingress owns the dev PWA loopback port and forwards to web with streaming, uploads and WebSocket support. This avoids OrbStack selecting web's isolated transit address for Mac port forwarding. Production publishes web directly. Production and development use separate Compose projects and volumes. Host-side builds and tests are supported; runtime execution uses Docker.
 
 ## Storage and Execution
 

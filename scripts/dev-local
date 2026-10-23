@@ -114,7 +114,7 @@ start_pwa_stage() {
     echo "The local development backend is not healthy. Run ./scripts/dev-local up first." >&2
     return 1
   fi
-  compose up -d --build --wait --no-deps web
+  compose up -d --build --wait --no-deps web pwa
   wait_for_url "$pwa_local_url/health"
 }
 
@@ -178,7 +178,8 @@ case "$command_name" in
       echo "  ./scripts/dev-local login" >&2
       exit 2
     fi
-    compose up -d --wait execution egress agent-service web frontend
+    compose up -d --wait execution egress agent-service web pwa frontend
+    wait_for_url "$pwa_local_url/health"
     echo "Pal development is available at $local_url"
     ;;
   rebuild)
@@ -186,7 +187,8 @@ case "$command_name" in
     compose build agent-service
     compose up -d --wait postgres
     compose run --rm --no-deps agent-service node dist/database/migrate.js
-    compose up -d --wait --no-deps --force-recreate agent-service web frontend
+    compose up -d --wait --no-deps --force-recreate agent-service web pwa frontend
+    wait_for_url "$pwa_local_url/health"
     echo "Pal development is available at $local_url"
     ;;
   execution-rebuild)
@@ -204,7 +206,7 @@ case "$command_name" in
     ;;
   logs)
     prepare
-    compose logs -f agent-service execution egress web frontend
+    compose logs -f agent-service execution egress web pwa frontend
     ;;
   status)
     prepare
@@ -236,7 +238,7 @@ case "$command_name" in
     tailnet_url="https://$tailnet_dns:$serve_port"
     write_serve_state "$tailnet_url" "$tailnet_dns" "$serve_port" "$pwa_local_port"
     load_serve_state
-    compose up -d --wait --no-deps --force-recreate agent-service web frontend
+    compose up -d --wait --no-deps --force-recreate agent-service web pwa frontend
     wait_for_url "$public_url/api/health"
     publish_pwa_update
     echo "Pal Dev Tailnet PWA is available at $public_url"
@@ -261,7 +263,7 @@ case "$command_name" in
     fi
     rm "$serve_state_file"
     load_serve_state
-    compose up -d --wait --no-deps --force-recreate agent-service web frontend
+    compose up -d --wait --no-deps --force-recreate agent-service web pwa frontend
     wait_for_url "$local_url/api/health"
     echo "Pal Tailnet Serve is disabled; local development remains at $local_url"
     ;;
