@@ -105,10 +105,15 @@ export async function createMainSession(options: {
         lastMessages: 20,
         semanticRecall: false,
         workingMemory: { enabled: false },
-        // Keep Mastra's compression defaults for now. If recall or task continuity
-        // suffers, consider raising observation.messageTokens or lowering
-        // observation.bufferActivation to retain more raw history.
-        observationalMemory: { model: options.model, scope: 'thread' },
+        observationalMemory: {
+          model: options.model,
+          scope: 'thread',
+          observation: {
+            messageTokens: 12_000,
+            bufferActivation: 3_000,
+          },
+          reflection: { observationTokens: 12_000 },
+        },
       },
     });
     // Zero removes the runtime ceiling; stopWhen disables the default five-step stop.
