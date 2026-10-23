@@ -86,8 +86,9 @@ npm run trim
 
 ## Inline UI Prototypes
 
-- The thread-bound Kodex pane compares inline form, expandable card and card/dialog layouts with credential/code requests and pending/completed/page-changed/cancelled states. Browser previews disclose locally; feedback explicitly submits a human-readable request to this conversation.
+- The selected design is a dense inline form: labels beside inputs, one action row and a collapsed browser preview. The thread-bound Kodex pane exercises credential/code requests and pending/completed/page-changed/cancelled states. Feedback explicitly submits a human-readable request to this conversation.
+- The page-changed action is labelled “Ask Pal to inspect again”: the intended production behavior is a fresh browser inspection and request, without reloading the website or resending a verification code. The prototype simulates the transition locally.
 - Components are bundled from PalThemeProvider, InstanceSettingsProvider preview mode, AssistantMarkdown, IconAction and the existing Mantine controls, foundation and conversation CSS. Prototype chrome follows Kodex theme tokens; the PWA preview uses Pal's actual theme.
 - Every credential/code input is read-only with fixed synthetic values. All prototype actions stay local except the explicit feedback bridge. No live backend, vault, external assets or network grants are used.
-- A browser smoke exercises twelve layout/scenario/viewport combinations at desktop and 390px mobile widths, completion/dialog behavior, preview disclosure, error refresh, cancellation, feedback and overflow. It reports no page errors or network requests. The self-contained HTML bundle was accepted by the app-surface tool and opened in the current Kodex thread.
+- A browser smoke exercises four scenario/viewport combinations at desktop and 390px mobile widths, compact card height, completion, preview disclosure, page-changed recovery, cancellation, feedback and overflow. It reports no page errors or network requests. The self-contained HTML bundle is open in the current Kodex thread.
 - Local editable source/build/smoke artifacts are under `.local/inline-secure-entry/`; generated HTML/CSS/JS and screenshots stay outside version control. Canonical message/card integration remains a separate implementation after UI iteration.
