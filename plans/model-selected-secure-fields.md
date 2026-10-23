@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Done — model-selected fields deployed to dev; interactive inline UI prototypes are open for iteration.
 
 ## Goal
 
@@ -36,13 +36,13 @@ Exit criteria: explicit selections handle staged credentials and unlabelled sing
 
 ### 2. Inline UI Prototypes
 
-Status: in progress.
+Status: validated; Kodex app surface is open.
 
-- Build interactive expanded-card and compact-card variants using Pal's Mantine controls, theme and conversation styling.
+- Build interactive inline-form, expandable-card and card/dialog variants using Pal's Mantine controls, theme and conversation styling.
 - Cover credentials/code requests, preview disclosure and completed/error/cancelled states using fixed demonstration values.
 - Open a Kodex generative UI pane with local iteration controls and explicit conversational feedback actions.
 
-Exit criteria: responsive self-contained pane opens in this thread, uses existing PWA components, and lets the user compare and exercise both designs without real credentials.
+Exit criteria: responsive self-contained pane opens in this thread, uses existing PWA components, and lets the user compare and exercise the layouts without real credentials.
 
 ## Tests
 
@@ -83,3 +83,11 @@ npm run trim
 - Backend build/lint/boundaries/OpenAPI checks pass. Drizzle reports no schema drift. The first-party contract is version 4; PWA types and the iOS client header are aligned.
 - Public Apple/Amazon inspection returns native username-stage input metadata without site-specific classifiers. The development execution-Chrome smoke fills selected credentials and six unclassified digit inputs without returning values or changing unrelated tabs/fields.
 - Development migration/rebuild and PWA update completed. All 12 existing previews and 569,932 image bytes remain, with original metadata preserved. Pending legacy code bindings are cancelled because backend restart invalidates their DOM references.
+
+## Inline UI Prototypes
+
+- The thread-bound Kodex pane compares inline form, expandable card and card/dialog layouts with credential/code requests and pending/completed/page-changed/cancelled states. Browser previews disclose locally; feedback explicitly submits a human-readable request to this conversation.
+- Components are bundled from PalThemeProvider, InstanceSettingsProvider preview mode, AssistantMarkdown, IconAction and the existing Mantine controls, foundation and conversation CSS. Prototype chrome follows Kodex theme tokens; the PWA preview uses Pal's actual theme.
+- Every credential/code input is read-only with fixed synthetic values. All prototype actions stay local except the explicit feedback bridge. No live backend, vault, external assets or network grants are used.
+- A browser smoke exercises twelve layout/scenario/viewport combinations at desktop and 390px mobile widths, completion/dialog behavior, preview disclosure, error refresh, cancellation, feedback and overflow. It reports no page errors or network requests. The self-contained HTML bundle was accepted by the app-surface tool and opened in the current Kodex thread.
+- Local editable source/build/smoke artifacts are under `.local/inline-secure-entry/`; generated HTML/CSS/JS and screenshots stay outside version control. Canonical message/card integration remains a separate implementation after UI iteration.
