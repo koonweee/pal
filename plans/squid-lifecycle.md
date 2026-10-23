@@ -54,7 +54,7 @@ python3 scripts/test-gateway-lifecycle.py
 
 - Production web access is restored without restarting execution or changing monitor state.
 - Lifecycle fix passes regression checks and is committed locally.
-- Permanent image rollout remains separate from immediate same-image recovery.
+- The permanent immutable gateway image is deployed and passes a production gateway-only restart.
 
 ## Rollback
 
@@ -66,4 +66,6 @@ Restore temporary Komodo extra arguments after the targeted recreation. Persiste
 - Execution, agent-service, and database container identities and start times stayed unchanged. Temporary Komodo deployment flags were restored.
 - All focused lifecycle checks pass against real Squid/Nginx: stale PID startup, forced restart, graceful SIGQUIT stop/restart, automatic recovery after Squid death, and shutdown after running or immediately failing children.
 - The original source fails the stale-PID startup regression.
-- The permanent source fix is committed locally; production still runs the recovered prior image. Image publishing and rollout are remaining release work.
+- Production uses the gateway-only release source `71ae197` (production `9ac4edb` plus fix `204e897`) and image `ghcr.io/koonweee/pal-web:71ae197@sha256:624f3ab0d056215f0a3b0a0c355ce1bc2605aa538182679c4ce5acb533ea002b`. All 15 PWA files match the prior image byte for byte; `PAL_RELEASE_ID` remains `9ac4edb`.
+- Deployment `6adba23b93f4565575da3e8b` and gateway-only restart `6adba27e93f4565575da3e95` pass. The restart completes in 3.247 seconds; execution, agent-service, PostgreSQL, and Google MCP retain their identities, start times, and image pins. Temporary Build/Stack settings are restored.
+- Squid reports a segmentation fault during controlled shutdown, before the successful restart. The replacement process is healthy and serves all proxy checks; no post-start fatal entry was observed. This package shutdown behavior remains outside the supervisor repair.
