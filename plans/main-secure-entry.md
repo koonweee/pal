@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Done
 
 ## Goal
 
@@ -83,4 +83,7 @@ PLAYWRIGHT_CHANNEL=chrome npm test -- test/secure-entry.spec.ts
 
 - Passed: 7 backend login regressions, 12 login/API client integration cases, 7 frontend unit/policy cases and 2 responsive browser flows (900px and 390px).
 - Passed: backend build/lint/boundaries; frontend type checks, ownership, unused-code and generated API checks.
-- Remaining: rebuild the development agent service with the visibility migration, update the staged PWA, verify health and existing-card promotion, then record completion.
+- Deployed implementation `7ff2d2b` with `./scripts/dev-local rebuild` and `./scripts/dev-local pwa-up`. The first PWA command encountered a transient proxy startup race; the retry succeeded after health checks passed.
+- Verified the staged PWA at mobile width: three existing Main cards, navigation to the owning Task and back, and no horizontal overflow. Tailnet and local health checks pass.
+- Preserved seven requests, 24 inspections and 1,196,508 preview bytes. The execution desktop container ID and start time are unchanged. All three canonical cards are now Main-visible.
+- No remaining implementation or deployment work.

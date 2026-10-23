@@ -14,7 +14,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Secure entry in Main](main-secure-entry.md) | In Progress | Shared Main/Task cards, Task attribution, cached-form gating and proactive credential correction. |
+| [Secure entry in Main](main-secure-entry.md) | Done | Shared Main/Task cards, Task attribution, cached-form gating and proactive credential correction. |
 | [Inline Secure Entry and Recovery](inline-secure-entry.md) | Done | Dense canonical request cards, null-safe tools and bounded automatic field recovery. |
 | [Model-Selected Secure Fields and Inline UI Prototypes](model-selected-secure-fields.md) | Done | Model-assigned credential/code fields, private destination checks and interactive inline PWA mockups. |
 | [Secure Entry and Verification Codes](secure-entry-otp.md) | Done | Generic secure entry, transient OTP filling, staged credential reuse and one current preview. |
