@@ -83,7 +83,7 @@ for case in starts:
         later = next((x for x in rows if x.get('event') == 'operation.start' and x.get('operation') == 'LoginBrowser.inspect' and x.get('threadId') == thread and f['at'] <= x['at'] <= stop), None)
         earlier = next((x for x in reversed(fixtures) if x.get('event') == 'fixture.browser' and x.get('name') == case['name'] and x.get('milestone') == 'submit_handler' and x['at'] < f['at']), None)
         inspect_end = next((x for x in rows if later and x.get('event') == 'operation.end' and x.get('id') == later['id']), None)
-        chosen = next((x for x in summary['calls'] if later and x['scenario'] == case['name'] and x['tool'] == 'login_inspect' and x['at'] <= later['at'] <= x.get('end', later['at'])), None)
+        chosen = next((x for x in summary['calls'] if later and x['scenario'] == case['name'] and x['tool'] in ('login_inspect', 'secure_fill') and x['at'] <= later['at'] <= x.get('end', later['at'])), None)
         summary['transitions'].append({'scenario': case['name'], 'stage': f['stage'], 'readyAt': f['at'], 'submitToDomReadyMs': f['at']-earlier['at'] if earlier else None, 'domReadyToInspectionStartMs': later['at']-f['at'] if later else None, 'inspectionDurationMs': inspect_end['ms'] if inspect_end else None, 'inspectionModelRequestMs': chosen.get('modelRequestMs') if chosen else None, 'combinedAction': chosen.get('hasInspectionAction', False) if chosen else False})
 
 valid = [x for x in summary['calls'] if not x.get('uncorrelated')]

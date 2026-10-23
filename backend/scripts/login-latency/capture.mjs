@@ -1,4 +1,4 @@
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 const { AsyncLocalStorage } = await import('node:async_hooks');
 const scope = new AsyncLocalStorage();
@@ -32,7 +32,46 @@ function wrap(cls, name, meta = () => ({}), after = () => ({})) {
       ...details,
     });
     try {
-      const result = await original.apply(this, args);
+      let result;
+      // An external CDP target can navigate before the fixture client's route
+      // attaches. Give only this run's fake hosts a blank target first, then
+      // navigate after the owned page has attached. Real sites are unchanged.
+      let fixtureUrl;
+      if (
+        cls.name === 'BrowserService' &&
+        name === 'command' &&
+        args[1]?.[0] === 'tab' &&
+        args[1]?.[1] === 'new' &&
+        args[1]?.[2]
+      ) {
+        try {
+          const hosts = JSON.parse(
+            readFileSync('/tmp/pal-login-latency-hosts.json', 'utf8'),
+          );
+          if (hosts.includes(new URL(args[1][2]).hostname))
+            fixtureUrl = args[1][2];
+        } catch {
+          /* Fixture registration is absent outside a running scenario. */
+        }
+      }
+      if (fixtureUrl) {
+        result = await original.call(
+          this,
+          args[0],
+          ['tab', 'new', 'about:blank'],
+          args[2],
+          args[3],
+        );
+        if (result.success) {
+          const page = await this.selectedPage(args[0], args[3]);
+          await page.goto(fixtureUrl, {
+            waitUntil: 'domcontentloaded',
+            timeout: 5000,
+          });
+          if ('url' in result.data) result.data.url = page.url();
+          emit('fixture.opening_ready', { taskId: args[0] });
+        }
+      } else result = await original.apply(this, args);
       emit('operation.end', {
         id,
         operation: cls.name + '.' + name,
@@ -108,6 +147,12 @@ for (const [path, exportName, methods] of [
             taskId: args[0],
             hasAction: !!args[2]?.length,
             actionKind: args[2]?.[0],
+          };
+        if (exportName === 'LoginService' && method === 'fill')
+          return {
+            taskId: args[0],
+            hasAction: !!args[5]?.length,
+            actionKind: args[5]?.[0],
           };
         if (exportName === 'LoginService' && method === 'request')
           return {
@@ -186,7 +231,7 @@ for (const [path, exportName, methods] of [
     );
 }
 // Tap actual tool execute functions after Mastra resolves this step's tools.
-// The original tool objects and processor result are preserved; no args/results are recorded.
+// The original tool objects and processor result are preserved; no raw args/results are recorded.
 const { TaskToolDiscoveryProcessor } = await import(
   root + 'agent/task-tool-discovery.processor.js'
 );
@@ -215,6 +260,10 @@ TaskToolDiscoveryProcessor.prototype.processInputStep = async function (args) {
         threadId: context?.agent?.threadId ?? context?.threadId ?? threadId,
         executionId: randomUUID(),
         parentExecutionId: parent?.executionId,
+        ...(name === 'set_task_status' &&
+        ['in-progress', 'needs-input', 'completed'].includes(input?.status)
+          ? { taskStatus: input.status }
+          : {}),
       };
       return scope.run(details, async () => {
         const begin = Date.now();

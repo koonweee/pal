@@ -9,7 +9,7 @@ out.mkdir(parents=True, exist_ok=True)
 source = (root / 'capture.mjs').read_text()
 # Inspector evaluations lack a dynamic-import callback. A CJS async module has
 # its own loader and imports the same cached application modules normally.
-for module, binding in [('node:fs', 'appendFileSync'), ('node:crypto', 'randomUUID')]:
+for module, binding in [('node:fs', 'appendFileSync, readFileSync'), ('node:crypto', 'randomUUID')]:
     source = source.replace(f"import {{ {binding} }} from '{module}';", f"const {{ {binding} }} = require('{module}');")
 (out / 'capture.cjs').write_text('module.exports = (async()=>{\n' + source + '\nreturn {ready:true};})();\n')
 subprocess.run(['docker', 'cp', str(out / 'capture.cjs'), name + ':/tmp/pal-login-latency-capture.cjs'], check=True)

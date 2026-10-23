@@ -1,3 +1,5 @@
+import { loginTools } from '../dist/login/login-tools.js';
+import type { LoginService } from '../dist/login/login.service.js';
 import { webSearchTool } from '../dist/agent/web-search.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -49,6 +51,7 @@ it('keeps discovery contextual and runs core/workspace tools with native media k
     await workspace.init();
     const tools = {
       web_search: webSearchTool(),
+      secure_fill: loginTools({} as LoginService).secure_fill,
       ...(await createWorkspaceTools(workspace)),
       core_check: createTool({
         id: 'core_check',
@@ -84,6 +87,8 @@ it('keeps discovery contextual and runs core/workspace tools with native media k
       );
     const initialInstructions = JSON.stringify(messageList.getSystemMessages());
     expect(initial.tools.web_search).toBe(tools.web_search);
+    expect(initial.tools.secure_fill).toBe(tools.secure_fill);
+    expect(initialInstructions).not.toContain('external_secure_fill');
     expect(initialInstructions).not.toContain('external_web_search');
     expect(initial.tools).not.toHaveProperty('fixture_lookup');
     expect(initial.tools).not.toHaveProperty('load_tool');

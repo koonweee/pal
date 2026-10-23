@@ -15,7 +15,7 @@ Measure serial login work after vault prewarming and direct private filling, and
 - Browser submit handlers, responses, DOMContentLoaded and load on unique fixture pages.
 - Existing browser, execution, vault and private-submission service spans.
 
-Capture excludes tool arguments/results, model text and secrets. The fixture contains only dummy credential constants. Native call IDs are preferred; a missing ID is correlated only when exactly one pending call has the same thread/tool. All correlated executions in the first sample resolve unambiguously.
+Capture excludes raw tool arguments/results, model text and secrets. Task status is recorded only as an allowlisted enum. The fixture contains only dummy credential constants. Native call IDs are preferred; a missing ID is correlated only when exactly one pending call has the same thread/tool. All correlated executions in the first sample resolve unambiguously.
 
 ## Baseline Results
 
@@ -131,3 +131,29 @@ Backend build, type-aware lint/boundaries, eight browser/vault tests and fourtee
 These are two baseline and two follow-up samples with different accumulated conversation context and provider timing. End-to-end results include Main routing and scripted user interaction. They demonstrate successful behavior and smaller transition/argument costs; they do not establish a stable percentage improvement.
 
 The local comparison is `.local/login-latency-action-comparison/comparison.html`, with numeric output beside it. The final detailed HTML/Chrome trace remains in `.local/login-latency-detailed/`. Chrome rendering and filtering pass. All runtime taps are restored; checks across 27 fixture hosts find zero vault entries, tabs, unfinished cards, injected files or open debugger endpoints. The disposable test database is removed. Dev is healthy and the execution desktop retains its original container/start time.
+
+## Native Fill and Broader Action Profiles
+
+secure_fill accepts an optional action, runs it only after successful private filling and returns a native masked inspection. Inspection/fill stay outside code mode. Shared Task/Worker guidance covers opening, username, verification and Trust transitions, and yielding without redundant needs-input updates. Filled notifications carry facts; the shared instructions own continuation policy.
+
+The final pass uses the same human-style prompts, model configuration and private PWA entry. All flows authenticate, including rejected-password correction and the Work account picker.
+
+| Flow | Preceding samples | Final pass | Task model requests before → final |
+| --- | ---: | ---: | ---: |
+| Apple | 68.157 / 65.310s | 57.918s | 11 / 11 → 8 |
+| Amazon with correction | 59.068 / 53.314s | 54.821s | 10 / 11 → 9 |
+| Combined form / picker | 37.219 / 32.107s | 34.918s | 6 / 6 → 5 |
+
+Apple shows a useful reduction; Amazon and the picker remain within preceding timing variation. One clean final pass does not establish stable percentage gains.
+
+- All three initial opening calls use login_inspect action and return the expected 1/1/2 inputs. Bookkeeping still runs in a separate model request after opening, costing 6.317/4.297/4.216s. The intended same-turn bookkeeping/opening guidance is not adopted.
+- Apple and Amazon use native secure_fill action. Apple password → verification field scanning starts 0.514s after DOM readiness versus 3.675/3.869s in the preceding samples. Username → password gaps are 0.233/0.424s.
+- The native Apple fill call uses 173 argument characters versus 273 for its previous script; streaming is 1.266s versus 2.580s in the preceding final sample. Amazon uses 252 versus 351 characters, but streaming takes 3.301s versus 2.068s, demonstrating provider variation despite shorter arguments.
+- No needs-input status calls occur in any of the nine follow-up flows. Required in-progress/completed bookkeeping remains. Initial task metadata updates and waiting responses still consume model turns.
+- Final tool-producing request median is 4.297s, dispatch 0.148s, and tool-end-to-next-request 0.027s. Same-page failed-password actions also retain the bounded navigation wait. Reduced tool counts alone do not guarantee a faster whole flow.
+
+Two diagnostic passes also complete all flows: 56.702/54.001/35.699s and 65.220/54.619/42.678s. Native new-tab opening exposed a synthetic routing startup miss: Chrome reached a network-error document before the external Playwright client's fake-host interception attached. Their whole-flow totals are excluded from the clean comparison. For exact registered fixture hosts, the temporary profiler now creates an owned blank target first and navigates after attachment; preparation time remains included. Production navigation has no fixture workaround.
+
+Backend build, lint/boundaries and 23 focused browser/vault, discovery, login and client-contract tests pass. Conditional-action coverage includes stale/wrong-owner refs, missing credentials, code-only entry, ambiguous-account waits, sanitized post-fill failure and native image serialization. JavaScript/Python syntax and interactive report checks pass. The local report is `.local/login-latency-native-comparison/comparison.html`; final phases remain in `.local/login-latency-detailed/`.
+
+Final cleanup checks across 36 fixture hosts find zero vault entries, fixture tabs, unfinished cards, injected files or open debugger endpoints. The disposable test container is removed. Dev services are healthy; execution retains its original container and start time.

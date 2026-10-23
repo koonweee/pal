@@ -11,6 +11,7 @@ const directTools = new Set<string>([
   'web_search',
   'browser_screenshot',
   'login_inspect',
+  'secure_fill',
   'agent-worker',
   WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
   ...Object.values(WORKSPACE_TOOLS.COMPUTER),

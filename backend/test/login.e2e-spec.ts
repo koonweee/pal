@@ -903,8 +903,10 @@ it('acts before masked inspection across new tabs, delayed navigation, same-page
       contentType: 'text/html',
       body:
         path === '/password'
-          ? '<input type="password" autocomplete="current-password" value="SENTINEL_PASSWORD">'
-          : '<input autocomplete="username"><button onclick="fetch(\'/step\').then(()=>location.href=\'/password\')">Next</button>',
+          ? `<input type="password" autocomplete="current-password" value="MASKED_INITIAL"><button onclick="if(document.querySelector('input').value==='SENTINEL_PASSWORD')location.href='/verify'">Sign in</button>`
+          : path === '/verify'
+            ? '<input autocomplete="one-time-code">'
+            : '<input autocomplete="username"><button onclick="fetch(\'/step\').then(()=>location.href=\'/password\')">Next</button>',
     });
   });
   let current = await context.newPage();
@@ -923,9 +925,23 @@ it('acts before masked inspection across new tabs, delayed navigation, same-page
       else if (args[0] === 'eval') await current.evaluate(args[1]);
       return { success: true, data: {}, error: null };
     });
-  const stored = vi.spyOn(fixture.app.get(LoginRepository), 'inspection');
+  const repository = fixture.app.get(LoginRepository);
+  const stored = vi.spyOn(repository, 'inspection');
+  const item = {
+    id: randomUUID(),
+    name: 'Personal',
+    type: 1,
+    login: { username: 'SENTINEL_USER', password: 'SENTINEL_PASSWORD' },
+  };
+  let items = [item, { ...item, id: randomUUID(), name: 'Work' }];
+  const vault = fixture.app.get(BitwardenService);
+  const configured = vi.spyOn(vault, 'configured', 'get').mockReturnValue(true);
+  const matching = vi
+    .spyOn(vault, 'matching')
+    .mockImplementation(async () => structuredClone(items));
   try {
-    const tool = loginTools(login).login_inspect;
+    const tools = loginTools(login);
+    const tool = tools.login_inspect;
     const opened = await tool.execute!(
       { action: ['tab', 'new', 'https://action.example.test/login'] },
       caller,
@@ -955,6 +971,66 @@ it('acts before masked inspection across new tabs, delayed navigation, same-page
         workerId,
       ),
     ).rejects.toMatchObject({ code: 'conflict' });
+    const fields = { password: next.inputs[0].ref };
+    let commands = command.mock.calls.length;
+    const picker = await tools.secure_fill.execute!(
+      { fields, action: ['click', 'button'] },
+      caller,
+    );
+    expect(picker).toMatchObject({ status: 'awaiting_user' });
+    expect(command).toHaveBeenCalledTimes(commands);
+    expect((await fixture.app.get(TasksService).details(task.id)).status).toBe(
+      'needs-input',
+    );
+    if (!('requestId' in picker)) throw new Error('Expected picker');
+    await repository.finish(picker.requestId);
+    items = [item];
+    const wrongOwner = await tools.secure_fill.execute!(
+      { fields, action: ['click', 'button'] },
+      {
+        requestContext: new RequestContext([
+          [MASTRA_THREAD_ID_KEY, 'pal-task:' + task.id],
+        ]),
+        observe: noopObserve,
+      },
+    );
+    expect(wrongOwner).toMatchObject({ status: 'error', code: 'conflict' });
+    expect(command).toHaveBeenCalledTimes(commands);
+    const filled = await tools.secure_fill.execute!(
+      { fields, action: ['click', 'button'] },
+      caller,
+    );
+    expect(filled).toMatchObject({ status: 'filled', accountId: item.id });
+    if (!('inputs' in filled))
+      throw new Error('Expected native inspection after fill');
+    expect(filled.inputs[0].autocomplete).toBe('one-time-code');
+    expect(current.url()).toBe('https://action.example.test/verify');
+    expect(command).toHaveBeenLastCalledWith(
+      task.id,
+      ['click', 'button'],
+      undefined,
+      workerId,
+    );
+    const media = tools.secure_fill.toModelOutput!(filled);
+    expect(media).toMatchObject({
+      type: 'content',
+      value: [{ type: 'text' }, { type: 'media', mediaType: 'image/png' }],
+    });
+    expect(JSON.stringify(media)).not.toContain('SENTINEL');
+    if (media.type !== 'content') throw new Error('Expected media');
+    expect(JSON.stringify(media.value[0])).not.toContain(filled.image);
+    commands = command.mock.calls.length;
+    const needsCode = await tools.secure_fill.execute!(
+      { fields: { code: [filled.inputs[0].ref] }, action: ['click', 'button'] },
+      caller,
+    );
+    expect(needsCode).toMatchObject({ status: 'input_required' });
+    const stale = await tools.secure_fill.execute!(
+      { fields, action: ['click', 'button'] },
+      caller,
+    );
+    expect(stale).toMatchObject({ status: 'error', code: 'conflict' });
+    expect(command).toHaveBeenCalledTimes(commands);
     const samePage = await tool.execute!(
       {
         action: [
@@ -977,8 +1053,43 @@ it('acts before masked inspection across new tabs, delayed navigation, same-page
     expect(failed).toMatchObject({ status: 'error', code: 'unavailable' });
     expect(JSON.stringify(failed)).not.toContain('SECRET');
     expect(stored).toHaveBeenCalledTimes(beforeFailure);
+    await current.goto('https://action.example.test/password');
+    const fresh = await tool.execute!({}, caller);
+    if (!('inputs' in fresh)) throw new Error('Expected fresh password field');
+    const freshFields = { password: fresh.inputs[0].ref };
+    commands = command.mock.calls.length;
+    items = [];
+    const missing = await tools.secure_fill.execute!(
+      { fields: freshFields, action: ['click', 'button'] },
+      caller,
+    );
+    expect(missing).toMatchObject({ status: 'error', code: 'conflict' });
+    expect(command).toHaveBeenCalledTimes(commands);
+    items = [item];
+    const failedAfterFill = await tools.secure_fill.execute!(
+      { fields: freshFields, action: ['fail'] },
+      caller,
+    );
+    expect(failedAfterFill).toMatchObject({
+      status: 'error',
+      code: 'unavailable',
+    });
+    expect(JSON.stringify(failedAfterFill)).toContain('Fields were filled');
+    expect(JSON.stringify(failedAfterFill)).not.toContain('SECRET');
+    expect(stored).toHaveBeenCalledTimes(beforeFailure + 1);
+    const plain = await tools.secure_fill.execute!(
+      { fields: freshFields, action: null },
+      caller,
+    );
+    expect(plain).toMatchObject({ status: 'filled' });
+    expect(plain).not.toHaveProperty('image');
+    expect(tools.secure_fill.toModelOutput!(plain)).toMatchObject({
+      type: 'text',
+    });
   } finally {
     releaseStep();
+    matching.mockRestore();
+    configured.mockRestore();
     stored.mockRestore();
     selected.mockRestore();
     command.mockRestore();

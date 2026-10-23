@@ -45,5 +45,6 @@ await b.close();console.log(JSON.stringify({removedRemainingFixtures:removed,rem
         run('docker', 'exec', container, 'node', '-e', cleanup, hosts)
     run('docker', 'exec', '--user', '0', container, 'rm', '-f',
         '/tmp/pal-login-latency-capture.cjs', '/tmp/pal-login-latency-inspector.mjs',
-        '/tmp/pal-login-latency-fixtures.mjs', '/tmp/pal-login-latency.jsonl')
+        '/tmp/pal-login-latency-fixtures.mjs', '/tmp/pal-login-latency.jsonl',
+        '/tmp/pal-login-latency-hosts.json')
 run('python3', str(scripts / 'analyze.py'))

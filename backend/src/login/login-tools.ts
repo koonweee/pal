@@ -68,21 +68,34 @@ export function loginTools(service: LoginService) {
     description:
       'Only supply when the user explicitly requests whether to stay signed in; otherwise reuse the stored website preference.',
   };
+  const actionSchema: Parameters<typeof jsonSchema>[0] = {
+    type: ['array', 'null'],
+    items: { type: 'string' },
+    minItems: 1,
+    description:
+      'Agent-browser arguments to run before inspecting, such as ["tab","new","https://example.com/login"] or ["click","@e4"].',
+  };
+  const modelOutput = (output: object) => {
+    if (!('image' in output) || typeof output.image !== 'string')
+      return { type: 'text' as const, value: JSON.stringify(output) };
+    const { image, ...metadata } = output;
+    return {
+      type: 'content' as const,
+      value: [
+        { type: 'text' as const, text: JSON.stringify(metadata) },
+        { type: 'media' as const, data: image, mediaType: 'image/png' },
+      ],
+    };
+  };
   return {
     login_inspect: createTool({
       id: 'login_inspect',
       description:
-        'Inspect editable inputs in your selected browser tab. Optional action runs agent-browser arguments first, then returns the resulting masked inspection. Use action for opening a login tab or advancing a filled username page so navigation and inspection share one call. It waits briefly for navigation; if the page is still loading, inspect again without repeating the action. Returns opaque refs, HTML metadata, matching accounts and a masked screenshot labelled i1, i2, etc.; each badge matches the ref prefix. Decide which inputs are username, password or verification code, then pass fields to secure_fill or secure_entry_request. Input roles are your judgment. Never read existing values. Reinspect after navigation or stale refs.',
+        'Inspect editable inputs in your selected browser tab. Optional action runs agent-browser arguments first, then returns the resulting masked inspection. Use action to open a login tab or perform any known next action that needs observation, including username, verification and Trust steps, so action and inspection share one call. It waits briefly for navigation; if the page is still loading, inspect again without repeating the action. Returns opaque refs, HTML metadata, matching accounts and a masked screenshot labelled i1, i2, etc.; each badge matches the ref prefix. Decide which inputs are username, password or verification code, then pass fields to secure_fill or secure_entry_request. Input roles are your judgment. Never read existing values. Reinspect after navigation or stale refs.',
       inputSchema: jsonSchema<{ action?: string[] | null }>({
         type: 'object',
         properties: {
-          action: {
-            type: ['array', 'null'],
-            items: { type: 'string' },
-            minItems: 1,
-            description:
-              'Agent-browser arguments to run before inspecting, such as ["tab","new","https://example.com/login"] or ["click","@e4"].',
-          },
+          action: actionSchema,
         },
         additionalProperties: false,
       }),
@@ -101,23 +114,12 @@ export function loginTools(service: LoginService) {
         | Awaited<ReturnType<LoginService['inspect']>>
         | { status: 'error'; code: string; message: string }
       >({ type: 'object', additionalProperties: true }),
-      toModelOutput: (output) => {
-        if (!('image' in output))
-          return { type: 'text' as const, value: JSON.stringify(output) };
-        const { image, ...metadata } = output;
-        return {
-          type: 'content' as const,
-          value: [
-            { type: 'text' as const, text: JSON.stringify(metadata) },
-            { type: 'media' as const, data: image, mediaType: 'image/png' },
-          ],
-        };
-      },
+      toModelOutput: modelOutput,
     }),
     secure_entry_request: createTool({
       id: 'secure_entry_request',
       description:
-        'Show one secure-entry card in Main and the owning Task conversation. Login entry collects the complete username/password once, saves it and fills the bound fields directly on submission; account selection also fills directly. If fields are stale, the save/selection is retained and completion tells you to inspect and fill fresh fields. Use secure_fill for additional fields on later pages. Verification entry collects only a code and fills it immediately without saving. Pass either username/password input refs or an ordered code-ref array from login_inspect. The selected roles determine the PWA form. Use chooseAccount true when the user asks to switch accounts without naming a specific saved account: shows saved accounts and Use a new account. Omit it for new or corrected credentials, even when matching accounts exist. Tell the user to use the inline form. Yield while awaiting input; workers report to their parent Task. The owning Task receives completion notification.',
+        'Show one secure-entry card in Main and the owning Task conversation. Login entry collects the complete username/password once, saves it and fills the bound fields directly on submission; account selection also fills directly. If fields are stale, the save/selection is retained and completion tells you to inspect and fill fresh fields. Use secure_fill for additional fields on later pages. Verification entry collects only a code and fills it immediately without saving. Pass either username/password input refs or an ordered code-ref array from login_inspect. The selected roles determine the PWA form. Use chooseAccount true when the user asks to switch accounts without naming a specific saved account: shows saved accounts and Use a new account. Omit it for new or corrected credentials, even when matching accounts exist. Tell the user to use the inline form. The host sets the owning Task to needs-input; yield on awaiting_user without calling set_task_status. Workers report to their parent Task. The owning Task receives completion notification.',
       inputSchema: jsonSchema<{
         fields: FieldInput;
         chooseAccount?: boolean | null;
@@ -152,22 +154,24 @@ export function loginTools(service: LoginService) {
     secure_fill: createTool({
       id: 'secure_fill',
       description:
-        'Assign username/password roles to inspected input refs in fields and fill from the matching vault account without seeing values. Password refs must identify password inputs. For code, pass an ordered array of refs; a single input uses a one-element array. Reuse the same saved account across username/password stages; both credentials were collected together. Omit accountId by default: reuses the current flow, then last successful matching account, then sole match. Supply accountId only for an explicit user account choice. Ambiguous saved accounts open an inline picker and return awaiting_user; yield while the user chooses. For verification codes, input_required means call secure_entry_request. Returns the Keep me signed in preference for you to apply through website controls. Does not click submit or prove login success; call login_session with action complete after verifying authentication.',
+        'Assign username/password roles to inspected input refs in fields and fill from the matching vault account without seeing values. Password refs must identify password inputs. For code, pass an ordered array of refs; a single input uses a one-element array. Reuse the same saved account across username/password stages; both credentials were collected together. Omit accountId by default: reuses the current flow, then last successful matching account, then sole match. Supply accountId only for an explicit user account choice. Ambiguous saved accounts open an inline picker, set the owning Task to needs-input and return awaiting_user; yield without calling set_task_status. For verification codes, input_required means call secure_entry_request. Returns the Keep me signed in preference for you to apply through website controls. Optional action runs agent-browser arguments only after a successful fill and returns the resulting masked inspection. Use a direct call with action for known fill/submit/inspect steps instead of generating a script. Waiting, input-required and failed fills never run action. After an action/inspection error, inspect without action before retrying. Without action this only fills; neither form proves login success. Call login_session with action complete after verifying authentication.',
       inputSchema: jsonSchema<{
         fields: FieldInput;
         accountId?: string | null;
         keepMeSignedIn?: boolean | null;
+        action?: string[] | null;
       }>({
         type: 'object',
         properties: {
           fields: fieldsSchema,
           accountId: { type: ['string', 'null'] },
           keepMeSignedIn: keepSchema,
+          action: actionSchema,
         },
         required: ['fields'],
         additionalProperties: false,
       }),
-      execute: ({ fields, accountId, keepMeSignedIn }, context) => {
+      execute: ({ fields, accountId, keepMeSignedIn, action }, context) => {
         const { taskId, workerId } = identity(context);
         return safe(() =>
           service.fill(
@@ -176,9 +180,16 @@ export function loginTools(service: LoginService) {
             accountId ?? undefined,
             workerId,
             keepMeSignedIn ?? undefined,
+            action ?? undefined,
+            context?.abortSignal,
           ),
         );
       },
+      outputSchema: jsonSchema<
+        | Awaited<ReturnType<LoginService['fill']>>
+        | { status: 'error'; code: string; message: string }
+      >({ type: 'object', additionalProperties: true }),
+      toModelOutput: modelOutput,
     }),
     login_session: createTool({
       id: 'login_session',

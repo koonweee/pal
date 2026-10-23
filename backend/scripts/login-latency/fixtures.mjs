@@ -1,3 +1,4 @@
+import { writeFileSync, unlinkSync } from 'node:fs';
 import { chromium } from '/opt/pal/node_modules/playwright-core/index.mjs';
 import { createInterface } from 'node:readline';
 const tag = process.argv[2];
@@ -7,6 +8,8 @@ const hosts = Object.fromEntries(
     `pal-latency-${name}-${tag}.example.test`,
   ]),
 );
+const hostsPath = '/tmp/pal-login-latency-hosts.json';
+writeFileSync(hostsPath, JSON.stringify(Object.values(hosts)), { mode: 0o600 });
 const password = 'Latency-only-dummy-password!';
 const marker = 'pal-latency-fixture:' + tag;
 function emit(event, data = {}) {
@@ -226,6 +229,7 @@ for await (const line of createInterface({ input: process.stdin })) {
         await bw('/object/item/' + encodeURIComponent(item.id), 'DELETE');
         emit('fixture.vault_deleted', { accountId: item.id });
       }
+      unlinkSync(hostsPath);
       await context.unroute(predicate, handler);
       await browser.close();
       emit('fixtures.closed');

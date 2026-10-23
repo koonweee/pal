@@ -12,11 +12,11 @@ Reduce latency after private PWA interactions and reprofile the same three synth
 
 - Private credential save, account selection and verification submission fill the bound browser fields directly, then notify the Task. Stale targets preserve saved credentials or account selection for recovery.
 - Bitwarden prewarms on application startup and refreshes hourly in the background. Pal writes are immediately available through its normal read-before-write workflow.
-- Shared Task/Worker guidance batches known fill/click actions and uses login_inspect action arguments to open login pages or advance filled username steps before masked inspection. Compact field refs retain all binding checks.
+- Shared Task/Worker guidance uses native action+inspection for login opening and subsequent transitions, and secure_fill action for fill/submit/inspection. Secure-entry tools own needs-input status. Compact field refs retain all binding checks.
 
 ## Target Data Shape
 
-Reuse existing request kinds, statuses and private endpoints. login_inspect accepts an optional browser action array; other model-facing arguments remain unchanged. A successful private credential/account submission finishes as `filled`; a saved/selected request whose browser binding is stale retains `saved`/`selected` and notifies the Task to continue from fresh fields. Successful authentication still requires explicit agent verification and login_session completion.
+Reuse existing request kinds, statuses and private endpoints. login_inspect and secure_fill accept optional browser action arrays; other model-facing arguments remain unchanged. A successful private credential/account submission finishes as `filled`; a saved/selected request whose browser binding is stale retains `saved`/`selected` and notifies the Task to continue from fresh fields. Successful authentication still requires explicit agent verification and login_session completion.
 
 ## Milestones
 
@@ -90,6 +90,22 @@ Exit criteria:
 
 - Navigation and inspection can be performed in one model request without exposing values or bypassing existing browser ownership.
 - Compact refs remain unique across inspections; old refs stay invalid. Profile results distinguish model adherence from backend guarantees.
+
+### 6. Native fill/action/inspection and fewer administrative turns
+
+Implementation tasks:
+
+- [x] Generalize shared action+inspection guidance to login opening and all known next actions, including verification and Trust; keep field/control choices with the model.
+- [x] Describe automatic needs-input status in secure-entry tools and shared guidance; remove competing continuation policy from filled notifications.
+- [x] Add optional action to secure_fill: fill through existing validation, execute only after success, then return masked inspection. Keep media-producing fill outside code mode and remove superseded script-batching guidance.
+- [x] Verify successful fill/action/inspection, no action on stale/missing/code/ambiguous results, caller ownership, sanitized failure and native image output; run focused backend checks.
+- [x] Deploy to dev preserving the desktop, profile unchanged natural prompts/model configuration, compare adoption and latency with the preceding runs, and clean synthetic state.
+
+Exit criteria:
+
+- Model-selected fields and controls retain existing safety checks. User entry never automatically submits a form.
+- Native combined fill returns a masked next-page image without credentials in model output. Waiting/error/input-required results never run the supplied action.
+- Measured results distinguish backend guarantees, guidance adoption, provider variation and model turn counts.
 
 ## Tests
 
@@ -220,3 +236,15 @@ Reports render correctly in Chrome, including scenario filtering. Profiler metho
 - Final username transitions combine action+inspection, reducing DOM-ready-to-field-scan gaps from 3.746–6.258s to 0.343–0.410s. Initial tab opening stays separate; its estimated savings remain unvalidated. Extra status/non-tool turns mean total model calls do not fall consistently.
 - Six-ref OTP arguments shrink 348→228 characters; streaming is 2.362/2.472s versus 3.187/4.715s. Two follow-up samples support smaller argument-generation costs; provider/context variation limits end-to-end attribution. See [Detailed login trace findings](login-latency-trace-findings.md) and `.local/login-latency-action-comparison/comparison.html`.
 - All runtime diagnostics and synthetic state are removed. Checks across 27 hosts find no fixture vault entries, tabs or unfinished cards. The disposable PostgreSQL test container is removed. Dev remains healthy and the long-running execution desktop is preserved.
+
+## Native Fill Verification
+
+- secure_fill action uses the existing private fill and owned browser action/inspection paths. It clears the retrieved credential object before acting; waiting, input-required and unsuccessful fills skip action. Inspection/fill return native media directly; code-mode fill batching is removed.
+- Shared guidance covers all known login transitions and host-owned needs-input status. Filled notifications report facts and persistence intent. Main remains a router; no frontend, schema, private API or model-configuration change is needed.
+- Backend build/lint and all 23 focused tests pass: eight browser/vault, one discovery and fourteen login/client-contract tests. The existing action scenario covers native image output, conditional action skips, ownership and sanitized post-fill errors.
+- Nine synthetic outcomes pass across three diagnostic/final runs. The final clean pass is Apple 57.918s (11→8 Task model requests), Amazon 54.821s (11→9), and picker 34.918s (6→5), compared with the immediately preceding 65.310/53.314/32.107s. Only Apple has a clear observed time reduction.
+- Initial native opening is used in all three final flows, but independent bookkeeping remains a separate 4.2–6.3s model turn. No redundant needs-input calls occur. Apple password→OTP field scanning starts after 0.514s instead of 3.869s.
+- Diagnostic opening failures were isolated to fake-host interception attaching after external CDP navigation. Exact-host temporary fixture preparation fixes this harness gap; its time stays in the reported tool durations. Production navigation has no workaround.
+- JavaScript/Python checks and interactive report rendering pass. Full results and sampling limits are in [Detailed login trace findings](login-latency-trace-findings.md) and `.local/login-latency-native-comparison/comparison.html`.
+
+Final cleanup checks across 36 fixture hosts find zero vault entries, fixture tabs, unfinished cards, injected files or open debugger endpoints. The disposable test container is removed. Dev services are healthy; execution retains its original container and start time.

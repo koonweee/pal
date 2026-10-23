@@ -81,12 +81,12 @@ export class LoginService implements OnModuleDestroy {
                     ? 'The user selected a saved account. Inspect again and use secure_fill without accountId to continue this selected flow.'
                     : row.status === 'filled'
                       ? row.kind === 'code'
-                        ? 'The verification code was filled directly in the browser. Continue with the known submit control; inspect again if the page advanced automatically.'
-                        : `The complete username and password are stored. The selected ${Object.keys(row.fields ?? {}).join('/')} fields were filled directly in the browser. Continue with the known submit control; do not refill or inspect only to confirm filling. Inspect and use secure_fill for additional fields on later pages.`
+                        ? 'The verification code was filled directly in the browser.'
+                        : `The complete username and password are stored. The selected ${Object.keys(row.fields ?? {}).join('/')} fields were filled directly in the browser.`
                       : 'The request was cancelled.';
           await this.notify(
             row.taskId,
-            `Secure entry request ${row.id} for ${row.origin} is ${row.status}. ${next}${row.kind === 'credentials' && ['saved', 'selected', 'filled'].includes(row.status) ? ` Keep me signed in preference: ${row.keepMeSignedIn ? 'on' : 'off'}. Inspect website persistence options and honor this preference; do not claim it was applied unless you selected an applicable option.` : ''} This notification can be delivered more than once.`,
+            `Secure entry request ${row.id} for ${row.origin} is ${row.status}. ${next}${row.kind === 'credentials' && ['saved', 'selected', 'filled'].includes(row.status) ? ` Keep me signed in preference: ${row.keepMeSignedIn ? 'on' : 'off'}.` : ''} This notification can be delivered more than once.`,
           );
           await this.repository.notified(row.id, row.status);
         } catch {
@@ -245,7 +245,12 @@ export class LoginService implements OnModuleDestroy {
     accountId?: string,
     workerId?: string,
     keepMeSignedIn?: boolean,
+    action?: string[],
+    signal?: AbortSignal,
   ) {
+    signal?.throwIfAborted();
+    if (action && !action.length)
+      throw new ApplicationError('invalid_input', 'Supply a browser action');
     const page = await this.browser.selectedPage(taskId, workerId);
     const target = await this.inspector.select(
       page,
@@ -291,7 +296,12 @@ export class LoginService implements OnModuleDestroy {
         'conflict',
         'Matching account is missing required login fields; request credentials',
       );
+    let filled: Awaited<ReturnType<LoginBrowser['fill']>> & {
+      accountId: string;
+      keepMeSignedIn: boolean;
+    };
     try {
+      signal?.throwIfAborted();
       const result = await this.inspector.fill(
         page,
         loginOwner(taskId, workerId),
@@ -312,12 +322,24 @@ export class LoginService implements OnModuleDestroy {
         account.id,
         keep,
       );
-      return { ...result, accountId: account.id, keepMeSignedIn: keep };
+      filled = { ...result, accountId: account.id, keepMeSignedIn: keep };
     } finally {
       if (account.login) {
         account.login.password = undefined;
         account.login.username = undefined;
       }
+    }
+    if (!action) return filled;
+    try {
+      return {
+        ...filled,
+        ...(await this.inspect(taskId, workerId, action, signal)),
+      };
+    } catch {
+      throw new ApplicationError(
+        'unavailable',
+        'Fields were filled, but browser action or inspection failed. Inspect again without action before retrying.',
+      );
     }
   }
   private async publishCard(row: LoginRequest) {
