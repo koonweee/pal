@@ -14,8 +14,8 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Browser login latency improvements](login-latency-improvements.md) | Done | Hourly vault refresh, direct private filling, known-action batching and before/after dev profiling. |
-| [Detailed login trace findings](login-latency-trace-findings.md) | Reference | Provider streaming, dispatch and browser-readiness timings with concrete next changes and estimated savings. |
+| [Browser login latency improvements](login-latency-improvements.md) | Done | Vault prewarming/refresh, direct private filling, combined navigation/inspection, compact refs and dev profiling. |
+| [Detailed login trace findings](login-latency-trace-findings.md) | Reference | Provider/dispatch/readiness timings, baseline estimates and measured action/ref implementation profiles. |
 | [Browser login latency investigation](login-latency-investigation.md) | Done | Actual dev-agent timings across synthetic entry, verification, correction and account-selection flows. |
 | [Routed execution egress](routed-egress-implementation.md) | Done | Container-wide public internet routing, private destination restrictions and independent gateway recovery. |
 | [Routed execution egress evaluation](routed-egress-gateway.md) | Done | Portable routed gateway, premade alternatives, restart safety, and native browser/desktop acceptance. |

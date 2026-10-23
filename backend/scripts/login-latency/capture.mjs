@@ -103,6 +103,18 @@ for (const [path, exportName, methods] of [
       cls,
       method,
       (args) => {
+        if (exportName === 'LoginService' && method === 'inspect')
+          return {
+            taskId: args[0],
+            hasAction: !!args[2]?.length,
+            actionKind: args[2]?.[0],
+          };
+        if (exportName === 'LoginService' && method === 'request')
+          return {
+            taskId: args[0],
+            entryKind: args[1]?.code ? 'code' : 'credentials',
+            codeFields: args[1]?.code?.length,
+          };
         if (exportName === 'LoginService' && method === 'fillRequest')
           return { taskId: args[0]?.taskId, requestId: args[0]?.id };
         if (exportName === 'LoginService')
@@ -165,7 +177,10 @@ for (const [path, exportName, methods] of [
           : {}),
         ...(result?.inspectionId ? { inspectionId: result.inspectionId } : {}),
         ...(Array.isArray(result?.inputs)
-          ? { inputCount: result.inputs.length }
+          ? {
+              inputCount: result.inputs.length,
+              refLengths: result.inputs.map((input) => input.ref.length),
+            }
           : {}),
       }),
     );

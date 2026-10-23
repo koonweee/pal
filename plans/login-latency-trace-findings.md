@@ -6,7 +6,7 @@ Reference
 
 ## Goal
 
-Identify the specific serial work worth changing after vault prewarming and direct private filling. The diagnostic harness is in `backend/scripts/login-latency/` and runs against the existing dev agent with ordinary user prompts.
+Measure serial login work after vault prewarming and direct private filling, and validate action-before-inspection and compact field refs. The diagnostic harness is in `backend/scripts/login-latency/` and runs against the existing dev agent with ordinary user prompts.
 
 ## Measurement Boundaries
 
@@ -17,9 +17,9 @@ Identify the specific serial work worth changing after vault prewarming and dire
 
 Capture excludes tool arguments/results, model text and secrets. The fixture contains only dummy credential constants. Native call IDs are preferred; a missing ID is correlated only when exactly one pending call has the same thread/tool. All correlated executions in the first sample resolve unambiguously.
 
-## Results
+## Baseline Results
 
-Two detailed samples complete all flows. The first sample records: Apple-style 71.6s, Amazon-style with correction 58.3s and combined form/account picker 32.7s. The repeat records 79.2s, 68.5s and 39.9s respectively. The vault is warm. These are measurements of the current implementation, without the proposed changes below. The table below describes the first sample; the repeat confirms the same boundary attribution.
+Two detailed samples complete all flows. The first sample records: Apple-style 71.6s, Amazon-style with correction 58.3s and combined form/account picker 32.7s. The repeat records 79.2s, 68.5s and 39.9s respectively. The vault is warm. These measurements precede action-before-inspection and compact refs. The table below describes the first sample; the repeat confirms the same boundary attribution.
 
 | Boundary | Median | Maximum |
 | --- | ---: | ---: |
@@ -43,11 +43,11 @@ Across 51 correlated tool executions in both samples, full model requests have a
 
 Inspection itself takes approximately 1.4–1.5s. The visible idle time before it is predominantly a model request. Moving tool dispatch earlier could recover at most a few tenths of a second per call in this sample; no large application scheduling gap is evident.
 
-## Proposed Changes
+## Implementation and Baseline Estimates
 
 ### 1. Allow an action before masked inspection
 
-Extend the existing tool with one optional browser-argument array:
+The existing tool accepts one optional browser-argument array:
 
 ```ts
 login_inspect({ action: ['click', '@e4'] })
@@ -55,9 +55,9 @@ login_inspect({ action: ['tab', 'new', 'https://example.com/login'] })
 login_inspect({})
 ```
 
-The service executes the action through the existing task/worker-owned BrowserService, observes the resulting page, then performs the existing masked inspection. Output remains field metadata, opaque refs, matching accounts and an annotated masked image. The model continues choosing the browser action and assigning field roles. Navigation readiness must use bounded browser events/current-page evidence and return inspection or an actionable error on failed navigation, rather than introducing a fixed sleep.
+The service executes the action through the existing task/worker-owned BrowserService, observes the resulting page, then performs the existing masked inspection. Output remains field metadata, opaque refs, matching accounts and an annotated masked image. The model continues choosing the browser action and assigning field roles. Existing-page actions observe frame navigation for up to 1.5 seconds and wait up to five seconds for DOM readiness. Same-page actions fall back to inspecting the current page. Delayed SPA transitions can require reinspection; guidance says to retry inspection without repeating an action.
 
-Use it when initially opening the login page and when advancing from a privately filled username page to the password page. It stays a direct multimodal tool. Shared execution guidance should describe this in the existing login section, with the tool description explaining action-before-inspection semantics.
+Use it when initially opening the login page and when advancing from a privately filled username page to the password page. It stays a direct multimodal tool. Shared execution guidance and the tool description explain action-before-inspection semantics. Task/Worker tab-opening defaults share the same instruction source; role files retain their ownership and cleanup responsibilities.
 
 The specific inspection-only model requests to remove represent:
 
@@ -73,11 +73,11 @@ The password-to-verification transition is excluded from that estimate. Its pass
 
 ### 2. Shorten opaque field refs
 
-`LoginBrowser` currently emits an input marker plus a UUID for each field. Keep generation-specific, opaque refs but use a compact 96-bit random base64url representation (for example, an input marker plus a 16-character nonce). Preserve owner, expiry, document, element and URL validation; never reduce refs to a reusable ordinal such as `i1` alone.
+`LoginBrowser` emits an input marker plus a 16-character, 96-bit random base64url nonce. The baseline used a UUID nonce. Owner, expiry, document, element and URL validation remain unchanged; refs are generation-specific and never reusable ordinals.
 
 The Apple code request sends six refs in 348 argument characters and spends 4.715s streaming them within a 7.791s request; the repeat spends 3.187s streaming the same 348 characters within an 8.242s request. A compact nonce format could reduce repeated text and plausibly recover 1–2s on this six-field request, with smaller gains elsewhere. That is a hypothesis bounded by the measured streaming time, not a measured improvement; do not add the full 4.715s to projected savings.
 
-## Validation Required for Implementation
+## Validation Scope
 
 - Reuse the same natural prompts and private PWA submissions, then compare total time, number of serial model calls, argument-streaming time and transition idle time.
 - Cover ownership, failed/no-navigation actions, fresh-page refs, masking and stale-ref rejection after compacting refs.
@@ -90,4 +90,44 @@ Run with `python3 backend/scripts/login-latency/profile.py`. JavaScript syntax c
 
 Detailed HTML, numeric summary and Chrome/Perfetto trace are under `.local/login-latency-detailed/`; archived runs sit beside it. The harness restores methods/fetch, closes the debugger and removes injected files and exact-host dummy accounts/tabs on completion. Raw traces and runtime data remain outside version control.
 
-Final checks across all nine hosts find zero remaining fixture vault entries, active cards, fixture tabs, injector files or open debugger endpoints. The execution desktop retains its original container/start time; dev services are healthy. Only diagnostic scripts and planning evidence change in this milestone.
+Final checks across all nine hosts find zero remaining fixture vault entries, active cards, fixture tabs, injector files or open debugger endpoints. The execution desktop retains its original container/start time; dev services are healthy. The baseline profiling milestone changes diagnostic scripts and planning evidence; the implementation results below cover the tool/ref changes.
+
+## Implementation Profiles
+
+Two follow-up runs use the same natural prompts and private PWA driver. Both complete all three flows, including six-field verification, rejected-password correction and the ambiguous account picker. The final pass uses aligned shared Task/Worker guidance.
+
+| Flow | Before samples | Initial implementation pass | Final pass | Task model requests before → final |
+| --- | ---: | ---: | ---: | ---: |
+| Apple username → password → code → Trust | 71.587 / 79.218s | 68.157s | 65.310s | 12 / 11 → 11 |
+| Amazon with rejected-password correction | 58.302 / 68.536s | 59.068s | 53.314s | 11 / 11 → 11 |
+| Combined form / account picker | 32.668 / 39.855s | 37.219s | 32.107s | 4 / 5 → 6 |
+
+### Combined Actions
+
+The initial pass combines Amazon's username transition. The final pass combines both Apple and Amazon username transitions. Each replaces a browser-only click followed by a separate inspection call with one action+inspection call. Field roles are still chosen after the resulting masked inspection.
+
+Readiness now measures the actual LoginBrowser field-scan start, including for the reanalyzed baselines. The service starts before navigation in a combined call, so its entry timestamp is unsuitable for this comparison.
+
+| Transition | DOM ready → field scan before | Final pass |
+| --- | ---: | ---: |
+| Apple username → password | 4.193 / 6.258s | 0.343s |
+| Amazon username → password | 3.746 / 3.770s | 0.410s |
+| Apple password → verification | 3.389 / 4.854s | 3.869s |
+
+The final password-to-verification transition retains the existing fill/click batch and a subsequent inspection turn. Browser field scanning remains about 0.3s.
+
+Initial tab opening remains separate in all six follow-up flows, despite the new guidance and available action schema. Thus the opening-call savings estimate remains unvalidated. Extra status and non-tool turns vary: removing a local click/inspection round trip does not guarantee fewer total model requests. The picker has no combined action in these samples; its elapsed-time change is not evidence for action batching.
+
+### Compact Refs
+
+Six-field OTP request arguments shrink from 348 to 228 characters (34%). Streaming takes 2.362 / 2.472s after, versus 3.187 / 4.715s before. Complete model requests for that tool take 6.367 / 5.624s after, versus 8.242 / 7.791s before. This supports the expected reduction in argument-generation cost; provider variability prevents assigning every millisecond to ref length.
+
+Across 50 correlated follow-up tool executions, model-request median is 3.989s versus 4.361s across 51 baseline executions. Final dispatch median is 0.161s and tool-end-to-next-request median is 0.019s. Serial model decisions remain the main cost; the traces do not indicate a large scheduling delay to fix in the host.
+
+### Validation and Limits
+
+Backend build, type-aware lint/boundaries, eight browser/vault tests and fourteen login/client-contract integration tests pass. Coverage includes new tabs, delayed navigation, same-page updates, worker identity, nullable action, sanitized failures, masking and stale compact-ref rejection. No frontend or private API contract changes are required.
+
+These are two baseline and two follow-up samples with different accumulated conversation context and provider timing. End-to-end results include Main routing and scripted user interaction. They demonstrate successful behavior and smaller transition/argument costs; they do not establish a stable percentage improvement.
+
+The local comparison is `.local/login-latency-action-comparison/comparison.html`, with numeric output beside it. The final detailed HTML/Chrome trace remains in `.local/login-latency-detailed/`. Chrome rendering and filtering pass. All runtime taps are restored; checks across 27 fixture hosts find zero vault entries, tabs, unfinished cards, injected files or open debugger endpoints. The disposable test database is removed. Dev is healthy and the execution desktop retains its original container/start time.

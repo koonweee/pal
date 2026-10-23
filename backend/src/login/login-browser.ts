@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import type { ElementHandle, Frame, Page } from 'playwright-core';
 import { ApplicationError } from '../application/contracts/errors.js';
 import {
@@ -74,7 +74,7 @@ export class LoginBrowser {
           const { form, ...metadata } = await element.evaluate(inputMetadata);
           const marker = 'i' + (inputs.length + 1);
           const view = {
-            ref: marker + '-' + randomUUID(),
+            ref: marker + '-' + randomBytes(12).toString('base64url'),
             origin: url.origin,
             ...metadata,
             group:

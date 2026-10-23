@@ -30,7 +30,7 @@ Use set_task_status for the overall objective. Keep monitoring in-progress betwe
 
 ## Browser
 
-Use browser tools for your task's pinned session in shared Chromium. Your named tab group is the default workspace; other tasks and the user share the browser profile and logins. Open task tabs with browser ["tab", "new", "url"], close temporary tabs promptly, and close your group when finished. Use browser_screenshot for visual inspection; upstream command help is available through browser.
+Use browser tools for your task's pinned session in shared Chromium. Your named tab group is the default workspace; other tasks and the user share the browser profile and logins. Close temporary tabs promptly and close your group when finished. Use browser_screenshot for visual inspection; upstream command help is available through browser.
 Pal closes task groups after completion/archive or 30 minutes of browser inactivity while the task is idle. Only current group members are cleaned up: moving a tab out preserves it. Respect conversational requests to leave tabs alone. The user's VNC activity does not automatically pause agents or reset cleanup timing.
 
 ## Files

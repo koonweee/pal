@@ -12,11 +12,11 @@ Reduce latency after private PWA interactions and reprofile the same three synth
 
 - Private credential save, account selection and verification submission fill the bound browser fields directly, then notify the Task. Stale targets preserve saved credentials or account selection for recovery.
 - Bitwarden prewarms on application startup and refreshes hourly in the background. Pal writes are immediately available through its normal read-before-write workflow.
-- Shared Task/Worker guidance batches known fill/click actions and continues from successful private fills without redundant confirmation.
+- Shared Task/Worker guidance batches known fill/click actions and uses login_inspect action arguments to open login pages or advance filled username steps before masked inspection. Compact field refs retain all binding checks.
 
 ## Target Data Shape
 
-Reuse existing request kinds, statuses, private endpoints and model-facing arguments. A successful private credential/account submission finishes as `filled`; a saved/selected request whose browser binding is stale retains `saved`/`selected` and notifies the Task to continue from fresh fields. Successful authentication still requires explicit agent verification and login_session completion.
+Reuse existing request kinds, statuses and private endpoints. login_inspect accepts an optional browser action array; other model-facing arguments remain unchanged. A successful private credential/account submission finishes as `filled`; a saved/selected request whose browser binding is stale retains `saved`/`selected` and notifies the Task to continue from fresh fields. Successful authentication still requires explicit agent verification and login_session completion.
 
 ## Milestones
 
@@ -76,11 +76,27 @@ Exit criteria:
 - Actual dev flows have correlated tool-call and browser readiness evidence. No agent behavior or tool contract changes are included in this profiling step.
 - The recommendation separates measured delays from estimated savings and preserves model-selected fields and private filling.
 
+### 5. Action-before-inspection and compact refs
+
+Implementation tasks:
+
+- [x] Extend login_inspect with optional nullable action arguments, retaining existing command ownership and masked output; update shared Task/Worker guidance.
+- [x] Emit 96-bit base64url field-ref nonces while retaining generation/owner/document/URL validation.
+- [x] Verify delayed navigation, same-page changes, failed actions, caller identity and stale refs; run backend checks.
+- [x] Deploy to dev with the execution desktop preserved and repeat the detailed synthetics using the same prompts.
+- [x] Compare serial calls, total time, navigation gaps and OTP argument generation; record measured gains/limits and clean fixtures.
+
+Exit criteria:
+
+- Navigation and inspection can be performed in one model request without exposing values or bypassing existing browser ownership.
+- Compact refs remain unique across inspections; old refs stay invalid. Profile results distinguish model adherence from backend guarantees.
+
 ## Tests
 
 - Existing vault integration: concurrent initial sync, own-write visibility, hourly background refresh, cached reads after refresh failure and sanitized provider errors.
 - Existing login/browser integration: immediate save/selection fill, duplicate submissions, current-origin matching and successful storage with stale-field fallback.
 - Shared card component: distinct Login filled and Code filled labels.
+- Browser/action integration covers owned caller identity, delayed navigation, same-page changes, failed actions, masked values and compact stale refs.
 - Three actual dev-agent flows cover username/password/verification, rejected-password correction and account selection.
 
 ## Validation Commands
@@ -104,7 +120,7 @@ cd ..
 
 ## Overall Exit Criteria
 
-- [x] All three improvements are implemented, documented, checked and committed locally.
+- [x] All latency changes are implemented, documented, checked and committed locally.
 - [x] Dev profiling reports measured before/after changes and remaining hotspots.
 - [x] Temporary profiler resources and fixture vault entries are removed; dev is healthy.
 
@@ -112,7 +128,7 @@ cd ..
 
 - All 27 focused tests pass: seven browser/vault tests, thirteen login/client-contract integration tests, five card/reload-safety tests and two desktop/touch browser workflows. Backend build/lint/boundaries/OpenAPI and frontend type/ownership/unused-code checks pass.
 - The mobile browser check now waits for the picker entrance animation to finish before asserting its 44-pixel rendered target height.
-- No schema migration, private API arguments or model-facing parameters were added. Private credential completion uses the existing filled status and an accurate Login filled label.
+- Direct private filling uses existing private API arguments and statuses. Credential completion renders Login filled. Action-before-inspection adds one optional model-facing argument and requires no schema migration.
 - Dev is running the updated backend and PWA. A concurrent routed-network refactor initially prevented Compose from recreating the existing network. Profiling deployment uses an isolated committed Compose/frontend snapshot and preserves the running execution container. The subsequent routed-network deployment remains separate work.
 
 ## Profile Results
@@ -162,7 +178,7 @@ The two costs multiply: a new page introduces serial observe/decide/act cycles, 
 | 15.28s | Model finishes producing the combined password-fill/submit call |
 | 17.12s | Website receives the password submission |
 
-The separate model call to request inspection contributes a cycle between navigation and field selection. Fresh page evidence is needed before assigning password-field roles; combining navigation and the resulting masked inspection could remove this extra cycle. login_inspect currently remains a direct multimodal tool outside code mode, so existing fill/click batching does not combine that pair.
+The separate model call to request inspection contributes a cycle between navigation and field selection. Fresh page evidence is needed before assigning password-field roles; combining navigation and the resulting masked inspection could remove this extra cycle. login_inspect remains a direct multimodal tool outside code mode; its optional action combines navigation with masked inspection.
 
 Across the comparison, model response headers arrive after a median 1.34s and full Task responses finish after a median 3.89s. Median output is only 27 tokens and the median cached input share is 99.1%. This establishes repeated model-request latency even for short tool calls; it does not isolate network, provider queueing, inference or streaming costs, or prove that accumulated context causes the delay. Faster model requests and fewer serial requests are separate optimization opportunities. The account-picker flow uses four Task requests; Apple uses thirteen for its additional stages and challenges.
 
@@ -192,5 +208,15 @@ Reports render correctly in Chrome, including scenario filtering. Profiler metho
 - The reusable `backend/scripts/login-latency/profile.py` harness captures provider argument streaming, actual tool execution, discovery processing and synthetic DOM readiness, restoring all runtime taps and cleaning exact-host fixtures automatically.
 - Six instrumented login flows pass across two traced runs, with 51 correlated tool executions and zero ambiguous matches. Syntax/compilation checks and Chrome rendering/filtering pass. One additional functionally successful run is excluded because a cached injector prevented fresh markers; cache eviction and trace reset are validated by the final repeat.
 - Combined medians: model request 4.361s; complete arguments to execution 0.172s; tool end to next request 0.020s. The recommendation and measured removable calls are in [Detailed login trace findings](login-latency-trace-findings.md).
-- Proposed follow-up: optional action-before-inspection on login_inspect, plus compact generation-specific refs. Neither change is implemented in this profiling milestone. Estimated action+inspection savings are 7–9s Apple, 6–8s Amazon and about 3s for the picker flow, with another hypothesized 1–2s for the six-ref OTP request after compacting refs.
+- The baseline recommendation estimates action+inspection savings of 7–9s Apple, 6–8s Amazon and about 3s for the picker flow, with another hypothesized 1–2s for the six-ref OTP request. Milestone 5 validates those estimates against the implementation.
 - Cleanup checks across nine fixture hosts find zero leftover credentials, actionable cards, fixture tabs, injector files or debugger endpoints. Dev remains healthy with its original execution desktop.
+
+## Action and Ref Verification
+
+- login_inspect accepts optional nullable action arguments through the existing caller-owned browser path. Bounded navigation observation precedes the existing masked inspection. Compact refs use 96-bit random nonces and retain all binding/expiry validation.
+- Shared execution guidance owns generic tab-opening defaults and secure-login batching; Task/Worker files retain role-specific ownership and cleanup.
+- Backend build, lint/boundaries, eight browser/vault tests and fourteen login/client-contract integration tests pass. Diagnostic JavaScript syntax, Python compilation and interactive Chrome reports pass.
+- Six follow-up synthetic flows succeed. Final timings are Apple 65.310s, Amazon 53.314s and picker 32.107s; baseline pairs are 71.587/79.218s, 58.302/68.536s and 32.668/39.855s.
+- Final username transitions combine action+inspection, reducing DOM-ready-to-field-scan gaps from 3.746–6.258s to 0.343–0.410s. Initial tab opening stays separate; its estimated savings remain unvalidated. Extra status/non-tool turns mean total model calls do not fall consistently.
+- Six-ref OTP arguments shrink 348→228 characters; streaming is 2.362/2.472s versus 3.187/4.715s. Two follow-up samples support smaller argument-generation costs; provider/context variation limits end-to-end attribution. See [Detailed login trace findings](login-latency-trace-findings.md) and `.local/login-latency-action-comparison/comparison.html`.
+- All runtime diagnostics and synthetic state are removed. Checks across 27 hosts find no fixture vault entries, tabs or unfinished cards. The disposable PostgreSQL test container is removed. Dev remains healthy and the long-running execution desktop is preserved.

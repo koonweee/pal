@@ -99,9 +99,48 @@ export class LoginService implements OnModuleDestroy {
       this.notifying = false;
     }
   }
-  async inspect(taskId: string, workerId?: string) {
+  async inspect(
+    taskId: string,
+    workerId?: string,
+    action?: string[],
+    signal?: AbortSignal,
+  ) {
     try {
+      signal?.throwIfAborted();
+      if (action) {
+        if (!action.length)
+          throw new ApplicationError(
+            'invalid_input',
+            'Supply a browser action',
+          );
+        // New tabs may be the caller's first owned page. For existing pages,
+        // arm the frame listener before dispatching asynchronous navigation.
+        const before =
+          action[0] === 'tab' && action[1] === 'new'
+            ? undefined
+            : await this.browser.selectedPage(taskId, workerId);
+        const navigation = before
+          ?.waitForEvent('framenavigated', { timeout: 1500 })
+          .catch(() => undefined);
+        const result = await this.browser.command(
+          taskId,
+          action,
+          signal,
+          workerId,
+        );
+        if (!result.success)
+          throw new ApplicationError(
+            'unavailable',
+            'Browser action failed. Inspect again without action before retrying.',
+          );
+        const frame = await navigation;
+        if (frame)
+          await frame.waitForLoadState('domcontentloaded', { timeout: 5000 });
+      }
       const page = await this.browser.selectedPage(taskId, workerId);
+      if (action)
+        await page.waitForLoadState('domcontentloaded', { timeout: 5000 });
+      signal?.throwIfAborted();
       const result = await this.inspector.inspect(
         page,
         loginOwner(taskId, workerId),

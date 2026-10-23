@@ -72,15 +72,30 @@ export function loginTools(service: LoginService) {
     login_inspect: createTool({
       id: 'login_inspect',
       description:
-        'Inspect editable inputs in your selected browser tab. Returns opaque refs, HTML metadata, matching accounts and a masked screenshot labelled i1, i2, etc.; each badge matches the ref prefix. Decide which inputs are username, password or verification code, then pass fields to secure_fill or secure_entry_request. Input roles are your judgment. Never read existing values. Reinspect after navigation or stale refs.',
-      inputSchema: jsonSchema<Record<string, never>>({
+        'Inspect editable inputs in your selected browser tab. Optional action runs agent-browser arguments first, then returns the resulting masked inspection. Use action for opening a login tab or advancing a filled username page so navigation and inspection share one call. It waits briefly for navigation; if the page is still loading, inspect again without repeating the action. Returns opaque refs, HTML metadata, matching accounts and a masked screenshot labelled i1, i2, etc.; each badge matches the ref prefix. Decide which inputs are username, password or verification code, then pass fields to secure_fill or secure_entry_request. Input roles are your judgment. Never read existing values. Reinspect after navigation or stale refs.',
+      inputSchema: jsonSchema<{ action?: string[] | null }>({
         type: 'object',
-        properties: {},
+        properties: {
+          action: {
+            type: ['array', 'null'],
+            items: { type: 'string' },
+            minItems: 1,
+            description:
+              'Agent-browser arguments to run before inspecting, such as ["tab","new","https://example.com/login"] or ["click","@e4"].',
+          },
+        },
         additionalProperties: false,
       }),
-      execute: (_input, context) => {
+      execute: ({ action }, context) => {
         const { taskId, workerId } = identity(context);
-        return safe(() => service.inspect(taskId, workerId));
+        return safe(() =>
+          service.inspect(
+            taskId,
+            workerId,
+            action ?? undefined,
+            context?.abortSignal,
+          ),
+        );
       },
       outputSchema: jsonSchema<
         | Awaited<ReturnType<LoginService['inspect']>>

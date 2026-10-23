@@ -3,6 +3,7 @@ import {
   MASTRA_THREAD_ID_KEY,
 } from '@mastra/core/request-context';
 import { noopObserve } from '@mastra/core/tools';
+import { PARENT_TASK_ID, WORKER_ID } from '../dist/agent/task-workers.js';
 import { loginTools } from '../dist/login/login-tools.js';
 import type { SecureFields } from '../dist/login/login-fields.js';
 import { ChatService } from '../dist/chat/chat.service.js';
@@ -862,6 +863,125 @@ it('recovers code requests after restart, bounds attempts, times out, and resume
   } finally {
     restarted?.onModuleDestroy();
     selected.mockRestore();
+    await browser.close();
+  }
+});
+
+it('acts before masked inspection across new tabs, delayed navigation, same-page updates and failures', async () => {
+  const browser = await chromium.launch({
+    channel: 'chrome',
+    executablePath: process.env.TEST_CHROMIUM_PATH,
+    headless: true,
+  });
+  const context = await browser.newContext();
+  const task = await fixture.app
+    .get(TasksService)
+    .create({ title: 'Action inspection', goal: 'Inspect after navigation' });
+  const login = fixture.app.get(LoginService);
+  const workerId = randomUUID();
+  const caller = {
+    requestContext: new RequestContext([
+      [MASTRA_THREAD_ID_KEY, 'pal-task:' + task.id],
+      [PARENT_TASK_ID, task.id],
+      [WORKER_ID, workerId],
+    ]),
+    observe: noopObserve,
+  };
+  let releaseStep!: () => void;
+  const step = new Promise<void>((resolve) => {
+    releaseStep = resolve;
+  });
+  let requested = false;
+  await context.route('https://action.example.test/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/step') {
+      requested = true;
+      await step;
+      return route.fulfill({ json: {} });
+    }
+    return route.fulfill({
+      contentType: 'text/html',
+      body:
+        path === '/password'
+          ? '<input type="password" autocomplete="current-password" value="SENTINEL_PASSWORD">'
+          : '<input autocomplete="username"><button onclick="fetch(\'/step\').then(()=>location.href=\'/password\')">Next</button>',
+    });
+  });
+  let current = await context.newPage();
+  const selected = vi
+    .spyOn(fixture.app.get(BrowserService), 'selectedPage')
+    .mockImplementation(async () => current);
+  const command = vi
+    .spyOn(fixture.app.get(BrowserService), 'command')
+    .mockImplementation(async (_id, args) => {
+      if (args[0] === 'fail')
+        return { success: false, data: null, error: 'SECRET_PROVIDER_ERROR' };
+      if (args[0] === 'tab') {
+        current = await context.newPage();
+        await current.goto(args[2]);
+      } else if (args[0] === 'click') await current.locator('button').click();
+      else if (args[0] === 'eval') await current.evaluate(args[1]);
+      return { success: true, data: {}, error: null };
+    });
+  const stored = vi.spyOn(fixture.app.get(LoginRepository), 'inspection');
+  try {
+    const tool = loginTools(login).login_inspect;
+    const opened = await tool.execute!(
+      { action: ['tab', 'new', 'https://action.example.test/login'] },
+      caller,
+    );
+    if (!('inputs' in opened)) throw new Error('Expected initial inspection');
+    expect(opened.inputs[0].autocomplete).toBe('username');
+    expect(command).toHaveBeenCalledWith(
+      task.id,
+      ['tab', 'new', 'https://action.example.test/login'],
+      undefined,
+      workerId,
+    );
+    const beforeStored = stored.mock.calls.length;
+    const navigating = tool.execute!({ action: ['click', 'button'] }, caller);
+    await until(() => requested);
+    expect(stored).toHaveBeenCalledTimes(beforeStored);
+    releaseStep();
+    const next = await navigating;
+    if (!('inputs' in next)) throw new Error('Expected password inspection');
+    expect(next.inputs.map((input) => input.type)).toEqual(['password']);
+    expect(JSON.stringify(next.inputs)).not.toContain('SENTINEL');
+    await expect(
+      login.fill(
+        task.id,
+        { username: opened.inputs[0].ref },
+        undefined,
+        workerId,
+      ),
+    ).rejects.toMatchObject({ code: 'conflict' });
+    const samePage = await tool.execute!(
+      {
+        action: [
+          'eval',
+          'document.body.innerHTML="<input autocomplete=one-time-code>"',
+        ],
+      },
+      caller,
+    );
+    if (!('inputs' in samePage))
+      throw new Error('Expected same-page inspection');
+    expect(samePage.inputs[0].autocomplete).toBe('one-time-code');
+    const calls = command.mock.calls.length;
+    expect(await tool.execute!({ action: null }, caller)).toHaveProperty(
+      'inputs',
+    );
+    expect(command).toHaveBeenCalledTimes(calls);
+    const beforeFailure = stored.mock.calls.length;
+    const failed = await tool.execute!({ action: ['fail'] }, caller);
+    expect(failed).toMatchObject({ status: 'error', code: 'unavailable' });
+    expect(JSON.stringify(failed)).not.toContain('SECRET');
+    expect(stored).toHaveBeenCalledTimes(beforeFailure);
+  } finally {
+    releaseStep();
+    stored.mockRestore();
+    selected.mockRestore();
+    command.mockRestore();
     await browser.close();
   }
 });

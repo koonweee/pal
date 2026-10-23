@@ -83,12 +83,17 @@ it('extracts generic masked inputs and fills only explicitly assigned credential
   expect(first.inputs[3].group).not.toBe(first.inputs[1].group);
   expect(JSON.stringify(first.inputs)).not.toContain('SECRET');
   expect(first).not.toHaveProperty('targets');
+  expect(first.inputs.every((input) => input.ref.length <= 21)).toBe(true);
   await page.locator('#comment').fill('SECRET_COMMENT');
   await page.locator('#user').fill('DIFFERENT_USERNAME');
   await page.locator('#pass').fill('DIFFERENT_PASSWORD');
   await page.locator('#pass').blur();
   const second = await service.inspect(page, 'a');
   expect(second.image.equals(first.image)).toBe(true);
+  expect(second.inputs[2].ref).not.toBe(first.inputs[2].ref);
+  await expect(
+    service.select(page, 'a', { password: first.inputs[2].ref }),
+  ).rejects.toMatchObject({ code: 'conflict' });
   const fields = {
     username: second.inputs[1].ref,
     password: second.inputs[2].ref,
