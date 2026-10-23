@@ -145,12 +145,14 @@ export class BitwardenService implements OnModuleDestroy {
         }
         if (!this.ready) throw new Error();
       }
-      const status = await this.request<{ status: string }>('/status');
-      if (status.status !== 'unlocked') {
+      const status = await this.request<{ template: { status: string } }>(
+        '/status',
+      );
+      if (status.template.status === 'locked') {
         await this.request('/unlock', 'POST', {
           password: this.config.get<string>('PAL_BITWARDEN_MASTER_PASSWORD'),
         });
-      }
+      } else if (status.template.status !== 'unlocked') throw new Error();
     })()
       .catch(() => {
         this.child?.kill();

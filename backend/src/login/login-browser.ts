@@ -16,21 +16,96 @@ interface BoundTarget {
   username?: ElementHandle<HTMLInputElement>;
   password?: ElementHandle<HTMLInputElement>;
 }
-// Playwright serializes this function into the page. Keep the password policy self-contained.
-function isFillablePassword(el: HTMLInputElement) {
+// These self-contained functions are serialized by Playwright into the page.
+function isEligibleInput(
+  el: HTMLInputElement,
+  role: 'any' | 'username' | 'password',
+) {
+  if (
+    !el.isConnected ||
+    el.disabled ||
+    el.readOnly ||
+    el.type === 'hidden' ||
+    !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
+  )
+    return false;
   const purposes = el.autocomplete.toLowerCase().split(/\s+/);
+  if (
+    role === 'password' &&
+    (el.type !== 'password' ||
+      purposes.some(
+        (purpose) =>
+          purpose === 'new-password' ||
+          purpose === 'one-time-code' ||
+          purpose.startsWith('cc-'),
+      ))
+  )
+    return false;
+  if (
+    role === 'username' &&
+    (!['text', 'email', 'tel'].includes(el.type) ||
+      purposes.some(
+        (purpose) =>
+          ['new-password', 'current-password', 'one-time-code'].includes(
+            purpose,
+          ) || purpose.startsWith('cc-'),
+      ))
+  )
+    return false;
+  const rect = el.getBoundingClientRect();
+  let left = rect.left,
+    right = rect.right,
+    top = rect.top,
+    bottom = rect.bottom;
+  // checkVisibility does not account for an input clipped by a collapsed ancestor.
+  let ancestor: Element | null =
+    el.parentElement ??
+    (el.getRootNode() instanceof ShadowRoot
+      ? (el.getRootNode() as ShadowRoot).host
+      : null);
+  while (ancestor) {
+    const style = getComputedStyle(ancestor),
+      bounds = ancestor.getBoundingClientRect();
+    if (['hidden', 'clip'].includes(style.overflowX)) {
+      left = Math.max(left, bounds.left);
+      right = Math.min(right, bounds.right);
+    }
+    if (['hidden', 'clip'].includes(style.overflowY)) {
+      top = Math.max(top, bounds.top);
+      bottom = Math.min(bottom, bounds.bottom);
+    }
+    ancestor =
+      ancestor.parentElement ??
+      (ancestor.getRootNode() instanceof ShadowRoot
+        ? (ancestor.getRootNode() as ShadowRoot).host
+        : null);
+  }
+  return right > left && bottom > top;
+}
+function hasUsernameHint(el: HTMLInputElement) {
+  if (!['text', 'email', 'tel'].includes(el.type)) return false;
+  const purposes = el.autocomplete.toLowerCase().split(/\s+/);
+  if (purposes.includes('username')) return true;
+  const identifier = [el.name, el.id].some((value) =>
+    /(^|[_-])(email|user[_-]?name|account([_-]?(name|id))?|identifier|login|phone)([_-]|$)/i.test(
+      value,
+    ),
+  );
+  const root = el.getRootNode() as Document | ShadowRoot;
+  const label = [...(el.labels ?? [])]
+    .map((label) => label.textContent ?? '')
+    .concat(
+      el.getAttribute('aria-label') ?? '',
+      ...(el.getAttribute('aria-labelledby') ?? '')
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((id) => root.getElementById(id)?.textContent ?? ''),
+    )
+    .join(' ');
   return (
-    el.isConnected &&
-    el.type === 'password' &&
-    !el.disabled &&
-    !el.readOnly &&
-    !purposes.some(
-      (purpose) =>
-        purpose === 'new-password' ||
-        purpose === 'one-time-code' ||
-        purpose.startsWith('cc-'),
-    ) &&
-    el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
+    identifier &&
+    (purposes.includes('webauthn') ||
+      /email|user\s*name|account|phone/i.test(label))
   );
 }
 /** Short-lived DOM references never contain input values. */
@@ -84,26 +159,19 @@ export class LoginBrowser {
       const inputs = allInputs.slice(0, 200);
       inspected.push(...allInputs);
       const candidates: ElementHandle<HTMLInputElement>[] = [];
+      const usernameHints = new Set<ElementHandle<HTMLInputElement>>();
       for (const input of inputs) {
-        const eligible = await input.evaluate((el) => {
-          const style = getComputedStyle(el),
-            r = el.getBoundingClientRect();
-          return (
-            !el.disabled &&
-            !el.readOnly &&
-            el.type !== 'hidden' &&
-            r.width > 0 &&
-            r.height > 0 &&
-            style.visibility === 'visible' &&
-            Number(style.opacity) > 0 &&
-            el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
-          );
-        });
-        if (eligible) candidates.push(input);
+        if (await input.evaluate(hasUsernameHint)) {
+          usernameHints.add(input);
+          mask.push(input);
+        }
+        if (await input.evaluate(isEligibleInput, 'any' as const))
+          candidates.push(input);
       }
       const passwords: ElementHandle<HTMLInputElement>[] = [];
       for (const input of candidates)
-        if (await input.evaluate(isFillablePassword)) passwords.push(input);
+        if (await input.evaluate(isEligibleInput, 'password' as const))
+          passwords.push(input);
       const pairs: {
         username?: ElementHandle<HTMLInputElement>;
         password?: ElementHandle<HTMLInputElement>;
@@ -113,7 +181,7 @@ export class LoginBrowser {
         for (const input of candidates) {
           if (
             await input.evaluate(
-              (el, pw) =>
+              (el, { pw, hinted }) =>
                 ['text', 'email', 'tel'].includes(el.type) &&
                 !el.autocomplete
                   .toLowerCase()
@@ -127,28 +195,18 @@ export class LoginBrowser {
                       ].includes(purpose) || purpose.startsWith('cc-'),
                   ) &&
                 el.form === pw.form &&
-                (el.form !== null ||
-                  el.autocomplete
-                    .toLowerCase()
-                    .split(/\s+/)
-                    .includes('username')) &&
+                (el.form !== null || hinted) &&
+                el.getRootNode() === pw.getRootNode() &&
                 !!(
                   el.compareDocumentPosition(pw) &
                   Node.DOCUMENT_POSITION_FOLLOWING
                 ),
-              password,
+              { pw: password, hinted: usernameHints.has(input) },
             )
           )
             possible.push(input);
         }
-        const explicit = [];
-        for (const input of possible)
-          if (
-            await input.evaluate((el) =>
-              el.autocomplete.toLowerCase().split(/\s+/).includes('username'),
-            )
-          )
-            explicit.push(input);
+        const explicit = possible.filter((input) => usernameHints.has(input));
         const username =
           explicit.length === 1
             ? explicit[0]
@@ -168,56 +226,57 @@ export class LoginBrowser {
         if (siblings === 1) pairs.push({ username, password });
       }
       if (!passwords.length) {
-        for (const username of candidates)
+        for (const username of candidates) {
           if (
-            await username.evaluate((el) => {
+            !usernameHints.has(username) ||
+            !(await username.evaluate(isEligibleInput, 'username' as const))
+          )
+            continue;
+          let peers = 0;
+          for (const other of candidates)
+            if (
+              await other.evaluate(
+                (el, user) =>
+                  ['text', 'email', 'tel'].includes(el.type) &&
+                  el.form === user.form &&
+                  el.getRootNode() === user.getRootNode(),
+                username,
+              )
+            )
+              peers++;
+          if (
+            await username.evaluate((el, peers) => {
+              const root = el.getRootNode() as Document | ShadowRoot;
+              const fields = Array.from(
+                el.form?.elements ?? root.querySelectorAll('input'),
+              );
               if (
-                !['text', 'email', 'tel'].includes(el.type) ||
-                Array.from(el.form?.elements ?? []).some(
+                fields.some(
                   (field) =>
                     field instanceof HTMLInputElement &&
+                    field.form === el.form &&
                     field.type === 'password' &&
-                    (field.checkVisibility({
-                      checkOpacity: true,
-                      checkVisibilityCSS: true,
-                    }) ||
-                      field.autocomplete
-                        .toLowerCase()
-                        .split(/\s+/)
-                        .includes('new-password')),
+                    field.autocomplete
+                      .toLowerCase()
+                      .split(/\s+/)
+                      .includes('new-password'),
                 )
               )
                 return false;
-              if (
-                el.autocomplete.toLowerCase().split(/\s+/).includes('username')
-              )
-                return true;
-              // A passkey autocomplete hint corroborates a named account identifier.
-              // Otherwise require a label and login-form destination as well.
-              const label = [...(el.labels ?? [])]
-                .map((label) => label.textContent ?? '')
-                .join(' ');
+              const purposes = el.autocomplete.toLowerCase().split(/\s+/);
+              if (purposes.includes('username')) return true;
               const path = el.form
                 ? new URL(el.form.action, location.href).pathname
-                : '';
-              const siblings = Array.from(el.form?.elements ?? []).filter(
-                (field) =>
-                  field instanceof HTMLInputElement &&
-                  ['text', 'email', 'tel'].includes(field.type),
-              );
+                : location.pathname;
               return (
-                siblings.length === 1 &&
-                /^(email|username|identifier|login|account)$/i.test(el.name) &&
-                (el.autocomplete
-                  .toLowerCase()
-                  .split(/\s+/)
-                  .includes('webauthn') ||
-                  (/email|user\s*name|account|phone/i.test(label) &&
-                    /sign[-_]?in|login|log[-_]?in/i.test(path)))
+                peers === 1 &&
+                (purposes.includes('webauthn') ||
+                  /sign[-_]?in|login|log[-_]?in/i.test(path))
               );
-            })
+            }, peers)
           )
             pairs.push({ username });
+        }
       }
       for (const pair of pairs) {
         const view: LoginTarget = {
@@ -375,22 +434,15 @@ export class LoginBrowser {
       await validate();
       if (
         target.password &&
-        !(await target.password.evaluate(isFillablePassword))
+        !(await target.password.evaluate(isEligibleInput, 'password' as const))
       )
         throw new Error();
       // Never re-resolve a stale selector or fill a text input with a password.
       if (target.username) {
         if (
           !(await target.username.evaluate(
-            (el) =>
-              el.isConnected &&
-              !el.disabled &&
-              !el.readOnly &&
-              ['text', 'email', 'tel'].includes(el.type) &&
-              el.checkVisibility({
-                checkOpacity: true,
-                checkVisibilityCSS: true,
-              }),
+            isEligibleInput,
+            'username' as const,
           ))
         )
           throw new Error();
@@ -398,7 +450,12 @@ export class LoginBrowser {
       }
       await validate();
       if (target.password) {
-        if (!(await target.password.evaluate(isFillablePassword)))
+        if (
+          !(await target.password.evaluate(
+            isEligibleInput,
+            'password' as const,
+          ))
+        )
           throw new Error();
         await target.password.fill(values.password ?? '', { timeout: 3000 });
       }

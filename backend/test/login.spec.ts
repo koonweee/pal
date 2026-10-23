@@ -245,7 +245,7 @@ if (command === 'serve') {
   let locked = true;
   const server = createServer(async (req,res) => {
     let data = {};
-    if (req.url === '/status') data = {status:locked?'locked':'unlocked'};
+    if (req.url === '/status') data = {object:'template',template:{status:locked?'locked':'unlocked'}};
     if (req.url === '/unlock') {
       let body=''; for await (const chunk of req) body += chunk;
       assert.equal(JSON.parse(body).password,'fixture-master'); locked=false; record('api-unlock');
@@ -280,6 +280,7 @@ if (command === 'serve') {
         vault.matching('https://example.test'),
       ]),
     ).toEqual([[], []]);
+    await vault.matching('https://example.test');
     const labels = (await readFile(events, 'utf8'))
       .trim()
       .split('\n')
@@ -315,4 +316,36 @@ it('refuses declared signup, one-time-code and card-security password inputs', a
     password: 'dummy',
   });
   expect(await page.locator('#otp').inputValue()).toBe('');
+});
+
+it('recognizes an accessible username-first stage and refuses a password clipped by a collapsed container', async () => {
+  await page.goto('https://login.example.test/sign-in');
+  await page.setContent(
+    '<span id="identity-label">Email or Phone Number</span><input id="account_name_text_field" autocomplete="off" aria-labelledby="identity-label"><div id="next-stage" style="height:0;overflow:hidden"><input id="password" type="password" autocomplete="current-password"></div>',
+  );
+  const service = new LoginBrowser();
+  const first = await service.inspect(page, 'clipped');
+  expect(first.targets.map((target) => target.fields)).toEqual([['username']]);
+  await service.fill(page, 'clipped', first.targets[0].loginRef, {
+    username: 'dummy-user',
+    password: 'dummy-pass',
+  });
+  expect(await page.locator('#account_name_text_field').inputValue()).toBe(
+    'dummy-user',
+  );
+  expect(await page.locator('#password').inputValue()).toBe('');
+  await page
+    .locator('#next-stage')
+    .evaluate((el) => (el.style.height = 'auto'));
+  const combined = await service.inspect(page, 'clipped');
+  expect(combined.targets.map((target) => target.fields)).toEqual([
+    ['username', 'password'],
+  ]);
+  await page.locator('#next-stage').evaluate((el) => (el.style.height = '0'));
+  await expect(
+    service.fill(page, 'clipped', combined.targets[0].loginRef, {
+      password: 'dummy-pass',
+    }),
+  ).rejects.toThrow();
+  expect(await page.locator('#password').inputValue()).toBe('');
 });
