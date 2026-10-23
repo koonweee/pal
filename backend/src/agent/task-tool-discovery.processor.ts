@@ -12,6 +12,9 @@ const directTools = new Set<string>([
   'browser_screenshot',
   'login_inspect',
   'secure_fill',
+  'skill',
+  'skill_read',
+  'skill_search',
   'agent-worker',
   WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
   ...Object.values(WORKSPACE_TOOLS.COMPUTER),
@@ -36,8 +39,8 @@ export class TaskToolDiscoveryProcessor implements Processor {
       tools: this.mcpTools(),
     });
     const tools = { ...args.tools, ...discovered.tools } as ToolsInput;
-    // Native search executes at the provider; media and worker delegations need
-    // native streams/context. Keep these tools outside the code runner.
+    // Native search executes at the provider; media and delegations need native
+    // streams/context. Skill results belong directly in conversation history.
     const codeTools = Object.fromEntries(
       Object.entries(tools).filter(
         ([name]) =>

@@ -21,9 +21,9 @@ const instructionFiles = {
   worker: ['voice', 'files', 'preferences', 'execution', 'worker'],
 } as const;
 
-export async function loadAgentInstructions(
-  role: keyof typeof instructionFiles,
-): Promise<string> {
+export type AgentRole = keyof typeof instructionFiles;
+
+export async function loadAgentInstructions(role: AgentRole): Promise<string> {
   return (
     await Promise.all(
       instructionFiles[role].map((name) =>

@@ -91,7 +91,7 @@ export function loginTools(service: LoginService) {
     login_inspect: createTool({
       id: 'login_inspect',
       description:
-        'Inspect editable inputs in your selected browser tab. Optional action runs agent-browser arguments first, then returns the resulting masked inspection. Use action to open a login tab or perform any known next action that needs observation, including username, verification and Trust steps, so action and inspection share one call. It waits briefly for navigation; if the page is still loading, inspect again without repeating the action. Returns opaque refs, HTML metadata, matching accounts and a masked screenshot labelled i1, i2, etc.; each badge matches the ref prefix. Decide which inputs are username, password or verification code, then pass fields to secure_fill or secure_entry_request. Input roles are your judgment. Never read existing values. Reinspect after navigation or stale refs.',
+        'Inspect editable inputs in your selected tab. Optional action runs agent-browser arguments before inspection. Returns opaque input refs, HTML metadata, matching account IDs/labels and a masked numbered screenshot. Assign username/password or ordered code refs to secure_fill or secure_entry_request. Never read existing values. Reinspect after navigation or stale refs; after a loading page or action failure inspect without repeating action.',
       inputSchema: jsonSchema<{ action?: string[] | null }>({
         type: 'object',
         properties: {
@@ -119,7 +119,7 @@ export function loginTools(service: LoginService) {
     secure_entry_request: createTool({
       id: 'secure_entry_request',
       description:
-        'Show one secure-entry card in Main and the owning Task conversation. Login entry collects the complete username/password once, saves it and fills the bound fields directly on submission; account selection also fills directly. If fields are stale, the save/selection is retained and completion tells you to inspect and fill fresh fields. Use secure_fill for additional fields on later pages. Verification entry collects only a code and fills it immediately without saving. Pass either username/password input refs or an ordered code-ref array from login_inspect. The selected roles determine the PWA form. Use chooseAccount true when the user asks to switch accounts without naming a specific saved account: shows saved accounts and Use a new account. Omit it for new or corrected credentials, even when matching accounts exist. Tell the user to use the inline form. The host sets the owning Task to needs-input; yield on awaiting_user without calling set_task_status. Workers report to their parent Task. The owning Task receives completion notification.',
+        'Show a private inline entry card in Main and Task. fields selects username/password entry or ordered verification-code inputs. Credential entry collects the complete login, saves it and fills bound fields; codes fill without storage. chooseAccount shows saved accounts and Use a new account. Returns awaiting_user; the host sets needs-input and notifies the owning Task after submission. Stale-field saves/selections remain available for fresh filling.',
       inputSchema: jsonSchema<{
         fields: FieldInput;
         chooseAccount?: boolean | null;
@@ -154,7 +154,7 @@ export function loginTools(service: LoginService) {
     secure_fill: createTool({
       id: 'secure_fill',
       description:
-        'Assign username/password roles to inspected input refs in fields and fill from the matching vault account without seeing values. Password refs must identify password inputs. For code, pass an ordered array of refs; a single input uses a one-element array. Reuse the same saved account across username/password stages; both credentials were collected together. Omit accountId by default: reuses the current flow, then last successful matching account, then sole match. Supply accountId only for an explicit user account choice. Ambiguous saved accounts open an inline picker, set the owning Task to needs-input and return awaiting_user; yield without calling set_task_status. For verification codes, input_required means call secure_entry_request. Returns the Keep me signed in preference for you to apply through website controls. Optional action runs agent-browser arguments only after a successful fill and returns the resulting masked inspection. Use a direct call with action for known fill/submit/inspect steps instead of generating a script. Waiting, input-required and failed fills never run action. After an action/inspection error, inspect without action before retrying. Without action this only fills; neither form proves login success. Call login_session with action complete after verifying authentication.',
+        'Fill inspected username/password refs from a matching vault account without exposing values; passwords require password inputs. Omit accountId for automatic reuse or an ambiguity picker. Code refs currently return input_required. Optional action runs only after successful filling and returns the resulting masked inspection. Waiting, input-required and failed fills never run action. After an action/inspection error, inspect without action before retrying. Without action only fills. Returns session-persistence intent; filling does not prove authentication.',
       inputSchema: jsonSchema<{
         fields: FieldInput;
         accountId?: string | null;
@@ -164,7 +164,11 @@ export function loginTools(service: LoginService) {
         type: 'object',
         properties: {
           fields: fieldsSchema,
-          accountId: { type: ['string', 'null'] },
+          accountId: {
+            type: ['string', 'null'],
+            description:
+              'Only for an explicit user choice of a matching saved account.',
+          },
           keepMeSignedIn: keepSchema,
           action: actionSchema,
         },
@@ -194,7 +198,7 @@ export function loginTools(service: LoginService) {
     login_session: createTool({
       id: 'login_session',
       description:
-        "Use action complete only after verifying the website accepted this flow's login, including verification challenges; remembers its account for future logins. Saving/filling alone is not success. Use action preference with keepMeSignedIn for an explicit user instruction, including an existing authenticated session; this never marks an account successful. Preferences apply to this caller's login flow, or the selected HTTPS page if there is no flow. Inspect website persistence controls and honor the preference yourself; this tool neither operates them nor guarantees session persistence.",
+        'Record the selected flow account as successful with action complete, only after verifying website authentication and challenges. action preference records an explicit keepMeSignedIn instruction for this flow or the selected HTTPS page. This tool does not operate website persistence controls or guarantee session retention.',
       inputSchema: jsonSchema<{
         action: 'complete' | 'preference';
         keepMeSignedIn?: boolean | null;

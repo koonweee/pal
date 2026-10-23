@@ -14,6 +14,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Native agent skills](native-agent-skills.md) | Done | Developer-owned role registration, native on-demand authentication guidance and verified dev login flows. |
 | [Task turn latency benchmark](turn-latency-benchmark.md) | Done | Thirty read-only request samples: fresh context improves latency; lower effort and smaller model show little gain. |
 | [Browser login latency improvements](login-latency-improvements.md) | Done | Vault prewarming/refresh, direct private filling, native fill/action/inspection, compact refs and dev profiling. |
 | [Detailed login trace findings](login-latency-trace-findings.md) | Reference | Provider/dispatch/readiness timings, baseline estimates and measured action/ref implementation profiles. |

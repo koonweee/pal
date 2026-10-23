@@ -1,4 +1,5 @@
 import { loadAgentInstructions } from './agent-instructions.js';
+import { agentSkillPaths } from './agent-skills.js';
 import { MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
 import { Mastra } from '@mastra/core/mastra';
 import type { ScheduleHooks } from '@mastra/core/schedules';
@@ -192,6 +193,7 @@ export async function createMainSession(options: {
       ? new Agent({
           id: 'pal-task-worker',
           name: 'Worker',
+          skills: agentSkillPaths('worker'),
           description:
             'Execute a focused independent branch of this task and return findings to the task agent. Call agent-worker concurrently for up to three substantial independent branches. Supply the assignment, constraints, and required evidence.',
           instructions: options.task.worker.instructions,
@@ -225,6 +227,7 @@ export async function createMainSession(options: {
       ? new Agent<string, ToolsInput, PublicResponse>({
           id: 'pal-task-agent',
           name: 'Task',
+          skills: agentSkillPaths('task'),
           instructions: options.task.instructions,
           model: options.model,
           defaultOptions: ({ requestContext }) => {

@@ -5,6 +5,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MessageList } from '@mastra/core/agent';
+import { resolveAgentSkills } from '@mastra/core/skills';
+import { agentSkillPaths } from '../dist/agent/agent-skills.js';
 import type { ProcessInputStepArgs } from '@mastra/core/processors';
 import {
   RequestContext,
@@ -16,6 +18,7 @@ import {
   LocalFilesystem,
   LocalSandbox,
   createWorkspaceTools,
+  createSkillTools,
   WORKSPACE_TOOLS,
 } from '@mastra/core/workspace';
 import { TaskToolDiscoveryProcessor } from '../dist/agent/task-tool-discovery.processor.js';
@@ -49,7 +52,11 @@ it('keeps discovery contextual and runs core/workspace tools with native media k
   const messageList = new MessageList();
   try {
     await workspace.init();
+    const nativeTools = createSkillTools(
+      resolveAgentSkills(agentSkillPaths('task')),
+    );
     const tools = {
+      ...nativeTools,
       web_search: webSearchTool(),
       secure_fill: loginTools({} as LoginService).secure_fill,
       ...(await createWorkspaceTools(workspace)),
@@ -88,6 +95,19 @@ it('keeps discovery contextual and runs core/workspace tools with native media k
     const initialInstructions = JSON.stringify(messageList.getSystemMessages());
     expect(initial.tools.web_search).toBe(tools.web_search);
     expect(initial.tools.secure_fill).toBe(tools.secure_fill);
+    for (const name of ['skill', 'skill_read', 'skill_search']) {
+      expect(initial.tools).toHaveProperty(name);
+      expect(initial.tools[name]).toBe(
+        nativeTools[name as keyof typeof nativeTools],
+      );
+      expect(initialInstructions).not.toContain('external_' + name);
+    }
+    await expect(
+      nativeTools.skill_read.execute!(
+        { skillName: 'website-authentication', path: '../../agent-skills.js' },
+        { requestContext, observe: noopObserve },
+      ),
+    ).rejects.toThrow('Invalid asset path');
     expect(initialInstructions).not.toContain('external_secure_fill');
     expect(initialInstructions).not.toContain('external_web_search');
     expect(initial.tools).not.toHaveProperty('fixture_lookup');

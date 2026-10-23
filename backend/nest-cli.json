@@ -15,7 +15,7 @@
     ],
     "assets": [
       {
-        "include": "agent/instructions/*.md",
+        "include": "agent/{instructions,skills}/**/*.md",
         "watchAssets": true
       }
     ]
