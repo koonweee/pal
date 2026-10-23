@@ -6,6 +6,7 @@ import {
 } from '../pwa/releases';
 
 const eventNames = [
+  'login.updated',
   'message.added',
   'message.updated',
   'task.added',

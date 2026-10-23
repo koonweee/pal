@@ -143,6 +143,70 @@ export interface paths {
     patch: operations['updateInstanceSettings'];
     trace?: never;
   };
+  '/login/inspections/{id}/image': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getLoginInspectionImage'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/login/requests/{id}/cancel': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['cancelLoginRequest'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/login/requests/{id}/save': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['saveLoginRequest'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/login/tasks/{taskId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getLoginSnapshot'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/mcp/apply': {
     parameters: {
       query?: never;
@@ -479,6 +543,42 @@ export interface components {
       /** @enum {string} */
       event: 'instance.settings.updated';
     };
+    LoginAccountDto: {
+      id: string;
+      label: string;
+    };
+    LoginFinishedDto: {
+      id: string;
+      /** @enum {string} */
+      status: 'saved' | 'cancelled';
+    };
+    LoginInspectionDto: {
+      id: string;
+      origin: string;
+      targets: components['schemas']['LoginTargetDto'][];
+    };
+    LoginRequestDto: {
+      accounts: components['schemas']['LoginAccountDto'][];
+      id: string;
+      origin: string;
+      /** @enum {string} */
+      status: 'pending' | 'saved' | 'cancelled';
+    };
+    LoginSnapshotDto: {
+      configured: boolean;
+      inspections: components['schemas']['LoginInspectionDto'][];
+      requests: components['schemas']['LoginRequestDto'][];
+    };
+    LoginTargetDto: {
+      fields: string[];
+      loginRef: string;
+      origin: string;
+    };
+    LoginUpdatedEventDto: {
+      /** @enum {string} */
+      event: 'login.updated';
+      taskId: string;
+    };
     McpAuthDto: {
       clientId?: string;
       clientMetadataUrl?: string;
@@ -666,6 +766,12 @@ export interface components {
       commentary: components['schemas']['ActivityCommentaryResponseDto'] | null;
       id: string;
       title: string;
+    };
+    SaveLoginDto: {
+      accountId?: string;
+      label: string;
+      password: string;
+      username: string;
     };
     SaveMcpServerDto: {
       auth?: components['schemas']['McpAuthDto'];
@@ -1058,6 +1164,94 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ApplicationErrorResponseDto'];
+        };
+      };
+    };
+  };
+  getLoginInspectionImage: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'image/png': string;
+        };
+      };
+    };
+  };
+  cancelLoginRequest: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LoginFinishedDto'];
+        };
+      };
+    };
+  };
+  saveLoginRequest: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveLoginDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LoginFinishedDto'];
+        };
+      };
+    };
+  };
+  getLoginSnapshot: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        taskId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LoginSnapshotDto'];
         };
       };
     };
@@ -1551,6 +1745,7 @@ export interface operations {
         };
         content: {
           'text/event-stream':
+            | components['schemas']['LoginUpdatedEventDto']
             | components['schemas']['MessageEventResponseDto']
             | components['schemas']['TaskEventResponseDto']
             | components['schemas']['AgentActivityEventResponseDto']

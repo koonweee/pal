@@ -365,6 +365,158 @@
         ],
         "type": "object"
       },
+      "LoginAccountDto": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "type": "object"
+      },
+      "LoginFinishedDto": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "saved",
+              "cancelled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "type": "object"
+      },
+      "LoginInspectionDto": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/LoginTargetDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "origin",
+          "targets"
+        ],
+        "type": "object"
+      },
+      "LoginRequestDto": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/LoginAccountDto"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "saved",
+              "cancelled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "origin",
+          "status",
+          "accounts"
+        ],
+        "type": "object"
+      },
+      "LoginSnapshotDto": {
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "inspections": {
+            "items": {
+              "$ref": "#/components/schemas/LoginInspectionDto"
+            },
+            "type": "array"
+          },
+          "requests": {
+            "items": {
+              "$ref": "#/components/schemas/LoginRequestDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "configured",
+          "requests",
+          "inspections"
+        ],
+        "type": "object"
+      },
+      "LoginTargetDto": {
+        "properties": {
+          "fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "loginRef": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "loginRef",
+          "origin",
+          "fields"
+        ],
+        "type": "object"
+      },
+      "LoginUpdatedEventDto": {
+        "properties": {
+          "event": {
+            "enum": [
+              "login.updated"
+            ],
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "taskId"
+        ],
+        "type": "object"
+      },
       "McpAuthDto": {
         "properties": {
           "clientId": {
@@ -1095,6 +1247,35 @@
           "id",
           "title",
           "commentary"
+        ],
+        "type": "object"
+      },
+      "SaveLoginDto": {
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          },
+          "username": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password",
+          "label"
         ],
         "type": "object"
       },
@@ -1879,6 +2060,141 @@
         ]
       }
     },
+    "/login/inspections/{id}/image": {
+      "get": {
+        "operationId": "getLoginInspectionImage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "login"
+        ]
+      }
+    },
+    "/login/requests/{id}/cancel": {
+      "post": {
+        "operationId": "cancelLoginRequest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginFinishedDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "login"
+        ]
+      }
+    },
+    "/login/requests/{id}/save": {
+      "post": {
+        "operationId": "saveLoginRequest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveLoginDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginFinishedDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "login"
+        ]
+      }
+    },
+    "/login/tasks/{taskId}": {
+      "get": {
+        "operationId": "getLoginSnapshot",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginSnapshotDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "login"
+        ]
+      }
+    },
     "/mcp/apply": {
       "post": {
         "operationId": "applyMcpServers",
@@ -2566,6 +2882,9 @@
               "text/event-stream": {
                 "schema": {
                   "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/LoginUpdatedEventDto"
+                    },
                     {
                       "$ref": "#/components/schemas/MessageEventResponseDto"
                     },

@@ -1,3 +1,5 @@
+import { LoginService } from '../../login/login.service.js';
+import { FirstPartyLoginController } from './login.controller.js';
 import { Module } from '@nestjs/common';
 import { InstanceSettingsService } from '../../instance-settings/instance-settings.service.js';
 import { FirstPartyInstanceSettingsController } from './instance-settings.controller.js';
@@ -33,6 +35,7 @@ const stub = { provide: Object, useValue: {} };
 @Module({
   controllers: [
     HealthController,
+    FirstPartyLoginController,
     WebPushController,
     FirstPartyInstanceSettingsController,
     FirstPartyChatController,
@@ -44,6 +47,7 @@ const stub = { provide: Object, useValue: {} };
   ],
   providers: [
     InstanceSettingsService,
+    LoginService,
     WebPushService,
     ChatService,
     ChatCoordinatorService,

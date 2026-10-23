@@ -1,4 +1,5 @@
 export interface ReloadSafetyState {
+  credentialEditing?: boolean;
   draft: string;
   pendingFiles: number;
   submitting: boolean;
@@ -8,6 +9,7 @@ export interface ReloadSafetyState {
 
 export function canActivateUpdate(state: ReloadSafetyState) {
   return (
+    !state.credentialEditing &&
     !state.draft &&
     state.pendingFiles === 0 &&
     !state.submitting &&

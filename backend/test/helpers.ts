@@ -1,3 +1,4 @@
+import { LoginService } from '../dist/login/login.service.js';
 import {
   ExecutionService,
   ExecutionFileError,
@@ -43,6 +44,7 @@ interface TestRuntimeDependencies {
   mcp: McpService;
   admission: AgentAdmissionService;
   browser: BrowserService;
+  login: LoginService;
   files: FilesService;
   preferences: PreferencesService;
   destinations: DestinationService;
@@ -114,6 +116,7 @@ export async function startTestApp(
         McpService,
         AgentAdmissionService,
         BrowserService,
+        LoginService,
         FilesService,
         PreferencesService,
         DestinationService,
@@ -126,6 +129,7 @@ export async function startTestApp(
         mcp: McpService,
         admission: AgentAdmissionService,
         browser: BrowserService,
+        login: LoginService,
         files: FilesService,
         preferences: PreferencesService,
         destinations: DestinationService,
@@ -143,6 +147,7 @@ export async function startTestApp(
               mcp,
               admission,
               browser,
+              login,
               files,
               preferences,
               destinations,

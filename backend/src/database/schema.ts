@@ -378,3 +378,47 @@ export const idempotency = pgTable(
   },
   (t) => [primaryKey({ columns: [t.operation, t.key] })],
 );
+
+export const loginRequests = pgTable(
+  'login_requests',
+  {
+    ...identity(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    origin: text('origin').notNull(),
+    status: text('status')
+      .$type<'pending' | 'saved' | 'cancelled'>()
+      .notNull()
+      .default('pending'),
+    accountId: text('account_id'),
+    notifiedAt: timestamp('notified_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('login_request_pending_idx')
+      .on(t.taskId, t.origin)
+      .where(sql`${t.status} = 'pending'`),
+    check(
+      'login_request_status',
+      sql`${t.status} in ('pending','saved','cancelled')`,
+    ),
+  ],
+);
+
+export const loginInspections = pgTable('login_inspections', {
+  ...identity(),
+  taskId: uuid('task_id')
+    .notNull()
+    .references(() => tasks.id, { onDelete: 'cascade' }),
+  origin: text('origin').notNull(),
+  targets: jsonb('targets')
+    .$type<
+      {
+        loginRef: string;
+        origin: string;
+        fields: ('username' | 'password')[];
+      }[]
+    >()
+    .notNull(),
+  image: text('image').notNull(),
+});

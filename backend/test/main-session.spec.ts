@@ -1,3 +1,4 @@
+import { LoginService } from '../dist/login/login.service.js';
 import { ExecutionService } from '../dist/execution/execution.service.js';
 import { LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import { DestinationService } from '../dist/delivery/destination.service.js';
@@ -436,6 +437,7 @@ it('keeps generation failures private, and shuts down silently', async () => {
     fixture.app.get(McpService),
     fixture.app.get(AgentAdmissionService),
     fixture.app.get(BrowserService),
+    fixture.app.get(LoginService),
     fixture.app.get(FilesService),
     fixture.app.get(PreferencesService),
     fixture.app.get(DestinationService),

@@ -1,3 +1,5 @@
+import { LoginModule } from '../../login/login.module.js';
+import { FirstPartyLoginController } from './login.controller.js';
 import { Module } from '@nestjs/common';
 import { InstanceSettingsModule } from '../../instance-settings/instance-settings.module.js';
 import { FirstPartyInstanceSettingsController } from './instance-settings.controller.js';
@@ -36,6 +38,7 @@ export { FIRST_PARTY_CONTRACT_VERSION } from './first-party-contract.js';
 @Module({
   imports: [
     AgentModule,
+    LoginModule,
     InstanceSettingsModule,
     ApplicationModule,
     ChatModule,
@@ -47,6 +50,7 @@ export { FIRST_PARTY_CONTRACT_VERSION } from './first-party-contract.js';
   ],
   controllers: [
     HealthController,
+    FirstPartyLoginController,
     FirstPartyInstanceSettingsController,
     FirstPartyChatController,
     FirstPartyFilesController,

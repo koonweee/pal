@@ -146,6 +146,8 @@ npm test
 npm run test:e2e
 ```
 
+Browser login tests use installed Google Chrome through Playwright. Set `TEST_CHROMIUM_PATH` to use another installed Chromium executable. `npm run login:smoke` inspects public Apple/Amazon forms without entering credentials.
+
 Automated suites cover service transactions, native Main delivery/memory/lifecycle, task delegation/steering/result sharing/restart recall, native scheduled execution and management, timezone metadata, chat/task APIs with SSE, and file transfers. Tests use controlled models, apply migrations, and reset application tables in the test database. Native agent fixtures use temporary schemas. Test commands build the app first so Nest's emitted decorator metadata matches production.
 
 The isolated runtime suites build disposable Compose projects and retain the existing running stack:

@@ -1,3 +1,4 @@
+import { LoginService } from '../dist/login/login.service.js';
 import { ExecutionService } from '../dist/execution/execution.service.js';
 import { DestinationService } from '../dist/delivery/destination.service.js';
 import { FilesService } from '../dist/files/files.service.js';
@@ -301,6 +302,7 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
         mcp,
         admission,
         browser,
+        login,
         files,
         preferences,
         destinations,
@@ -322,6 +324,7 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
           mcp,
           admission,
           browser,
+          login,
           files,
           preferences,
           destinations,
@@ -713,6 +716,7 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
       fixture.app.get(McpService),
       fixture.app.get(AgentAdmissionService),
       fixture.app.get(BrowserService),
+      fixture.app.get(LoginService),
       fixture.app.get(FilesService),
       fixture.app.get(PreferencesService),
       fixture.app.get(DestinationService),

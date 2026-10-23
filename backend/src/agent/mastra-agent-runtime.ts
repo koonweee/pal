@@ -1,3 +1,5 @@
+import { LoginService } from '../login/login.service.js';
+import { loginTools } from '../login/login-tools.js';
 import { webSearchTool } from './web-search.js';
 import {
   isMastraSignalMessage,
@@ -95,6 +97,7 @@ export class MastraAgentRuntime
     @Inject(AgentAdmissionService)
     private readonly admission: AgentAdmissionService,
     @Inject(BrowserService) private readonly browser: BrowserService,
+    @Inject(LoginService) private readonly login: LoginService,
     @Inject(FilesService) private readonly files: FilesService,
     @Inject(PreferencesService)
     private readonly preferences: PreferencesService,
@@ -106,6 +109,9 @@ export class MastraAgentRuntime
   ) {}
 
   async onModuleInit() {
+    this.login.bindNotifier((taskId, text) =>
+      this.sendTask(taskId, text, false),
+    );
     this.browser.bindActiveTasks(() =>
       (this.main?.taskAgent?.listActiveThreadRuns() ?? [])
         .filter((run) => run.threadId.startsWith(TASK_THREAD_PREFIX))
@@ -225,6 +231,7 @@ export class MastraAgentRuntime
         // Broad task primitives are always available here; Mastra adds workspace tools.
         tools: () => ({
           ...browserTools(this.browser),
+          ...loginTools(this.login),
           web_search: webSearchTool(),
           inspect_message: inspectMessageTool(this.files, this.chat),
           set_task_status: taskStatusTool(this.tasks),
@@ -250,6 +257,7 @@ export class MastraAgentRuntime
             new Date().toISOString(),
           tools: () => ({
             ...browserTools(this.browser),
+            ...loginTools(this.login),
             web_search: webSearchTool(),
             inspect_message: inspectMessageTool(this.files, this.chat),
             read_preferences: preferenceReadTool(this.preferences),

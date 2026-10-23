@@ -19,6 +19,7 @@ export interface AgentActivityState {
   status: 'idle' | 'working';
 }
 export type PalEvent =
+  | { event: 'login.updated'; taskId: string }
   | { event: 'message.added' | 'message.updated'; message: UserVisibleMessage }
   | { event: 'task.added' | 'task.updated'; task: Task }
   | { event: 'agent.activity'; state: AgentActivityState }

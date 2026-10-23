@@ -14,6 +14,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [External Password Vault and Browser Login](password-vault-login.md) | Done | Secure PWA collection, Bitwarden-backed filling and masked inspection; operator account acceptance is documented. |
 | [Agent Service and Persistent Execution Container](agent-service-execution-split.md) | Done | Persistent execution split, dev/production migration, and compatibility cleanup verified. |
 | [PWA Cold-Start Cache](pwa-cold-start-cache.md) | Done | Restore cached appearance and a bounded display-only Main snapshot before authoritative network synchronization. |
 | [Public Repository Sanitization](public-repository-sanitization.md) | Done        | Remove user-specific branding and private deployment evidence while retaining reusable behavior and a concise Tailscale-only warning. |

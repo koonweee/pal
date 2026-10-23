@@ -1,3 +1,4 @@
+import { LoginUpdatedEventDto } from './login.controller.js';
 import {
   Body,
   Controller,
@@ -49,6 +50,7 @@ export class FrontendUpdateRequestDto {
   FrontendUpdatedEventResponseDto,
   HeartbeatEventResponseDto,
   InstanceSettingsUpdatedEventResponseDto,
+  LoginUpdatedEventDto,
 )
 @Controller()
 export class FirstPartyStreamController {
@@ -78,6 +80,7 @@ export class FirstPartyStreamController {
     description: 'Named SSE events carrying one Pal event envelope.',
     schema: {
       oneOf: [
+        { $ref: getSchemaPath(LoginUpdatedEventDto) },
         { $ref: getSchemaPath(MessageEventResponseDto) },
         { $ref: getSchemaPath(TaskEventResponseDto) },
         { $ref: getSchemaPath(AgentActivityEventResponseDto) },

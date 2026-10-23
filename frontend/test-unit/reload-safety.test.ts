@@ -17,4 +17,5 @@ test('permits an update only when reload cannot discard active work', () => {
   expect(canActivateUpdate({ ...idle, submitting: true })).toBe(false);
   expect(canActivateUpdate({ ...idle, desktopOpen: true })).toBe(false);
   expect(canActivateUpdate({ ...idle, dirtyForms: true })).toBe(false);
+  expect(canActivateUpdate({ ...idle, credentialEditing: true })).toBe(false);
 });

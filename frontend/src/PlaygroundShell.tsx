@@ -1,3 +1,4 @@
+import { LoginPanel } from './login/LoginPanel';
 import { useNotificationNavigation } from './pwa/use-notification-navigation';
 import { Drawer } from '@mantine/core';
 import { useEffect, useRef, useState } from 'react';
@@ -92,6 +93,14 @@ export function PlaygroundShellView({
               }
             }}
           >
+            {!preview && (
+              <LoginPanel
+                key={chat.selectedTaskId}
+                taskId={chat.selectedTaskId}
+                revision={chat.loginRevision ?? 0}
+                connected={chat.connected}
+              />
+            )}
             <Conversation chat={chat} />
             <Composer chat={chat} />
           </div>

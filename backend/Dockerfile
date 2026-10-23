@@ -10,6 +10,7 @@ COPY src/ src/
 RUN npm run build && npm prune --omit=dev --no-audit --no-fund
 
 FROM base AS agent-service
+RUN npm install --prefix /opt/bitwarden @bitwarden/cli@2026.10.0 --omit=dev --no-audit --no-fund
 WORKDIR /opt/pal
 COPY --from=build /opt/pal/package.json /opt/pal/package-lock.json ./
 COPY --from=build /opt/pal/node_modules/ node_modules/

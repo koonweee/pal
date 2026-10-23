@@ -32,6 +32,7 @@ export type SaveMcpServer = components['schemas']['SaveMcpServerDto'];
 export type AgentActivity = components['schemas']['AgentActivityResponseDto'];
 
 export type PalEvent =
+  | components['schemas']['LoginUpdatedEventDto']
   | components['schemas']['MessageEventResponseDto']
   | components['schemas']['TaskEventResponseDto']
   | components['schemas']['AgentActivityEventResponseDto']
@@ -365,6 +366,8 @@ export function decodePalEvent(
         typeof value.state.latestCompletion.occurredAt === 'string'))
   )
     return value as PalEvent;
+  if (name === 'login.updated' && typeof value.taskId === 'string')
+    return value as PalEvent;
   if (name === 'heartbeat' || name === 'instance.settings.updated')
     return value as PalEvent;
   if (
@@ -398,4 +401,37 @@ export function disableWebPush(id: string) {
       signal: requestSignal(),
     }),
   );
+}
+
+export type LoginSnapshot = components['schemas']['LoginSnapshotDto'];
+export function getLoginSnapshot(taskId: string, signal?: AbortSignal) {
+  return unwrap(
+    client.GET('/login/tasks/{taskId}', {
+      params: { path: { taskId } },
+      signal: requestSignal(signal),
+    }),
+  );
+}
+export function saveLoginRequest(
+  id: string,
+  body: components['schemas']['SaveLoginDto'],
+) {
+  return unwrap(
+    client.POST('/login/requests/{id}/save', {
+      params: { path: { id } },
+      body,
+      signal: requestSignal(undefined, 120_000),
+    }),
+  );
+}
+export function cancelLoginRequest(id: string) {
+  return unwrap(
+    client.POST('/login/requests/{id}/cancel', {
+      params: { path: { id } },
+      signal: requestSignal(),
+    }),
+  );
+}
+export function loginPreviewUrl(id: string) {
+  return `/api/login/inspections/${encodeURIComponent(id)}/image`;
 }

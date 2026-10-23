@@ -367,6 +367,44 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** Resolve the CLI session's pinned target, then enforce group/session ownership. */
+  async selectedPage(taskId: string, workerId?: string) {
+    const result = await this.command(
+      taskId,
+      ['tab', 'list'],
+      undefined,
+      workerId,
+    );
+    if (!result.success || !Array.isArray(result.data.tabs))
+      throw new Error('Browser tab is unavailable');
+    const active = result.data.tabs.find(
+      (tab: { active?: boolean }) => tab.active,
+    ) as { targetId?: string } | undefined;
+    const group = (await this.groups()).find(
+      (group) => group.taskId === taskId,
+    );
+    if (
+      !active?.targetId ||
+      !group?.tabs?.some(
+        (tab) =>
+          tab.targetId === active.targetId &&
+          tab.sessionId === this.identity(taskId, workerId),
+      )
+    )
+      throw new Error('Browser tab is not owned by this session');
+    const browser = await this.connect();
+    for (const page of browser.contexts()[0].pages()) {
+      const session = await page.context().newCDPSession(page);
+      try {
+        const { targetInfo } = await session.send('Target.getTargetInfo');
+        if (targetInfo.targetId === active.targetId) return page;
+      } finally {
+        await session.detach();
+      }
+    }
+    throw new Error('Browser tab is unavailable');
+  }
+
   async screenshot(
     taskId: string,
     fullPage: boolean,

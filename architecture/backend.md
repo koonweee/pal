@@ -67,6 +67,25 @@ Web clients generate types from the committed artifact. HTTP goes through their 
 
 Avatars use the existing file upload/content APIs. Assignment validates the detected PNG format, signature/IHDR, a 2 MB byte limit, and dimensions up to 2048 × 2048. The settings transaction locks the selected attachment using the file repository's existing lock before saving its reference. Cleanup retains attachments referenced by messages or instance settings; unreferenced uploads become eligible after 24 hours from upload. Uploaded images remain outside the PWA static-shell cache.
 
+### Browser logins
+
+Task and Worker agents have `login_inspect()`, `login_request({loginRef})`, and `login_fill({loginRef, accountId?})`. Main delegates browser work. Inspection stays a direct multimodal tool; fill/request also work in code mode. LoginService owns the workflow, LoginRepository owns PostgreSQL metadata, and BitwardenService isolates the external vault integration.
+
+Inspection foregrounds the caller's pinned tab, resolves it through BrowserService and checks group/session ownership. The deterministic inspector pairs visible eligible password inputs with associated usernames, accepts explicit username-first/passkey hints, and refuses signup, declared OTP/card-security purposes, ambiguous and unsupported targets. Opaque references bind the caller, page, frame origin, document and actual elements for ten minutes. Filling rechecks these bindings and password input type, retrieves only URL-matching credentials, and uses trusted Playwright/CDP directly. It never submits; ordinary browser actions handle Next/Sign in and verify success.
+
+Hosted Bitwarden owns credentials and URI matching through its supported CLI Vault Management API. The CLI runs on agent-service loopback with private state and temporary files. Account API credentials authenticate; the separately configured master password unlocks the vault automatically. New items use HTTPS Host matching; each fill rematches the current frame URL. There is no model-facing read/export operation. Missing configuration leaves inspection available and reports `not_configured`.
+
+Inspection returns field/account metadata and a viewport PNG with credential inputs masked and detected fields labelled. Private `login_inspections` rows retain the preview for 24 hours; maintenance deletes expired images. PostgreSQL `login_requests` contains IDs, task, verified origin, status and delivery metadata, never username/password. Pending requests deduplicate by task/origin and expire after 24 hours. The PWA submits credentials directly to the backend and keeps drafts only in component memory; closing or saving clears them. Request IDs reconcile repeated Bitwarden saves. Completion notifications retry independently of vault writes and wake the owning Task through its existing signal path. Workers report pending requests to their parent Task.
+
+| Route | Behavior |
+| --- | --- |
+| `GET /login/tasks/:taskId` | Recent request/inspection metadata and matching account labels |
+| `GET /login/inspections/:id/image` | Masked PNG; `Cache-Control: no-store` |
+| `POST /login/requests/:id/save` | Direct username/password/label entry; optional matching account replacement |
+| `POST /login/requests/:id/cancel` | Complete a pending request without saving |
+
+`login.updated` carries only task identity and invalidates the PWA snapshot. Login-tool outputs, SSE, chat, errors and shared files receive no credential values. Existing generic browser/shell control permits access to browser state; ordinary DOM snapshots can also include populated usernames. Shared guidance selects submit controls before filling and uses masked login inspection while a credential form is populated. These tools remain available within the accepted model trust boundary. The website and execution browser necessarily receive filled values.
+
 ### Connected services (MCP)
 
 `McpService` loads general HTTP MCP connections at startup and explicit Apply. Task agents discover MCP tools with native Mastra `search_tools`; matches load automatically for the next model step. Server instructions are available from the start. Main remains a fast conversational router with task tools and generic connected-service delegation guidance. External checks use ordinary visible tasks and reuse suitable existing work.

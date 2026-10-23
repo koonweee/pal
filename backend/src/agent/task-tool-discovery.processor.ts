@@ -10,6 +10,7 @@ import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
 const directTools = new Set<string>([
   'web_search',
   'browser_screenshot',
+  'login_inspect',
   'agent-worker',
   WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
   ...Object.values(WORKSPACE_TOOLS.COMPUTER),

@@ -1,5 +1,6 @@
 import { DeliveryModule } from '../delivery/delivery.module.js';
-import { BrowserService } from '../browser/browser.service.js';
+import { BrowserModule } from '../browser/browser.module.js';
+import { LoginModule } from '../login/login.module.js';
 import { Module } from '@nestjs/common';
 import { TasksModule } from '../tasks/tasks.module.js';
 import { FilesModule } from '../files/files.module.js';
@@ -12,6 +13,8 @@ import { AgentActivityService } from './agent-activity.service.js';
 @Module({
   imports: [
     DeliveryModule,
+    BrowserModule,
+    LoginModule,
     ChatModule,
     TasksModule,
     FilesModule,
@@ -21,7 +24,6 @@ import { AgentActivityService } from './agent-activity.service.js';
   providers: [
     { provide: AGENT_RUNTIME, useClass: MastraAgentRuntime },
     AgentActivityService,
-    BrowserService,
   ],
   exports: [AGENT_RUNTIME, AgentActivityService],
 })

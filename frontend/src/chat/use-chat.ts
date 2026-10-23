@@ -41,6 +41,7 @@ interface SendFailure {
 }
 
 interface ChatState {
+  loginRevision?: number;
   before: number | null;
   connected: boolean;
   draft: string;
@@ -653,6 +654,10 @@ export function useChat() {
         void refreshInstanceSettings();
       },
       onEvent(event) {
+        if (event.event === 'login.updated') {
+          commit({ loginRevision: (current.current.loginRevision ?? 0) + 1 });
+          return;
+        }
         if (event.event === 'instance.settings.updated') {
           void refreshInstanceSettings();
           return;
