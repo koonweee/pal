@@ -14,6 +14,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Exceptional login account picker](exceptional-login-picker.md) | Done | Inline saved-account choice for ambiguous matches and explicit switching; automatic remembered login reuse. |
 | [Remembered browser logins](remembered-browser-logins.md) | Done | Last successful account reuse, private Keep me signed in checkbox and conversational overrides. |
 | [Different login entry](different-login-entry.md) | Done | Explicit new-login entry with saved accounts, selected-account continuity and simpler tool semantics. |
 | [Secure entry in Main](main-secure-entry.md) | Done | Identical Main/Task cards, standard message width, cached-form gating and proactive credential correction. |

@@ -39,8 +39,12 @@ for (const width of [900, 390]) {
       status: 'pending',
       inspectionId: 'login-preview',
       configured: true,
+      chooseAccount: true,
       keepMeSignedIn: true,
-      accounts: [],
+      accounts: [
+        { id: 'personal', label: 'Personal' },
+        { id: 'work', label: 'Work' },
+      ],
     });
     const card = (id: string): Message => ({
       ...backend.message('Enter securely.'),
@@ -63,7 +67,8 @@ for (const width of [900, 390]) {
     backend.holdNextHistory = true;
     let credentialSubmissions = 0,
       codeSubmissions = 0,
-      requestLoads = 0;
+      requestLoads = 0,
+      accountSelections = 0;
     const update = () =>
       backend.emit('login.updated', {
         event: 'login.updated',
@@ -93,6 +98,13 @@ for (const width of [900, 390]) {
         });
         credentialSubmissions++;
         rows.set(root, { ...current, status: 'saved', inspectionId: null });
+      } else if (action === 'select') {
+        expect(route.request().postDataJSON()).toEqual({
+          accountId: 'work',
+          keepMeSignedIn: true,
+        });
+        accountSelections++;
+        rows.set(root, { ...current, status: 'selected', inspectionId: null });
       } else if (action === 'code') {
         expect(route.request().postDataJSON()).toEqual({ code: '731946' });
         codeSubmissions++;
@@ -160,8 +172,21 @@ for (const width of [900, 390]) {
           .getByRole('button', { name: /Store sign-in/ })
           .click();
       };
+      await expect(
+        page.getByText('Choose an account', { exact: true }),
+      ).toBeVisible();
+      await assertCardLayout();
+      await openTask();
+      await expect(
+        page.getByRole('radio', { name: 'Work', exact: true }),
+      ).toBeVisible();
+      await assertCardLayout();
+      await page.locator('#thread-open').click();
+      await page.locator('#main-chat').click();
+      await page.getByRole('button', { name: 'Use a new account' }).click();
       const password = page.getByLabel(/^Password/);
       await expect(password).toBeVisible();
+      await expect(page.getByLabel('Save to', { exact: true })).toHaveCount(0);
       await expect(
         page.getByRole('checkbox', { name: 'Keep me signed in' }),
       ).toBeChecked();
@@ -211,10 +236,36 @@ for (const width of [900, 390]) {
       await expect(
         page.getByText('Login saved', { exact: true }),
       ).toBeVisible();
+      rows.set('picker-root', {
+        ...rows.get('login-root')!,
+        id: 'picker-root',
+        status: 'pending',
+      });
+      backend.publish(card('picker-root'));
+      await expect(
+        page.getByText('Choose an account', { exact: true }),
+      ).toBeVisible();
+      await page.getByRole('radio', { name: 'Work', exact: true }).check();
+      if (width === 390)
+        expect(
+          (await page.getByText('Work', { exact: true }).boundingBox())!.height,
+        ).toBeGreaterThanOrEqual(44);
+      await page.getByRole('button', { name: 'Continue', exact: true }).click();
+      await expect(
+        page.getByText('Account selected', { exact: true }),
+      ).toBeVisible();
+      await openTask();
+      await expect(
+        page.getByText('Account selected', { exact: true }),
+      ).toBeVisible();
+      await assertCardLayout();
+      await page.locator('#thread-open').click();
+      await page.locator('#main-chat').click();
       rows.set('code-root', {
         ...rows.get('login-root')!,
         id: 'code-root',
         kind: 'code',
+        chooseAccount: false,
         status: 'pending',
         inspectionId: 'code-preview',
         configured: false,
@@ -255,6 +306,7 @@ for (const width of [900, 390]) {
         page.getByText('Code filled', { exact: true }),
       ).toBeVisible();
       expect(credentialSubmissions).toBe(1);
+      expect(accountSelections).toBe(1);
       expect(codeSubmissions).toBe(2);
       expect(backend.submissions).toHaveLength(0);
       expect(

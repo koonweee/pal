@@ -6,6 +6,7 @@ import {
   Group,
   Loader,
   PasswordInput,
+  Radio,
   Select,
   Stack,
   Text,
@@ -26,6 +27,7 @@ import {
   loginPreviewUrl,
   retryLoginRequest,
   saveLoginRequest,
+  selectLoginAccount,
   submitLoginCode,
   type LoginRequest,
 } from '../api/client';
@@ -61,12 +63,17 @@ export function SecureEntryCard({ requestId }: { requestId: string }) {
   }, [requestId, updates.revision, updates.connected, refresh]);
   const current = loadedFor === requestId ? request : undefined;
   const pending = current?.status === 'pending';
-  const complete = current?.status === 'saved' || current?.status === 'filled';
+  const complete =
+    current?.status === 'saved' ||
+    current?.status === 'filled' ||
+    current?.status === 'selected';
   const cancelled = current?.status === 'cancelled';
   const title = complete
     ? current.status === 'saved'
       ? 'Login saved'
-      : 'Code filled'
+      : current.status === 'selected'
+        ? 'Account selected'
+        : 'Code filled'
     : cancelled
       ? 'Request cancelled'
       : current?.kind === 'code'
@@ -92,30 +99,14 @@ export function SecureEntryCard({ requestId }: { requestId: string }) {
   }
   return (
     <section className="secure-entry-card" aria-label="Secure entry">
-      <div className="secure-entry-heading">
-        <span
-          className="secure-entry-icon"
-          data-complete={complete || undefined}
-        >
-          {complete ? (
-            <Check size={16} />
-          ) : cancelled ? (
-            <X size={16} />
-          ) : (
-            <LockKeyhole size={16} />
-          )}
-        </span>
-        <div>
-          <Text size="sm" fw={600}>
-            {title}
-          </Text>
-          {current && (
-            <Text size="xs" c="dimmed">
-              {new URL(current.origin).hostname}
-            </Text>
-          )}
-        </div>
-      </div>
+      {!pending && (
+        <SecureEntryHeading
+          title={title}
+          origin={current?.origin}
+          complete={complete}
+          cancelled={cancelled}
+        />
+      )}
       {pending && (
         <SecureEntryForm
           key={current.id}
@@ -186,6 +177,42 @@ export function SecureEntryCard({ requestId }: { requestId: string }) {
   );
 }
 
+function SecureEntryHeading({
+  title,
+  origin,
+  complete = false,
+  cancelled = false,
+}: {
+  title: string;
+  origin?: string;
+  complete?: boolean;
+  cancelled?: boolean;
+}) {
+  return (
+    <div className="secure-entry-heading">
+      <span className="secure-entry-icon" data-complete={complete || undefined}>
+        {complete ? (
+          <Check size={16} />
+        ) : cancelled ? (
+          <X size={16} />
+        ) : (
+          <LockKeyhole size={16} />
+        )}
+      </span>
+      <div>
+        <Text size="sm" fw={600}>
+          {title}
+        </Text>
+        {origin && (
+          <Text size="xs" c="dimmed">
+            {new URL(origin).hostname}
+          </Text>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SecureEntryForm({
   request,
   onFinished,
@@ -194,12 +221,17 @@ function SecureEntryForm({
   onFinished(status: LoginRequest['status']): void;
 }) {
   const codeEntry = request.kind === 'code';
+  const [choosing, setChoosing] = useState(
+    request.chooseAccount && request.accounts.length > 0,
+  );
   const [preview, setPreview] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [label, setLabel] = useState('Personal');
-  const [accountId, setAccountId] = useState<string | null>(null);
+  const [accountId, setAccountId] = useState<string | null>(
+    request.chooseAccount ? (request.accounts[0]?.id ?? null) : null,
+  );
   const [keepMeSignedIn, setKeepMeSignedIn] = useState(request.keepMeSignedIn);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -211,15 +243,20 @@ function SecureEntryForm({
     try {
       const result = cancel
         ? await cancelLoginRequest(request.id)
-        : codeEntry
-          ? await submitLoginCode(request.id, code)
-          : await saveLoginRequest(request.id, {
-              username,
-              password,
-              label,
+        : choosing
+          ? await selectLoginAccount(request.id, {
+              accountId: accountId!,
               keepMeSignedIn,
-              ...(accountId ? { accountId } : {}),
-            });
+            })
+          : codeEntry
+            ? await submitLoginCode(request.id, code)
+            : await saveLoginRequest(request.id, {
+                username,
+                password,
+                label,
+                keepMeSignedIn,
+                ...(accountId ? { accountId } : {}),
+              });
       setUsername('');
       setPassword('');
       setCode('');
@@ -228,9 +265,11 @@ function SecureEntryForm({
       setError(
         cancel
           ? 'Could not cancel the request.'
-          : codeEntry
-            ? 'Could not fill the code. Check it and try again.'
-            : 'Could not save credentials. Check vault setup and try again.',
+          : choosing
+            ? 'Could not select the account. Try again.'
+            : codeEntry
+              ? 'Could not fill the code. Check it and try again.'
+              : 'Could not save credentials. Check vault setup and try again.',
       );
     } finally {
       setCode('');
@@ -239,7 +278,17 @@ function SecureEntryForm({
   }
   return (
     <>
-      {request.inspectionId && (
+      <SecureEntryHeading
+        title={
+          choosing
+            ? 'Choose an account'
+            : codeEntry
+              ? 'Verification code'
+              : 'Sign-in details'
+        }
+        origin={request.origin}
+      />
+      {!choosing && request.inspectionId && (
         <div className="secure-entry-preview">
           <Button
             size="compact-sm"
@@ -275,7 +324,25 @@ function SecureEntryForm({
               Bitwarden needs setup before credentials can be saved.
             </Alert>
           )}
-          {codeEntry ? (
+          {choosing ? (
+            <Radio.Group
+              aria-label="Saved accounts"
+              value={accountId ?? ''}
+              onChange={setAccountId}
+            >
+              <Stack gap={4}>
+                {request.accounts.map((account) => (
+                  <Radio
+                    key={account.id}
+                    className="secure-entry-account"
+                    value={account.id}
+                    label={account.label}
+                    disabled={busy}
+                  />
+                ))}
+              </Stack>
+            </Radio.Group>
+          ) : codeEntry ? (
             <TextInput
               className="secure-entry-field"
               label="Code"
@@ -290,7 +357,7 @@ function SecureEntryForm({
             />
           ) : (
             <>
-              {!!request.accounts.length && (
+              {!request.chooseAccount && !!request.accounts.length && (
                 <Select
                   className="secure-entry-field"
                   label="Save to"
@@ -344,7 +411,7 @@ function SecureEntryForm({
           )}
           {!codeEntry && (
             <Checkbox
-              className="secure-entry-remember"
+              className={choosing ? undefined : 'secure-entry-remember'}
               label="Keep me signed in"
               checked={keepMeSignedIn}
               onChange={(event) =>
@@ -364,10 +431,32 @@ function SecureEntryForm({
               size="sm"
               type="submit"
               loading={busy}
-              disabled={!codeEntry && !request.configured}
+              disabled={
+                (!codeEntry && !request.configured) || (choosing && !accountId)
+              }
             >
-              {codeEntry ? 'Fill code' : 'Save login'}
+              {choosing ? 'Continue' : codeEntry ? 'Fill code' : 'Save login'}
             </Button>
+            {request.chooseAccount && (
+              <Button
+                size="sm"
+                variant="subtle"
+                disabled={busy}
+                onClick={() => {
+                  setUsername('');
+                  setPassword('');
+                  setCode('');
+                  setError('');
+                  setPreview(false);
+                  setAccountId(
+                    choosing ? null : (request.accounts[0]?.id ?? null),
+                  );
+                  setChoosing(!choosing);
+                }}
+              >
+                {choosing ? 'Use a new account' : 'Back'}
+              </Button>
+            )}
             <Button
               size="sm"
               variant="subtle"

@@ -40,6 +40,10 @@ it('keeps request metadata secret-free and saves once across repeated API submis
     label: 'Personal',
   };
   await request(fixture.url)
+    .post(`/login/requests/${pending.id}/select`)
+    .send({ accountId: randomUUID() })
+    .expect(400);
+  await request(fixture.url)
     .post(`/login/requests/${pending.id}/save`)
     .send(input)
     .expect(201);
@@ -138,6 +142,7 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
           password: null,
           code: null,
         } as unknown as SecureFields,
+        chooseAccount: true,
       },
       {
         requestContext: new RequestContext([
@@ -148,6 +153,7 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
     );
     if (!('requestId' in pending))
       throw new Error('Expected secure entry request');
+    expect(pending).toMatchObject({ chooseAccount: false }); // No saved accounts: open entry directly.
     outputs.push(pending);
     const chat = fixture.app.get(ChatService);
     const card = (await chat.history({ taskId: task.id })).messages.find(
@@ -492,17 +498,57 @@ it('remembers verified accounts and session intent across callers and restarts w
   });
   const origin = 'https://accounts.example.test';
   const outputs: unknown[] = [];
+  const notifications: string[] = [];
+  original.bindNotifier(async (_id, text) => {
+    notifications.push(text);
+  });
   try {
     await expect(original.session(a.id, 'preference')).rejects.toMatchObject({
       code: 'invalid_input',
     });
     const first = fields(await original.inspect(a.id));
-    await expect(original.fill(a.id, first)).rejects.toMatchObject({
-      code: 'conflict',
+    const ambiguous = await original.fill(a.id, first);
+    expect(ambiguous).toMatchObject({
+      status: 'awaiting_user',
+      chooseAccount: true,
     });
-    outputs.push(
-      await original.fill(a.id, first, items[0].id, undefined, true),
-    );
+    if (!('requestId' in ambiguous)) throw new Error('Expected account picker');
+    expect(await original.fill(a.id, first)).toMatchObject({
+      requestId: ambiguous.requestId,
+    });
+    const picker = await request(fixture.url)
+      .get(`/login/requests/${ambiguous.requestId}`)
+      .expect(200);
+    expect(picker.body).toMatchObject({
+      chooseAccount: true,
+      accounts: items.map((item) => ({ id: item.id, label: item.name })),
+    });
+    outputs.push(picker.body);
+    await request(fixture.url)
+      .post(`/login/requests/${ambiguous.requestId}/select`)
+      .send({ accountId: randomUUID() })
+      .expect(400);
+    const selection = await request(fixture.url)
+      .post(`/login/requests/${ambiguous.requestId}/select`)
+      .send({ accountId: items[0].id, keepMeSignedIn: true })
+      .expect(201);
+    expect(selection.body.status).toBe('selected');
+    outputs.push(selection.body);
+    await until(async () => {
+      await original.flushNotifications();
+      return notifications.some((text) => text.includes('is selected.'));
+    });
+    outputs.push(notifications);
+    // A duplicate selection cannot switch the account or checkbox after completion.
+    await request(fixture.url)
+      .post(`/login/requests/${ambiguous.requestId}/select`)
+      .send({ accountId: items[1].id, keepMeSignedIn: false })
+      .expect(201);
+    expect(await repository.selection(a.id)).toMatchObject({
+      accountId: items[0].id,
+      keepMeSignedIn: true,
+    });
+    outputs.push(await original.fill(a.id, first));
     expect((await repository.site(origin))?.lastAccountId).toBeNull();
     // Success is an explicit agent report after website verification, independent of save/fill.
     outputs.push(
@@ -527,6 +573,14 @@ it('remembers verified accounts and session intent across callers and restarts w
       keepMeSignedIn: true,
     });
     expect(
+      (
+        await fixture.database.pool.query(
+          'select id from login_requests where task_id=$1',
+          [b.id],
+        )
+      ).rows,
+    ).toHaveLength(0);
+    expect(
       await restarted.fill(b.id, second, items[1].id, undefined, false),
     ).toMatchObject({ accountId: items[1].id, keepMeSignedIn: false });
     expect((await repository.site(origin))?.lastAccountId).toBe(items[0].id);
@@ -545,7 +599,23 @@ it('remembers verified accounts and session intent across callers and restarts w
     expect(await restarted.fill(c.id, third)).toMatchObject({
       accountId: items[1].id,
     });
-    const entry = await restarted.request(c.id, third, undefined, true);
+    // Explicit switching opens the picker even when an active/default account is known.
+    const entry = await loginTools(restarted).secure_entry_request.execute!(
+      { fields: third, chooseAccount: true, keepMeSignedIn: true },
+      {
+        requestContext: new RequestContext([
+          [MASTRA_THREAD_ID_KEY, 'pal-task:' + c.id],
+        ]),
+        observe: noopObserve,
+      },
+    );
+    if (
+      !entry ||
+      !('requestId' in entry) ||
+      typeof entry.requestId !== 'string'
+    )
+      throw new Error('Expected explicit picker');
+    expect(entry).toMatchObject({ chooseAccount: true });
     expect((await restarted.get(entry.requestId)).keepMeSignedIn).toBe(true);
     // A private checkbox submission can override the preference supplied in user text.
     await request(fixture.url)
@@ -587,9 +657,17 @@ it('remembers verified accounts and session intent across callers and restarts w
     const fourth = fields(await resumed.inspect(d.id));
     // A removed or nonmatching remembered account must not bypass current vault matching.
     matching.mockImplementation(async () => structuredClone(items.slice(0, 2)));
-    await expect(resumed.fill(d.id, fourth)).rejects.toMatchObject({
-      code: 'conflict',
+    const missingDefault = await resumed.fill(d.id, fourth);
+    expect(missingDefault).toMatchObject({
+      status: 'awaiting_user',
+      chooseAccount: true,
     });
+    if (!('requestId' in missingDefault))
+      throw new Error('Expected account picker');
+    // Cancellation does not change the selected flow or remembered successful account.
+    await resumed.finish(missingDefault.requestId);
+    await resumed.selectAccount(missingDefault.requestId, items[0].id, false);
+    expect(await repository.selection(d.id)).toBeUndefined();
     matching.mockImplementation(async () => [structuredClone(items[0])]);
     expect(await resumed.fill(d.id, fourth)).toMatchObject({
       accountId: items[0].id,
@@ -611,12 +689,13 @@ it('remembers verified accounts and session intent across callers and restarts w
       keepMeSignedIn: true,
     });
     const persisted = await fixture.database.pool.query(
-      'select row_to_json(s) as value from login_sites s union all select row_to_json(f) from login_flows f',
+      'select row_to_json(s) as value from login_sites s union all select row_to_json(f) from login_flows f union all select row_to_json(r) from login_requests r',
     );
     expect(JSON.stringify({ outputs, persisted: persisted.rows })).not.toMatch(
       /PRIVATE_LOGIN|PRIVATE_PASSWORD/,
     );
   } finally {
+    original.onModuleDestroy();
     selected.mockRestore();
     configured.mockRestore();
     matching.mockRestore();

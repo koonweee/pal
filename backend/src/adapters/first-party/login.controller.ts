@@ -37,12 +37,21 @@ class LoginRequestDto {
   @ApiProperty() origin!: string;
   @ApiProperty({ enum: ['credentials', 'code'] }) kind!: 'credentials' | 'code';
   @ApiProperty({
-    enum: ['pending', 'saved', 'filled', 'cancelled', 'updating', 'failed'],
+    enum: [
+      'pending',
+      'saved',
+      'selected',
+      'filled',
+      'cancelled',
+      'updating',
+      'failed',
+    ],
   })
   status!: string;
   @ApiProperty({ nullable: true, type: String }) inspectionId!: string | null;
   @ApiProperty() configured!: boolean;
   @ApiProperty() keepMeSignedIn!: boolean;
+  @ApiProperty() chooseAccount!: boolean;
   @ApiProperty({ type: [LoginAccountDto] }) accounts!: LoginAccountDto[];
 }
 export class LoginUpdatedEventDto {
@@ -65,6 +74,10 @@ class SaveLoginDto {
   @ApiPropertyOptional() @IsOptional() @IsUUID() accountId?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() keepMeSignedIn?: boolean;
 }
+class SelectLoginAccountDto {
+  @ApiProperty() @IsUUID() accountId!: string;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() keepMeSignedIn?: boolean;
+}
 class SubmitCodeDto {
   @ApiProperty({ minLength: 1, maxLength: 64, writeOnly: true })
   @IsString()
@@ -73,7 +86,9 @@ class SubmitCodeDto {
 }
 class LoginFinishedDto {
   @ApiProperty() id!: string;
-  @ApiProperty({ enum: ['saved', 'filled', 'cancelled', 'updating', 'failed'] })
+  @ApiProperty({
+    enum: ['saved', 'selected', 'filled', 'cancelled', 'updating', 'failed'],
+  })
   status!: string;
 }
 
@@ -105,6 +120,16 @@ export class FirstPartyLoginController {
   @ApiCreatedResponse({ type: LoginFinishedDto })
   save(@Param('id', ParseUUIDPipe) id: string, @Body() input: SaveLoginDto) {
     return this.login.finish(id, input);
+  }
+  @Post('requests/:id/select')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ operationId: 'selectLoginAccount' })
+  @ApiCreatedResponse({ type: LoginFinishedDto })
+  select(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: SelectLoginAccountDto,
+  ) {
+    return this.login.selectAccount(id, input.accountId, input.keepMeSignedIn);
   }
   @Post('requests/:id/code')
   @Header('Cache-Control', 'no-store')

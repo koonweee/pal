@@ -102,17 +102,26 @@ export function loginTools(service: LoginService) {
     secure_entry_request: createTool({
       id: 'secure_entry_request',
       description:
-        'Show one secure-entry card in Main and the owning Task conversation. Login entry collects the complete username/password once and saves it; use secure_fill for later stages. Verification entry collects only a code and fills it immediately without saving. Pass either username/password input refs or an ordered code-ref array from login_inspect. The selected roles determine the PWA form. Opens entry even when matching accounts exist; use it for a different login or corrected credentials. Tell the user to use the inline form. Yield while awaiting input; workers report to their parent Task. The owning Task receives completion notification.',
+        'Show one secure-entry card in Main and the owning Task conversation. Login entry collects the complete username/password once and saves it; use secure_fill for later stages. Verification entry collects only a code and fills it immediately without saving. Pass either username/password input refs or an ordered code-ref array from login_inspect. The selected roles determine the PWA form. Use chooseAccount true when the user asks to switch accounts without naming a specific saved account: shows saved accounts and Use a new account. Omit it for new or corrected credentials, even when matching accounts exist. Tell the user to use the inline form. Yield while awaiting input; workers report to their parent Task. The owning Task receives completion notification.',
       inputSchema: jsonSchema<{
         fields: FieldInput;
+        chooseAccount?: boolean | null;
         keepMeSignedIn?: boolean | null;
       }>({
         type: 'object',
-        properties: { fields: fieldsSchema, keepMeSignedIn: keepSchema },
+        properties: {
+          fields: fieldsSchema,
+          chooseAccount: {
+            type: ['boolean', 'null'],
+            description:
+              'Show saved accounts and Use a new account for an explicit account-switch request.',
+          },
+          keepMeSignedIn: keepSchema,
+        },
         required: ['fields'],
         additionalProperties: false,
       }),
-      execute: ({ fields, keepMeSignedIn }, context) => {
+      execute: ({ fields, chooseAccount, keepMeSignedIn }, context) => {
         const { taskId, workerId } = identity(context);
         return safe(() =>
           service.request(
@@ -120,6 +129,7 @@ export function loginTools(service: LoginService) {
             normalizeFields(fields),
             workerId,
             keepMeSignedIn ?? undefined,
+            chooseAccount ?? false,
           ),
         );
       },
@@ -127,7 +137,7 @@ export function loginTools(service: LoginService) {
     secure_fill: createTool({
       id: 'secure_fill',
       description:
-        'Assign username/password roles to inspected input refs in fields and fill from the matching vault account without seeing values. Password refs must identify password inputs. For code, pass an ordered array of refs; a single input uses a one-element array. Reuse the same saved account across username/password stages; both credentials were collected together. Omit accountId by default: reuses the current flow, then last successful matching account, then sole match. Supply accountId only for an explicit user account choice. For verification codes, input_required means call secure_entry_request. Returns the Keep me signed in preference for you to apply through website controls. Does not click submit or prove login success; call login_session with action complete after verifying authentication.',
+        'Assign username/password roles to inspected input refs in fields and fill from the matching vault account without seeing values. Password refs must identify password inputs. For code, pass an ordered array of refs; a single input uses a one-element array. Reuse the same saved account across username/password stages; both credentials were collected together. Omit accountId by default: reuses the current flow, then last successful matching account, then sole match. Supply accountId only for an explicit user account choice. Ambiguous saved accounts open an inline picker and return awaiting_user; yield while the user chooses. For verification codes, input_required means call secure_entry_request. Returns the Keep me signed in preference for you to apply through website controls. Does not click submit or prove login success; call login_session with action complete after verifying authentication.',
       inputSchema: jsonSchema<{
         fields: FieldInput;
         accountId?: string | null;

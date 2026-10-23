@@ -77,12 +77,14 @@ export class LoginService implements OnModuleDestroy {
                 ? 'Automatic recovery stopped. Yield; the inline card lets the user retry. Do not create more requests until the user retries.'
                 : row.status === 'saved'
                   ? 'The complete username and password are stored. Inspect again and use secure_fill with the saved account for subsequent login stages.'
-                  : row.status === 'filled'
-                    ? 'The verification code was filled directly in the browser. Check the page before continuing.'
-                    : 'The request was cancelled.';
+                  : row.status === 'selected'
+                    ? 'The user selected a saved account. Inspect again and use secure_fill without accountId to continue this selected flow.'
+                    : row.status === 'filled'
+                      ? 'The verification code was filled directly in the browser. Check the page before continuing.'
+                      : 'The request was cancelled.';
           await this.notify(
             row.taskId,
-            `Secure entry request ${row.id} for ${row.origin} is ${row.status}. ${next}${row.status === 'saved' ? ` Keep me signed in preference: ${row.keepMeSignedIn ? 'on' : 'off'}. Inspect website persistence options and honor this preference; do not claim it was applied unless you selected an applicable option.` : ''} This notification can be delivered more than once.`,
+            `Secure entry request ${row.id} for ${row.origin} is ${row.status}. ${next}${row.status === 'saved' || row.status === 'selected' ? ` Keep me signed in preference: ${row.keepMeSignedIn ? 'on' : 'off'}. Inspect website persistence options and honor this preference; do not claim it was applied unless you selected an applicable option.` : ''} This notification can be delivered more than once.`,
           );
           await this.repository.notified(row.id, row.status);
         } catch {
@@ -156,6 +158,7 @@ export class LoginService implements OnModuleDestroy {
     fields: SecureFields,
     workerId?: string,
     keepMeSignedIn?: boolean,
+    chooseAccount = false,
   ) {
     const target = await this.inspector.select(
       await this.browser.selectedPage(taskId, workerId),
@@ -163,6 +166,15 @@ export class LoginService implements OnModuleDestroy {
       fields,
     );
     const kind = target.roles.includes('code') ? 'code' : 'credentials';
+    if (chooseAccount && kind === 'code')
+      throw new ApplicationError(
+        'invalid_input',
+        'Account selection requires credential fields',
+      );
+    const picker =
+      chooseAccount &&
+      this.vault.configured &&
+      (await this.vault.matching(target.origin)).length > 0;
     const row = await this.repository.request(
       taskId,
       target.origin,
@@ -171,6 +183,7 @@ export class LoginService implements OnModuleDestroy {
       workerId,
       target.inspectionId,
       keepMeSignedIn,
+      picker,
     );
     await this.publishCard(row);
     await this.tasks.update(taskId, { status: 'needs-input' });
@@ -180,6 +193,7 @@ export class LoginService implements OnModuleDestroy {
       requestId: row.id,
       origin: row.origin,
       kind,
+      chooseAccount: row.chooseAccount,
       keepMeSignedIn: row.keepMeSignedIn,
     };
   }
@@ -220,6 +234,8 @@ export class LoginService implements OnModuleDestroy {
           : matches.length === 1
             ? matches[0]
             : undefined;
+    if (!account && !accountId && matches.length > 1)
+      return this.request(taskId, fields, workerId, keepMeSignedIn, true);
     if (!account)
       throw new ApplicationError(
         'conflict',
@@ -267,7 +283,9 @@ export class LoginService implements OnModuleDestroy {
     const text =
       row.kind === 'code'
         ? 'Enter the verification code securely.'
-        : 'Enter your sign-in details securely.';
+        : row.chooseAccount
+          ? 'Choose an account to sign in.'
+          : 'Enter your sign-in details securely.';
     const metadata = { secureEntryRequestId: row.cardId };
     await this.chat.publish(
       {
@@ -286,6 +304,7 @@ export class LoginService implements OnModuleDestroy {
       id: row.id,
       origin: row.origin,
       kind: row.kind,
+      chooseAccount: row.chooseAccount,
       status: row.status,
       inspectionId: row.status === 'pending' ? row.inspectionId : null,
       configured: this.vault.configured,
@@ -327,28 +346,59 @@ export class LoginService implements OnModuleDestroy {
   ) {
     const row = await this.repository.finish(
       id,
-      input ? 'credentials' : undefined,
-      input ? (row) => this.vault.save(row.origin, input, row.id) : undefined,
-      input?.keepMeSignedIn,
+      input
+        ? {
+            kind: 'credentials',
+            status: 'saved',
+            submit: (row) => this.vault.save(row.origin, input, row.id),
+            keepMeSignedIn: input.keepMeSignedIn,
+          }
+        : undefined,
     );
+    this.events.publish({ event: 'login.updated', taskId: row.taskId });
+    void this.flushNotifications();
+    return { id: row.id, status: row.status };
+  }
+  async selectAccount(id: string, accountId: string, keepMeSignedIn?: boolean) {
+    const row = await this.repository.finish(id, {
+      kind: 'credentials',
+      status: 'selected',
+      keepMeSignedIn,
+      submit: async (row) => {
+        if (
+          !(await this.vault.matching(row.origin)).some(
+            (item) => item.id === accountId,
+          )
+        )
+          throw new ApplicationError(
+            'invalid_input',
+            'Account does not match this website',
+          );
+        return accountId;
+      },
+    });
     this.events.publish({ event: 'login.updated', taskId: row.taskId });
     void this.flushNotifications();
     return { id: row.id, status: row.status };
   }
   async submitCode(id: string, code: string) {
     try {
-      const row = await this.repository.finish(id, 'code', async (row) => {
-        if (!row.fields || !('code' in row.fields))
-          throw new StaleSecureFieldsError();
-        const owner = loginOwner(row.taskId, row.workerId ?? undefined);
-        const page = await this.browser
-          .selectedPage(row.taskId, row.workerId ?? undefined)
-          .catch(() => {
+      const row = await this.repository.finish(id, {
+        kind: 'code',
+        status: 'filled',
+        submit: async (row) => {
+          if (!row.fields || !('code' in row.fields))
             throw new StaleSecureFieldsError();
-          });
-        const target = await this.inspector.select(page, owner, row.fields);
-        if (target.origin !== row.origin) throw new StaleSecureFieldsError();
-        await this.inspector.fill(page, owner, row.fields, { code });
+          const owner = loginOwner(row.taskId, row.workerId ?? undefined);
+          const page = await this.browser
+            .selectedPage(row.taskId, row.workerId ?? undefined)
+            .catch(() => {
+              throw new StaleSecureFieldsError();
+            });
+          const target = await this.inspector.select(page, owner, row.fields);
+          if (target.origin !== row.origin) throw new StaleSecureFieldsError();
+          await this.inspector.fill(page, owner, row.fields, { code });
+        },
       });
       this.events.publish({ event: 'login.updated', taskId: row.taskId });
       void this.flushNotifications();

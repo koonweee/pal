@@ -21,6 +21,7 @@ import {
   getLoginRequest,
   retryLoginRequest,
   saveLoginRequest,
+  selectLoginAccount,
   submitLoginCode,
   type LoginRequest,
 } from '../src/api/client';
@@ -28,6 +29,7 @@ vi.mock('../src/api/client', () => ({
   getLoginRequest: vi.fn(),
   retryLoginRequest: vi.fn(),
   saveLoginRequest: vi.fn(),
+  selectLoginAccount: vi.fn(),
   submitLoginCode: vi.fn(),
   cancelLoginRequest: vi.fn(),
   loginPreviewUrl: (id: string) => '/api/login/inspections/' + id + '/image',
@@ -57,6 +59,7 @@ const pending: LoginRequest = {
   status: 'pending',
   inspectionId: 'bound-preview',
   configured: true,
+  chooseAccount: false,
   keepMeSignedIn: true,
   accounts: [],
 };
@@ -218,4 +221,55 @@ test('keeps reload blocked until every active form closes, and cancellation remo
   expect(
     screen.queryByRole('button', { name: /browser preview/ }),
   ).not.toBeInTheDocument();
+});
+
+test('offers saved accounts and new entry, keeps checkbox drafts local, and selects privately without requesting credentials', async () => {
+  let current: LoginRequest = {
+    ...pending,
+    chooseAccount: true,
+    accounts: [
+      { id: 'personal', label: 'Personal' },
+      { id: 'work', label: 'Work' },
+    ],
+  };
+  vi.mocked(getLoginRequest).mockImplementation(async () => current);
+  vi.mocked(selectLoginAccount).mockImplementation(async () => {
+    current = { ...current, status: 'selected', inspectionId: null };
+    return { id: 'request', status: 'selected' };
+  });
+  const { rerender } = render(view());
+  expect(await screen.findByText('Choose an account')).toBeInTheDocument();
+  expect(screen.queryByLabelText(/^Password/)).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole('button', { name: /browser preview/ }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Use a new account' }));
+  expect(screen.getByLabelText(/^Password/)).toHaveValue('');
+  expect(screen.queryByLabelText('Save to')).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText(/^Password/), {
+    target: { value: 'discarded-dummy' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Use a new account' }));
+  expect(screen.getByLabelText(/^Password/)).toHaveValue('');
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+  fireEvent.click(screen.getByRole('radio', { name: 'Work' }));
+  current = { ...current, keepMeSignedIn: false };
+  rerender(view(1));
+  await waitFor(() => expect(getLoginRequest).toHaveBeenCalledTimes(2));
+  expect(
+    screen.getByRole('checkbox', { name: 'Keep me signed in' }),
+  ).toBeChecked();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Keep me signed in' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  await waitFor(() =>
+    expect(selectLoginAccount).toHaveBeenCalledWith('request', {
+      accountId: 'work',
+      keepMeSignedIn: false,
+    }),
+  );
+  expect(await screen.findByText('Account selected')).toBeInTheDocument();
+  expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+  expect(saveLoginRequest).not.toHaveBeenCalled();
+  expect(await screen.findByText('Reload safe')).toBeInTheDocument();
 });

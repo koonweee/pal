@@ -388,6 +388,7 @@
           "status": {
             "enum": [
               "saved",
+              "selected",
               "filled",
               "cancelled",
               "updating",
@@ -409,6 +410,9 @@
               "$ref": "#/components/schemas/LoginAccountDto"
             },
             "type": "array"
+          },
+          "chooseAccount": {
+            "type": "boolean"
           },
           "configured": {
             "type": "boolean"
@@ -437,6 +441,7 @@
             "enum": [
               "pending",
               "saved",
+              "selected",
               "filled",
               "cancelled",
               "updating",
@@ -453,6 +458,7 @@
           "inspectionId",
           "configured",
           "keepMeSignedIn",
+          "chooseAccount",
           "accounts"
         ],
         "type": "object"
@@ -1283,6 +1289,20 @@
           "idempotencyKey",
           "messageId",
           "actionId"
+        ],
+        "type": "object"
+      },
+      "SelectLoginAccountDto": {
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "keepMeSignedIn": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accountId"
         ],
         "type": "object"
       },
@@ -2222,6 +2242,47 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SaveLoginDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginFinishedDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "login"
+        ]
+      }
+    },
+    "/login/requests/{id}/select": {
+      "post": {
+        "operationId": "selectLoginAccount",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectLoginAccountDto"
               }
             }
           },

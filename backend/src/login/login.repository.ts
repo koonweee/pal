@@ -37,6 +37,7 @@ export class LoginRepository {
     workerId?: string,
     inspectionId?: string,
     keepMeSignedIn?: boolean,
+    chooseAccount = false,
   ): Promise<LoginRequest> {
     return this.database.transaction(async (tx) => {
       const keep =
@@ -64,6 +65,7 @@ export class LoginRepository {
           taskId,
           origin,
           kind,
+          chooseAccount,
           fields,
           workerId,
           inspectionId,
@@ -96,6 +98,7 @@ export class LoginRepository {
         );
       if (
         existing.status === 'pending' &&
+        existing.chooseAccount === chooseAccount &&
         (kind === 'credentials' ||
           JSON.stringify(existing.fields) === JSON.stringify(fields))
       ) {
@@ -120,6 +123,7 @@ export class LoginRepository {
           taskId,
           origin,
           kind,
+          chooseAccount,
           fields,
           workerId,
           inspectionId,
@@ -187,9 +191,12 @@ export class LoginRepository {
   }
   async finish(
     id: string,
-    kind?: 'credentials' | 'code',
-    submit?: (row: LoginRequest) => Promise<string | void>,
-    keepMeSignedIn?: boolean,
+    completion?: {
+      kind: 'credentials' | 'code';
+      status: 'saved' | 'filled' | 'selected';
+      submit: (row: LoginRequest) => Promise<string | void>;
+      keepMeSignedIn?: boolean;
+    },
   ) {
     return this.database.transaction(async (tx) => {
       const [row] = await tx
@@ -202,38 +209,39 @@ export class LoginRepository {
           'not_found',
           'Secure entry request not found',
         );
-      if (kind && row.kind !== kind)
+      if (completion && row.kind !== completion.kind)
         throw new ApplicationError(
           'invalid_input',
           'Secure entry request has a different input type',
         );
       if (
         !active.includes(row.status as (typeof active)[number]) ||
-        (submit && row.status !== 'pending')
+        (completion && row.status !== 'pending')
       )
         return row;
       if (
-        submit &&
+        completion &&
         Date.now() - row.createdAt.getTime() >
           (row.kind === 'code' ? 10 * 60_000 : 24 * 3600_000)
       )
         throw new StaleSecureFieldsError();
-      const accountId = submit ? await submit(row) : undefined;
+      if (completion?.status === 'selected' && !row.chooseAccount)
+        throw new ApplicationError(
+          'invalid_input',
+          'This request is not an account picker',
+        );
+      const accountId = completion ? await completion.submit(row) : undefined;
       const [updated] = await tx
         .update(loginRequests)
         .set({
-          status: submit
-            ? row.kind === 'code'
-              ? 'filled'
-              : 'saved'
-            : 'cancelled',
+          status: completion?.status ?? 'cancelled',
           accountId: accountId ?? null,
-          keepMeSignedIn: keepMeSignedIn ?? row.keepMeSignedIn,
+          keepMeSignedIn: completion?.keepMeSignedIn ?? row.keepMeSignedIn,
           notifiedAt: null,
         })
         .where(eq(loginRequests.id, id))
         .returning();
-      if (submit && row.kind === 'credentials' && accountId) {
+      if (completion && row.kind === 'credentials' && accountId) {
         await this.select(
           row.taskId,
           row.workerId ?? undefined,

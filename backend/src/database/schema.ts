@@ -390,7 +390,13 @@ export const loginRequests = pgTable(
     origin: text('origin').notNull(),
     status: text('status')
       .$type<
-        'pending' | 'saved' | 'filled' | 'cancelled' | 'updating' | 'failed'
+        | 'pending'
+        | 'saved'
+        | 'selected'
+        | 'filled'
+        | 'cancelled'
+        | 'updating'
+        | 'failed'
       >()
       .notNull()
       .default('pending'),
@@ -398,6 +404,7 @@ export const loginRequests = pgTable(
       .$type<'credentials' | 'code'>()
       .notNull()
       .default('credentials'),
+    chooseAccount: boolean('choose_account').notNull().default(false),
     fields: jsonb('fields').$type<SecureFields>(),
     inspectionId: uuid('inspection_id').references(
       (): AnyPgColumn => loginInspections.id,
@@ -419,7 +426,7 @@ export const loginRequests = pgTable(
     check('login_request_kind', sql`${t.kind} in ('credentials','code')`),
     check(
       'login_request_status',
-      sql`${t.status} in ('pending','saved','filled','cancelled','updating','failed')`,
+      sql`${t.status} in ('pending','saved','selected','filled','cancelled','updating','failed')`,
     ),
   ],
 );

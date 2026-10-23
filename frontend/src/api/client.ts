@@ -432,6 +432,18 @@ export function saveLoginRequest(
     }),
   );
 }
+export function selectLoginAccount(
+  id: string,
+  body: components['schemas']['SelectLoginAccountDto'],
+) {
+  return unwrap(
+    client.POST('/login/requests/{id}/select', {
+      params: { path: { id } },
+      body,
+      signal: requestSignal(),
+    }),
+  );
+}
 export function submitLoginCode(id: string, code: string) {
   return unwrap(
     client.POST('/login/requests/{id}/code', {
