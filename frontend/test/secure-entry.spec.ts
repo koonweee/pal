@@ -49,7 +49,16 @@ for (const width of [900, 390]) {
       metadata: { secureEntryRequestId: id },
     });
     const loginCard = card('login-root');
-    backend.rows.push(loginCard);
+    const reference = {
+      ...backend.message(
+        'Reference message with enough text to fill the normal message width. '.repeat(
+          12,
+        ),
+      ),
+      taskId: task.id,
+      mainVisible: true,
+    };
+    backend.rows.push(reference, loginCard);
     backend.holdNextHistory = true;
     let credentialSubmissions = 0,
       codeSubmissions = 0,
@@ -117,11 +126,41 @@ for (const width of [900, 390]) {
       expect(requestLoads).toBe(0);
       await expect(page.getByLabel(/^Password/)).toHaveCount(0);
       backend.releaseHistory!();
-      await expect(
-        page.getByRole('button', { name: 'Open task: Store sign-in' }),
-      ).toBeVisible();
+      const assertCardLayout = async () => {
+        await expect(
+          page.getByRole('button', { name: /^Open task:/ }),
+        ).toHaveCount(0);
+        // Exercise a narrow conversation pane at desktop size as well as the mobile viewport.
+        if (width === 900)
+          await page.locator('.chat-pane').evaluate((node) => {
+            node.style.flex = '0 1 400px';
+          });
+        const referenceMessage = page.locator(
+          `[data-message-id="${reference.id}"]`,
+        );
+        await expect(referenceMessage).toBeVisible();
+        const referenceWidth = (await referenceMessage.boundingBox())!.width;
+        for (const card of await page
+          .getByRole('region', { name: 'Secure entry' })
+          .all()) {
+          const box = (await card.boundingBox())!;
+          expect(box.width).toBeLessThanOrEqual(referenceWidth + 1);
+        }
+        if (width === 900)
+          await page
+            .locator('.chat-pane')
+            .evaluate((node) => node.style.removeProperty('flex'));
+      };
+      const openTask = async () => {
+        await page.locator('#thread-open').click();
+        await page
+          .locator('#task-list')
+          .getByRole('button', { name: /Store sign-in/ })
+          .click();
+      };
       const password = page.getByLabel(/^Password/);
       await expect(password).toBeVisible();
+      await assertCardLayout();
       await expect(page.getByRole('button', { name: /Logins/ })).toHaveCount(0);
       await page.getByRole('button', { name: 'Show browser preview' }).click();
       await expect(
@@ -152,17 +191,13 @@ for (const width of [900, 390]) {
         page.getByRole('button', { name: /browser preview/ }),
       ).toHaveCount(0);
       // The Task shows the same canonical card and status after completion in Main.
-      await page
-        .getByRole('button', { name: 'Open task: Store sign-in' })
-        .click();
+      await openTask();
       await expect(
         page
           .locator(`[data-message-id="${loginCard.id}"]`)
           .getByText('Login saved', { exact: true }),
       ).toBeVisible();
-      await expect(
-        page.getByRole('button', { name: 'Open task: Store sign-in' }),
-      ).toHaveCount(0);
+      await assertCardLayout();
       await page.locator('#thread-open').click();
       await page.locator('#main-chat').click();
       await expect(
@@ -178,6 +213,7 @@ for (const width of [900, 390]) {
       });
       backend.publish(card('code-root'));
       const code = page.getByLabel(/^Code/);
+      await assertCardLayout();
       await code.fill('731946');
       await page.getByRole('button', { name: 'Fill code' }).click();
       await expect(page.getByText('Updating request…')).toBeVisible();
@@ -193,11 +229,9 @@ for (const width of [900, 390]) {
       });
       update();
       await expect(code).toHaveValue('');
-      await page
-        .getByRole('button', { name: 'Open task: Store sign-in' })
-        .last()
-        .click();
+      await openTask();
       await expect(code).toHaveValue('');
+      await assertCardLayout();
       await code.fill('731946');
       await page.getByRole('button', { name: 'Fill code' }).click();
       await expect(

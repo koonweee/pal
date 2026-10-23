@@ -36,13 +36,7 @@ export const SecureEntryUpdates = createContext({
   connected: false,
 });
 
-export function SecureEntryCard({
-  requestId,
-  task,
-}: {
-  requestId: string;
-  task?: { title: string; onOpen(): void };
-}) {
+export function SecureEntryCard({ requestId }: { requestId: string }) {
   const updates = useContext(SecureEntryUpdates);
   const [request, setRequest] = useState<LoginRequest>();
   const [loadedFor, setLoadedFor] = useState('');
@@ -121,17 +115,6 @@ export function SecureEntryCard({
           )}
         </div>
       </div>
-      {task && (
-        <Button
-          className="secure-entry-task"
-          variant="subtle"
-          size="compact-sm"
-          onClick={task.onOpen}
-          aria-label={`Open task: ${task.title}`}
-        >
-          {task.title}
-        </Button>
-      )}
       {pending && (
         <SecureEntryForm
           key={current.id}

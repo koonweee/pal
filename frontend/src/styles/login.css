@@ -1,6 +1,5 @@
 .message.secure-entry-message {
   width: min(100%, 420px);
-  max-width: 100%;
 }
 .message.secure-entry-message .message-bubble {
   padding: 0;
@@ -80,16 +79,4 @@
 }
 .secure-entry-note {
   padding-left: 80px;
-}
-
-.secure-entry-task {
-  align-self: flex-start;
-  max-width: 100%;
-  min-height: 44px;
-  padding-inline: 0;
-}
-.secure-entry-task .mantine-Button-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: block;
 }

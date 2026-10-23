@@ -127,7 +127,7 @@ test('submits credentials privately, preserves drafts on updates and reconnect, 
   expect(
     screen.queryByRole('button', { name: /browser preview/ }),
   ).not.toBeInTheDocument();
-  expect(screen.getByText('Reload safe')).toBeInTheDocument();
+  expect(await screen.findByText('Reload safe')).toBeInTheDocument();
   expect(storage).not.toHaveBeenCalled();
   storage.mockRestore();
 });

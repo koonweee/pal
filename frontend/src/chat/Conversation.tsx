@@ -631,8 +631,6 @@ export function Conversation({ chat }: { chat: ChatController }) {
             <SecureEntryUpdates.Provider value={secureEntryUpdates}>
               <MessageList
                 messages={chat.messages}
-                taskRows={chat.taskRows}
-                onOpenTask={chat.selectedTaskId ? undefined : chat.selectChat}
                 onNavigate={(id) => void chat.ensureMessage(id)}
                 onReply={chat.selectReply}
                 virtualizer={virtualizer}

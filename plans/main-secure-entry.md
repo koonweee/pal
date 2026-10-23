@@ -25,7 +25,7 @@ Secure-entry Task messages use the existing `mainVisible` flag. The same message
 Implementation tasks:
 
 - Derive Main visibility from trusted secure-entry metadata and promote existing cards.
-- Render the existing card in Main with a link to its Task.
+- Render the same card in Main and Task using the standard message maximum width.
 - Keep cached Main history display-only until authoritative reconciliation.
 
 Exit criteria:
@@ -87,3 +87,9 @@ PLAYWRIGHT_CHANNEL=chrome npm test -- test/secure-entry.spec.ts
 - Verified the staged PWA at mobile width: three existing Main cards, navigation to the owning Task and back, and no horizontal overflow. Tailnet and local health checks pass.
 - Preserved seven requests, 24 inspections and 1,196,508 preview bytes. The execution desktop container ID and start time are unchanged. All three canonical cards are now Main-visible.
 - No remaining implementation or deployment work.
+
+## Card Presentation
+
+Main and Task use identical secure-entry cards without Task navigation inside the card. Cards retain their compact preferred width and inherit the standard message maximum width. Removed the unused attribution props and styles. Responsive coverage compares rendered card bounds with ordinary messages in both conversations, including a narrow desktop pane. The card unit test waits for asynchronous reload-safety cleanup before asserting the released state.
+
+Validated with frontend type/ownership/unused-code checks, three card unit tests and two responsive browser flows. Development PWA update pending.
