@@ -33,7 +33,7 @@ Exit criteria:
 
 Implementation tasks:
 
-- [ ] Update the Komodo-owned configuration with immutable images, current service/network definitions and matching release identity.
+- [x] Update the Komodo-owned configuration with immutable images, current service/network definitions and matching release identity.
 - [ ] Preserve previous deployment definitions/images and a paired backup of stopped home, service data and PostgreSQL.
 - [ ] Apply explicit database migrations and migrate the execution network without deleting persistent state.
 - [ ] Deploy and verify application/API/PWA, native browser/desktop/filesystem, network isolation and router recovery on production AMD64.
@@ -78,7 +78,7 @@ npm run test:pwa
 - Frontend ownership checks, 27 component tests, strict production TypeScript/build checks and all 10 PWA tests pass. Both secure-entry browser cases pass.
 - The full browser suite reports 59/65 passing. All six failing layout/focus cases reproduce on the published `origin/main` baseline: mobile desktop focus, two standalone safe-area cases, two workbench cases and intermittent keyboard-anchor retention. The keyboard case also fails on an isolated current-source rerun and two of three additional baseline runs. These existing failures remain outside this release's changed scope.
 - AMD64 agent-service, execution, web and egress images build successfully with a shared application revision and production PWA identity.
-- Production inventory is reviewed. The app-owned infrastructure revision `1a848eb` is pushed and validated. The owner selected the dev Pal vault, and its settings are stored in internal BWS. Direct BWS reads succeed with the production reader credential. The native sync trigger returns HTTP 500, and its `/repo` bind predates the replacement host checkout. Refresh only the secret-sync container, require a fresh successful startup, then resume native secret/resource synchronization. Production application containers remain unchanged.
+- Production inventory is reviewed. The app-owned infrastructure revision `1a848eb` is pushed and validated. The owner selected the dev Pal vault, and its settings are stored in internal BWS. The secret-sync service reports a fresh successful startup after its repository mount refresh. Native secret and Pal resource syncs succeed; all three vault variables are marked secret, and only the reviewed four settings plus description changed. All immutable images are pulled and verified on native AMD64. Production application containers remain unchanged pending the paired stopped-state backup and execution-network preparation.
 
 ## Published Artifacts
 
