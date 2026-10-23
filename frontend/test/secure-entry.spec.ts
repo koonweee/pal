@@ -247,9 +247,13 @@ for (const width of [900, 390]) {
       ).toBeVisible();
       await page.getByRole('radio', { name: 'Work', exact: true }).check();
       if (width === 390)
-        expect(
-          (await page.getByText('Work', { exact: true }).boundingBox())!.height,
-        ).toBeGreaterThanOrEqual(44);
+        await expect
+          .poll(
+            async () =>
+              (await page.getByText('Work', { exact: true }).boundingBox())
+                ?.height ?? 0,
+          )
+          .toBeGreaterThanOrEqual(44);
       await page.getByRole('button', { name: 'Continue', exact: true }).click();
       await expect(
         page.getByText('Account selected', { exact: true }),
