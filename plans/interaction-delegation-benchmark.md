@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress: four-lane collection, 126 expected matrix samples
+Blocked: host swap guard stopped four-lane collection at 45 of 126 samples
 
 ## Goal
 
@@ -68,3 +68,10 @@ python3 backend/scripts/browser-benchmark/run.py --check --variants luna-coordin
 - Workflow: `.local/browser-benchmark/delegation-20261024T053055Z/`; tmux session `pal-bench-four`.
 - Nine variant/round jobs run on the existing four isolated lanes with unchanged pinned images and 12 GiB Docker allocation. The prior passing four-lane capacity smoke is reused; fresh boundary validation covers the changed harness.
 - Model-free health refreshes every ten seconds; the existing automation checks every two minutes with progress and ETA, investigates new failures and compares speed, accuracy and cost at completion.
+
+
+## Collection Interruption
+
+- The four-lane workflow stopped at 45/126 rows when host swap rose from 1368.38 to 2065.75 MiB, exceeding the 512 MiB growth guard. VM swap stayed unused and VM available memory was about 4.8 GiB at the guard. The available data does not identify the cause of host pressure.
+- All four started jobs settled with verified cleanup, preserved artifacts and released locks. Four final rows labeled timeout were cancellations from the resource guard; they do not establish model timeouts or task failures.
+- This dataset is incomplete and cannot support the final three-arm ranking. Recovery needs a capacity/concurrency decision before a new collection; the guard remains enforced.
