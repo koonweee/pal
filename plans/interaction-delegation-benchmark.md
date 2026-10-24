@@ -2,16 +2,16 @@
 
 ## Status
 
-In Progress: three-arm collection complete; coordinator follow-up with two Luna-high workers in validation; live semantic review pending.
+In Progress: three-arm and coordinator follow-up collections and comparisons complete; live semantic review pending.
 
 ## Goal
 
-Compare three Task tool boundaries with a Luna-high interaction worker and a Sol-medium general worker. Both workers receive explicit assignments without inherited history. Measure correctness, end-to-end latency and API-equivalent cost before choosing the production boundary.
+Compare three Task tool boundaries with a Luna-high interaction worker and a Sol-medium general worker. Both workers receive explicit assignments without inherited history. Measure correctness, end-to-end latency and API-equivalent cost before choosing the production boundary. A coordinator follow-up also compares Luna high for the general worker.
 
 ## Current Behavior
 
 - Production Task and general workers share tools, model settings and inherited context. Production behavior is unchanged by this experiment.
-- All experimental arms use Sol medium for Task and general workers, and Luna high for the interaction worker. Browser, computer and login tools belong to the interaction worker.
+- The three boundary arms use Sol medium for Task and general workers, and Luna high for the interaction worker. The coordinator follow-up uses Luna high for both workers. Browser, computer and login tools belong to the interaction worker.
 - Coordinator Task plans and delegates; services Task also reads files, searches and discovers MCP; execution Task also has shell and file processing. General-worker use is model judgment.
 
 ## Milestones
@@ -32,7 +32,7 @@ Exit validated: 126 unique matrix rows, all nine jobs with cleanupVerified/artif
 
 ### 3. Live semantic review — pending
 
-- Review the 36 live rows for answer correctness, citations and observed website evidence, retaining the coordinator stream error as a failure.
+- Review the 48 live rows across the three-arm collection and coordinator follow-up for answer correctness, citations and observed website evidence, retaining both coordinator stream errors as failures.
 - Record semantic judgments before making live-quality claims or selecting the production boundary.
 
 Exit: every live row has a documented semantic disposition and the production-boundary decision states the evidence and tested limits.
@@ -90,8 +90,36 @@ python3 backend/scripts/browser-benchmark/cost.py .local/browser-benchmark/deleg
 
 Pricing references: [Standard rates](https://developers.openai.com/api/docs/pricing?latest-pricing-expanded=true), [prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching).
 
-## Coordinator Follow-Up
+## Coordinator Follow-Up — Complete
 
-The user requested `luna-coordinator-both`: Sol-medium Task with Luna-high interaction and general workers. The coordinator boundary, worker tools, explicit assignments, zero inherited history, seven cases, two contexts and three rounds stay fixed. The fresh dataset contains 42 samples and uses two isolated lanes with Docker at 12 GiB. Fresh capacity and boundary validation precede collection. General-worker use remains model judgment and must be reported; only two of six earlier coordinator support-file samples used it. Compare paired results against the completed coordinator arm, retaining separate datasets and disclosing timing, source and concurrency differences.
+`luna-coordinator-both` keeps Sol-medium Task and the coordinator boundary, with Luna-high interaction and general workers. Worker tools, explicit assignments, zero inherited history, seven cases, two contexts and three rounds stay fixed. Production behavior is unchanged.
 
-Twelve focused tests, changed-file lint, Python syntax and the 42-sample matrix check pass. The cost script prices the general worker from each sample's recorded model. Production agent behavior is unchanged.
+The fresh dataset `.local/browser-benchmark/coordinator-both-20261024T155432Z/` contains 42 unique rows. Fresh capacity and two boundary samples passed; all three matrix jobs verified cleanup and artifact copying, interrupted false and released locks. Actual request models/efforts, empty inherited history and all role boundaries were verified. General-worker requests were observed in the matrix. Collection ran 16:05:48–16:48:43 UTC on October 24, 2026, using two lanes with a final one-lane tail and Docker at 12 GiB. No resource guard or provider HTTP errors occurred.
+
+Comparison uses only the earlier `luna-coordinator` arm, with separate datasets and matched case/context/round pairs. The earlier coordinator used a Sol-medium general worker. Both interaction workers are Luna high.
+
+| General worker | Synthetic accuracy | Mean latency | Mean API-equivalent cost | Cost coverage |
+| --- | --- | --- | --- | --- |
+| Sol medium | 30/30 | 89.6 s | $0.0434–0.0508 | 29/30 |
+| Luna high | 28/30 | 103.9 s | $0.0404–0.0471 | 28/30 |
+
+The follow-up's measured synthetic cost mean is about 7% lower, with mean latency 16% higher. Across 30 matched synthetic pairs, it was faster in 11/30; mean latency difference was +14.3 s and median difference +6.8 s. The 27 pairs with complete usage in both datasets averaged $0.00162–0.00218 less. Different missing-usage subsets affect the aggregate cost means.
+
+| General worker | Fresh synthetic mean / cost | Established synthetic mean / cost |
+| --- | --- | --- |
+| Sol medium | 82.5 s / $0.0246–0.0283 | 96.6 s / $0.0610–0.0719 |
+| Luna high | 99.3 s / $0.0256–0.0295 | 108.5 s / $0.0552–0.0646 |
+
+Each context has 15 synthetic samples. Follow-up accuracy is 14/15 in each context, with 14/15 cost coverage. Baseline fresh coverage is 14/15 and established coverage 15/15.
+
+General-worker use was 2/42 samples in each dataset, exclusively support-file. The follow-up has four observed general requests, all Luna high. Support-file passed 6/6 in each dataset; mean latency increased from 95.9 to 113.2 s, while measured mean cost fell from $0.0534–0.0632 to $0.0311–0.0353. General-worker selection and assignment differ by model judgment; two uses do not establish broader general-worker performance.
+
+The follow-up synthetic mean cost comprises Task $0.03309–0.03901, interaction $0.00723–0.00796 and general $0.000074–0.000088 per measured sample. Model-aware pricing uses Sol rates for Task and Luna rates for both workers.
+
+Live mean latency was 68.4 s versus 70.3 s previously. Follow-up live measured cost was $0.0519–0.0615 versus $0.0475–0.0562; coverage is 11/12 in each. Each coordinator dataset has one live error and 11 pending semantic reviews. No live-quality ranking is established.
+
+Three first-content timeout errors are retained: support/established/round0, desktop/fresh/round1 and live-mdn/fresh/round1. The first two saved the correct draft/expense fields; timeout status still makes them failures. The live error had an unfinished Task Sol-medium request. General was unused in all three failures. Resource and HTTP checks were healthy and collection continued, but the timeout root cause is unestablished. Accuracy and latency include these rows. Cost excludes their incomplete usage, giving total follow-up coverage 39/42. Per-request input peaked at 69,883 tokens, within the short-context guard.
+
+The collections are noncontemporaneous. Host/provider/cache variation, timeout frequency and final one-lane tails limit causal attribution to the general-worker model. These workflows chiefly measure interaction overhead, with a small real file-handoff case. Broader MCP/API/shell benefits remain untested. The follow-up does not establish an overall improvement from changing the general worker.
+
+Twelve focused tests, changed-file lint, Python syntax and the 42-sample matrix check passed before collection (source `58e4de8`). Completion artifacts are `cost-comparison.json`, `comparison-details.json`, `completion-verification.json` and `matrix/report.html` in the follow-up root. The collection automation is paused; live semantic review remains open.
