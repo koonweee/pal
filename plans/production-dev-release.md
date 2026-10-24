@@ -83,3 +83,7 @@ npm run test:pwa
 ## Published Artifacts
 
 All application commits are pushed to `origin/main`. Four AMD64 images from `73bc06e` are published and their immutable remote manifests are verified. Agent-service, execution and web use their existing package names with tag `73bc06e`; the router uses `pal:73bc06e-egress` because the registry rejected publishing a new router package. Immutable pins and staged runtime verification assets are retained privately for the pending production cutover.
+
+## Production preparation checkpoint
+
+- The first stopped-state database/directory and execution-filesystem backups pass integrity checks. The final network guard made no removals and restored the original canonical runtime. Its stopped-endpoint assumption is corrected; the next bounded attempt takes a fresh backup and verifies the deployment with owned fixtures. Retained legacy agents remain stopped with restart disabled.
