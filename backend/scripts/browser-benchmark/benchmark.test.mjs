@@ -258,7 +258,7 @@ test('billing retries an explicit hosted rate limit wrapped in HTTP 400', async 
 test('delegation arms retain only their declared Task capabilities', async () => {
   const { taskToolAllowed, delegationVariants, delegationGuidance } =
     await import('./delegation.mjs');
-  assert.equal(delegationVariants.length, 4);
+  assert.equal(delegationVariants.length, 5);
   const both = delegationVariants.find((v) => v.id === 'luna-coordinator-both');
   assert.equal(both.boundary, 'coordinator');
   assert.equal(both.model, 'gpt-6-luna');
@@ -270,7 +270,9 @@ test('delegation arms retain only their declared Task capabilities', async () =>
     delegationGuidance(delegationVariants[0]),
     /agent-general \(Sol medium\)/,
   );
-  for (const { boundary } of delegationVariants) {
+  for (const { boundary } of delegationVariants.filter(
+    (v) => v.boundary !== 'interaction-mcp',
+  )) {
     for (const name of [
       'browser',
       'login_inspect',
@@ -352,4 +354,95 @@ test('result boundary validation works after generation and rejects forbidden to
     false,
   );
   assert.equal(validBoundaries(variant, [{ role: 'task', tools: [] }]), false);
+});
+
+// The two-role arm keeps local execution on Task and service/UI access on interaction.
+test('interaction-MCP arm exposes no general worker or worker file/shell tools', async () => {
+  const {
+    delegationVariants,
+    delegationGuidance,
+    taskToolAllowed,
+    validBoundaries,
+  } = await import('./delegation.mjs');
+  const variant = delegationVariants.find(
+    (v) => v.id === 'luna-interaction-mcp',
+  );
+  assert.equal(variant.model, 'gpt-6-luna');
+  assert.equal(variant.effort, 'high');
+  assert.match(delegationGuidance(variant), /There is no general worker/);
+  const task = {
+    role: 'task',
+    tools: [
+      'agent-worker',
+      'mastra_workspace_read_file',
+      'mastra_workspace_execute_command',
+      'web_search',
+      'execute_typescript',
+    ],
+  };
+  const worker = {
+    role: 'worker',
+    tools: [
+      'browser',
+      'secure_fill',
+      'mastra_workspace_computer_click',
+      'search_tools',
+      'execute_typescript',
+    ],
+  };
+  assert.equal(validBoundaries(variant, [task, worker]), true);
+  const service = 'example_lookup';
+  assert.equal(
+    validBoundaries(
+      variant,
+      [task, { ...worker, tools: [...worker.tools, service] }],
+      [service],
+    ),
+    true,
+  );
+  assert.equal(
+    validBoundaries(
+      variant,
+      [{ ...task, tools: [...task.tools, service] }, worker],
+      [service],
+    ),
+    false,
+  );
+  assert.equal(
+    validBoundaries(
+      variant,
+      [task, { ...worker, tools: [...worker.tools, 'unknown_tool'] }],
+      [service],
+    ),
+    false,
+  );
+  assert.equal(validBoundaries(variant, [worker]), false);
+  assert.equal(validBoundaries(variant, [task]), false);
+  assert.equal(
+    validBoundaries(variant, [task, worker, { role: 'general', tools: [] }]),
+    false,
+  );
+  for (const name of [
+    'mastra_workspace_read_file',
+    'mastra_workspace_execute_command',
+    'web_search',
+    'agent-worker',
+    'read_preferences',
+  ]) {
+    assert.equal(
+      validBoundaries(variant, [
+        task,
+        { ...worker, tools: [...worker.tools, name] },
+      ]),
+      false,
+    );
+  }
+  for (const name of [
+    'search_tools',
+    'agent-general',
+    'browser',
+    'mastra_workspace_computer_click',
+  ]) {
+    assert.equal(taskToolAllowed(variant.boundary, name), false);
+  }
 });

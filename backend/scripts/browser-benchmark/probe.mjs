@@ -206,8 +206,21 @@ scope.run = async () => {
         ...(variant.boundary
           ? {
               delegationBoundary: variant.boundary,
-              generalModel: variant.generalModel ?? 'gpt-6.1-sol',
-              generalEffort: variant.generalEffort ?? 'medium',
+              ...(variant.boundary === 'interaction-mcp'
+                ? {
+                    generalWorkerAvailable: false,
+                    mcpOwner: 'worker',
+                    mcpToolCount: Object.keys(r.mcp.tools()).length,
+                  }
+                : {}),
+              generalModel:
+                variant.boundary === 'interaction-mcp'
+                  ? null
+                  : (variant.generalModel ?? 'gpt-6.1-sol'),
+              generalEffort:
+                variant.boundary === 'interaction-mcp'
+                  ? null
+                  : (variant.generalEffort ?? 'medium'),
             }
           : {}),
       };
@@ -341,7 +354,8 @@ scope.run = async () => {
             ) +
             '\n## Interaction delegation\nDelegate all browser, desktop, website authentication and page verification to agent-worker. Supply a compact complete assignment containing the URL, relevant prior constraints, requested interaction method and required evidence. The worker receives only your assignment, never your conversation history. Own planning, user communication and synthesis. You have no browser, computer, shell or website-authentication tools. Do not perform interaction through other services. Keep necessary work in the worker until complete.';
         }
-        let taskWorkspace, generalWorkspace;
+        let taskWorkspace, generalWorkspace, interactionWorkspace;
+        const interactionMcp = variant.boundary === 'interaction-mcp';
         const isolatedBoundary = variant.boundary;
         const cleanExecution = withoutSection(
           withoutSection(sharedFile('execution'), 'Secure browser entry'),
@@ -371,17 +385,18 @@ scope.run = async () => {
               { enabled: false },
             ]),
           );
-          generalWorkspace = new Workspace({
-            id: 'bench-general-workspace-' + sample,
-            filesystem: r.main.workspace.filesystem,
-            sandbox: r.main.workspace.sandbox,
-            tools: { requireApproval: false, ...noComputerTools },
-          });
+          if (!interactionMcp)
+            generalWorkspace = new Workspace({
+              id: 'bench-general-workspace-' + sample,
+              filesystem: r.main.workspace.filesystem,
+              sandbox: r.main.workspace.sandbox,
+              tools: { requireApproval: false, ...noComputerTools },
+            });
           if (isolatedBoundary !== 'coordinator')
             taskWorkspace = new Workspace({
               id: 'bench-task-workspace-' + sample,
               filesystem: r.main.workspace.filesystem,
-              ...(isolatedBoundary === 'execution'
+              ...(['execution', 'interaction-mcp'].includes(isolatedBoundary)
                 ? { sandbox: r.main.workspace.sandbox }
                 : {}),
               tools:
@@ -394,6 +409,36 @@ scope.run = async () => {
                   : { requireApproval: false, ...noComputerTools },
             });
         }
+        if (interactionMcp)
+          interactionWorkspace = new Workspace({
+            id: 'bench-interaction-workspace-' + sample,
+            filesystem: r.main.workspace.filesystem,
+            sandbox: r.main.workspace.sandbox,
+            tools: {
+              enabled: false,
+              requireApproval: false,
+              ...Object.fromEntries(
+                Object.values(WORKSPACE_TOOLS.COMPUTER).map((name) => [
+                  name,
+                  { enabled: true },
+                ]),
+              ),
+            },
+          });
+        // Reuse production code mode, but Task has no connected-service catalog in this arm.
+        const taskDiscovery = new TaskToolDiscoveryProcessor(() =>
+          interactionMcp ? {} : r.mcp.tools(),
+        );
+        const taskDiscoveryProcessor = interactionMcp
+          ? {
+              id: 'bench-task-local-code',
+              async processInputStep(args) {
+                const result = await taskDiscovery.processInputStep(args);
+                delete result.tools.search_tools;
+                return result;
+              },
+            }
+          : taskDiscovery;
         // Browser-only tasks explicitly exercise the UI; APIs/search would measure a different workflow.
         const benchmarkGuidance =
           '\nFor this benchmark the user requests browser UI interaction (or screenshot/computer interaction when explicitly specified). Use visible page content and UI controls. Do not bypass the UI with fetch, hidden APIs, source-code inspection or direct network/shell requests. DOM inspection and normal browser actions are allowed for browser cases. Do not interact with unrelated tabs or real accounts. Return evidence and state uncertainty honestly.';
@@ -410,22 +455,40 @@ scope.run = async () => {
           worker = new Agent({
             id: 'bench-worker-' + sample,
             name: 'Interaction worker',
-            description:
-              'Complete a browser/computer operation and return verified findings. Supply the full compact assignment and necessary constraints.',
+            description: interactionMcp
+              ? 'Complete browser/computer or connected-service/MCP operations and return verified findings. Supply all relevant facts and constraints; local file processing belongs to Task.'
+              : 'Complete a browser/computer operation and return verified findings. Supply the full compact assignment and necessary constraints.',
             instructions:
-              (await loadAgentInstructions('worker')) + benchmarkGuidance,
+              (interactionMcp
+                ? sharedFile('voice') +
+                  '\n' +
+                  withoutSection(
+                    withoutSection(sharedFile('worker'), 'Files'),
+                    'Preferences',
+                  ) +
+                  '\n' +
+                  withoutSection(
+                    withoutSection(sharedFile('execution'), 'File processing'),
+                    'Public web research',
+                  ) +
+                  '\n' +
+                  r.mcp.instructions() +
+                  '\nUse MCP discovery and code mode for connected services. You have no shell, file-processing, public web-search or preference tools. Return local file processing to Task; use facts supplied in your assignment. Code mode combines your available tools; do not use it for shell or filesystem access.'
+                : await loadAgentInstructions('worker')) + benchmarkGuidance,
             model: model(variant.model, variant.effort),
             memory,
             skills: agentSkillPaths('worker'),
-            tools: isolatedBoundary
-              ? {
-                  ...interactionTools,
-                  web_search: baseTools.web_search,
-                  read_preferences: baseTools.read_preferences,
-                  inspect_message: baseTools.inspect_message,
-                }
-              : interactionTools,
-            workspace: r.main.workspace,
+            tools: interactionMcp
+              ? interactionTools
+              : isolatedBoundary
+                ? {
+                    ...interactionTools,
+                    web_search: baseTools.web_search,
+                    read_preferences: baseTools.read_preferences,
+                    inspect_message: baseTools.inspect_message,
+                  }
+                : interactionTools,
+            workspace: interactionWorkspace ?? r.main.workspace,
             inputProcessors: [
               ...(isolatedBoundary
                 ? [new TaskToolDiscoveryProcessor(() => r.mcp.tools())]
@@ -434,7 +497,7 @@ scope.run = async () => {
             ],
             defaultOptions: options(sample, 'worker'),
           });
-          if (isolatedBoundary)
+          if (isolatedBoundary && !interactionMcp)
             general = new Agent({
               id: 'bench-general-' + sample,
               name: 'General worker',
@@ -514,7 +577,7 @@ scope.run = async () => {
           inputProcessors: variant.delegated
             ? [
                 ...(isolatedBoundary && isolatedBoundary !== 'coordinator'
-                  ? [new TaskToolDiscoveryProcessor(() => r.mcp.tools())]
+                  ? [taskDiscoveryProcessor]
                   : []),
                 toolTiming(emit, sample, 'task'),
               ]
@@ -596,7 +659,11 @@ scope.run = async () => {
             toolNames,
           );
           const boundaries = events.filter((e) => e.event === 'model.start');
-          const boundaryValid = validBoundaries(variant, boundaries);
+          const boundaryValid = validBoundaries(
+            variant,
+            boundaries,
+            Object.keys(r.mcp.tools()),
+          );
           result({
             ...row,
             status,

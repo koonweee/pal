@@ -2,11 +2,11 @@
 
 ## Status
 
-In Progress: three-arm and coordinator follow-up collections and comparisons complete; live semantic review pending.
+In Progress: Task-execution/interaction-MCP follow-up in preparation; earlier collections and comparisons complete, with live semantic review pending.
 
 ## Goal
 
-Compare three Task tool boundaries with a Luna-high interaction worker and a Sol-medium general worker. Both workers receive explicit assignments without inherited history. Measure correctness, end-to-end latency and API-equivalent cost before choosing the production boundary. A coordinator follow-up also compares Luna high for the general worker.
+Compare three Task tool boundaries with a Luna-high interaction worker and a Sol-medium general worker. Both workers receive explicit assignments without inherited history. Measure correctness, end-to-end latency and API-equivalent cost before choosing the production boundary. A coordinator follow-up also compares Luna high for the general worker. A two-role follow-up assigns local execution to Task and UI/MCP work to interaction, removing the general worker.
 
 ## Current Behavior
 
@@ -36,6 +36,15 @@ Exit validated: 126 unique matrix rows, all nine jobs with cleanupVerified/artif
 - Record semantic judgments before making live-quality claims or selecting the production boundary.
 
 Exit: every live row has a documented semantic disposition and the production-boundary decision states the evidence and tested limits.
+
+### 4. Task execution and interaction MCP — in preparation
+
+- Add `luna-interaction-mcp`: Sol-medium Task owns shell, files, web search, task management, preferences and local code mode; Luna-high interaction owns browser/computer/login, MCP discovery and code mode. No general worker is registered. Workers receive explicit assignments and zero inherited history.
+- Enforce exposed tool inventories, including no local file/shell/web-search tools on interaction and no MCP catalog/discovery on Task. Code mode retains the shared execution sandbox; exposed-tool separation is not a filesystem/process security boundary.
+- Validate native tool inventories, request settings, file inspection by Task, computer-only behavior, cleanup and a two-lane capacity gate before collecting 42 samples in a new dataset with Docker fixed at 12 GiB.
+- Compare the same seven cases, contexts and rounds against saved matched earlier arms, keeping datasets separate. Report Task/interaction costs and live-review uncertainty. The existing cases test UI workflows and file inspection; they do not measure MCP service effectiveness.
+
+Exit: 42 unique case/context/round rows, all three job cleanup and artifact checks verified, ownership locks released, role-priced costs and qualified matched comparisons saved. Preserve experimental grading failures and timeouts.
 
 ## Results
 

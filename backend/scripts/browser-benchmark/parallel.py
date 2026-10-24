@@ -16,7 +16,7 @@ from lanes import BASE, ROOT, capacity
 
 SCRIPTS = Path(__file__).resolve().parent
 DEFAULT_CASES = ['billing', 'stays', 'support', 'desktop', 'live-mdn', 'live-wikipedia']
-VARIANTS = ['control', 'sol-low', 'sol-medium', 'sol-high', 'luna-low', 'luna-high', 'luna-xhigh', 'astra-low', 'astra-medium', 'luna-coordinator', 'luna-services', 'luna-execution', 'luna-coordinator-both']
+VARIANTS = ['control', 'sol-low', 'sol-medium', 'sol-high', 'luna-low', 'luna-high', 'luna-xhigh', 'astra-low', 'astra-medium', 'luna-coordinator', 'luna-services', 'luna-execution', 'luna-coordinator-both', 'luna-interaction-mcp']
 
 def write(path, value):
     tmp = path.with_suffix(path.suffix + '.tmp')
