@@ -9,7 +9,7 @@ This is the acceptance checklist for [React Web App and Installable PWA](react-p
 | Main synchronization | Snapshots, buffered SSE changes, older pages, reload, and reconnect converge without duplicates. | `reconciles snapshots, live follow-ups, older history, reconnect, and reload` |
 | Read state | A persisted user message receives a Read marker before agent acceptance and the marker survives a snapshot. | `marks read on persistence before agent acceptance and restores receipts from snapshots` |
 | Replies | Reply composition, older-history lookup, and chat-visibility rules preserve quotes. | `composes replies...` and `keeps task-only quotes...` |
-| Send recovery | An uncertain send preserves content and only retries after explicit user input with a new key. | `preserves a failed submission...` |
+| Send recovery | A failed send remains inline with client-only Retry and Dismiss controls; Retry reuses the submission key. | `keeps a failed submission...` |
 | Tasks | Delegation, task chat, steering, shared finals, archive state, and reconnect work together. | `delegates into task chat...` |
 | Read retries | Snapshot and detail failures retry with backoff; obsolete detail requests are cancelled. | `retries failed snapshots...` |
 | Attachments | Mixed uploads, image grids, document pills, reload, retry, chat switching, drop/paste, concurrency, ordering, focus, and limits are preserved. | Five attachment/file Playwright scenarios |

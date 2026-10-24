@@ -13,7 +13,7 @@ Provide a small browser playground for the persistent Main conversation. Load hi
 - The backend exposes Main text submission, paginated public history, and named SSE events.
 - HTTP success acknowledges input acceptance. Assistant responses arrive independently.
 - SSE has no replay. Clients connect before fetching snapshots, merge by message ID/version, and refresh displayed history after reconnecting.
-- Failed handoff can leave a committed user message. A fresh submission uses a fresh idempotency key.
+- A failed handoff remains as a client-marked user bubble with Retry and Dismiss controls. Retry reuses the idempotency key.
 
 ## Target Data Shape
 
@@ -29,7 +29,7 @@ Implementation tasks:
 - [x] Build a responsive Main chat screen with sanitized Markdown, older history, connection/activity indicators, and a text composer.
 - [x] Use public HTTP/SSE endpoints; keep follow-up submission available during agent execution.
 - [x] Buffer live message events during snapshot loading, merge versions, and refresh all loaded history after reconnecting.
-- [x] Expose submission/history failures and preserve the draft; do not automatically retry uncertain sends.
+- [x] Expose history failures and keep failed submissions inline for explicit retry or dismissal.
 
 Exit criteria:
 
@@ -51,7 +51,7 @@ Exit criteria:
 ## Tests
 
 - Browser integration with controlled HTTP/SSE: snapshot/event race, version merging, pagination, reconnect recovery of loaded history, active-run follow-up submission, and reload.
-- Browser submission failure: persisted failed handoff, preserved draft, explicit resend, and a new idempotency key.
+- Browser submission failure: inline failed bubble, same-key explicit retry, and client-only dismissal.
 - Bounded live browser conversation against the real backend.
 
 ## Validation Commands

@@ -631,8 +631,12 @@ export function Conversation({ chat }: { chat: ChatController }) {
             <SecureEntryUpdates.Provider value={secureEntryUpdates}>
               <MessageList
                 messages={chat.messages}
+                onDismissFailed={chat.dismissFailedMessage}
                 onNavigate={(id) => void chat.ensureMessage(id)}
                 onReply={chat.selectReply}
+                onRetryFailed={(idempotencyKey) =>
+                  void chat.retryFailedMessage(idempotencyKey)
+                }
                 virtualizer={virtualizer}
                 scrollMargin={scrollMargin}
                 highlightedMessage={highlightedMessage}

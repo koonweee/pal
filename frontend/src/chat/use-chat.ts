@@ -4,7 +4,6 @@ import {
   getHistory,
   getTask,
   getTasks,
-  RequestError,
   sendMessage,
   type Message,
   type Task,
@@ -27,17 +26,13 @@ import { useConversationPacing } from './use-conversation-pacing';
 import { readMainHistoryCache, writeMainHistoryCache } from './history-cache';
 
 export interface MessageView {
+  failed: boolean;
   message: Message;
   persisted: boolean;
   receiptSlot: boolean;
+  retrying: boolean;
   showQuote: boolean;
   read: boolean;
-}
-
-interface SendFailure {
-  message: string;
-  failedText: string;
-  restore: boolean;
 }
 
 interface ChatState {
@@ -45,6 +40,8 @@ interface ChatState {
   before: number | null;
   connected: boolean;
   draft: string;
+  failedSends: Map<string, Message>;
+  hiddenMessageKeys: Set<string>;
   loaded: boolean;
   navigationTarget?: { id: string; key: number };
   loadingOlder: boolean;
@@ -53,6 +50,7 @@ interface ChatState {
   latestNavigationKey?: number;
   online: boolean;
   outgoing: Map<string, Message>;
+  retryingSendKey?: string;
   selectedDetails?: TaskDetails;
   selectedReply?: Message;
   selectedTaskId?: string;
@@ -60,7 +58,6 @@ interface ChatState {
   submitting: boolean;
   syncing: boolean;
   historyError?: string;
-  sendFailure?: SendFailure;
   taskAfter: string | null;
   taskArchived: boolean;
   taskError?: string;
@@ -75,6 +72,8 @@ function createInitialState(): ChatState {
     before: null,
     connected: false,
     draft: '',
+    failedSends: new Map(),
+    hiddenMessageKeys: new Set(),
     loaded: false,
     loadingOlder: false,
     opened: false,
@@ -152,7 +151,6 @@ export function useChat() {
   const buffered = useRef<Message[]>([]);
   const taskBuffered = useRef<Task[]>([]);
   const taskDrafts = useRef(new Map<string, string>());
-  const draftRevision = useRef(0);
   const chatReplies = useRef(new Map<string, Message | undefined>());
   const mounted = useRef(true);
   const controller = useRef<{
@@ -389,7 +387,6 @@ export function useChat() {
         selectedDetails: undefined,
         selectedReply: chatReplies.current.get(id ?? 'main'),
         selectedTaskId: id,
-        sendFailure: undefined,
         stored: new Map(),
       });
       void controller.current.refreshTaskDetails();
@@ -450,6 +447,48 @@ export function useChat() {
     [loadOlder, selectChat],
   );
 
+  const deliverMessage = useCallback(
+    async (message: Message, assistantSequence: number) => {
+      const idempotencyKey = message.idempotencyKey;
+      if (!idempotencyKey) return;
+      const destination = message.taskId ?? undefined;
+      messageSubmitted(idempotencyKey, assistantSequence);
+      try {
+        await sendMessage({
+          text: message.text,
+          idempotencyKey,
+          taskId: destination,
+          replyToMessageId: message.replyToMessageId ?? undefined,
+          attachmentIds: message.attachments.map((file) => file.id),
+        });
+        messageAccepted(idempotencyKey);
+        assistantArrived(
+          latestAssistantSequence(current.current.stored, destination),
+        );
+        if (current.current.outgoing.has(idempotencyKey))
+          await controller.current.synchronize();
+        const failedSends = new Map(current.current.failedSends);
+        failedSends.delete(idempotencyKey);
+        commit({ failedSends });
+      } catch {
+        messageFailed(idempotencyKey);
+        const failedSends = new Map(current.current.failedSends);
+        failedSends.set(idempotencyKey, message);
+        commit({ failedSends });
+        void controller.current.synchronize();
+      } finally {
+        commit({ retryingSendKey: undefined, submitting: false });
+      }
+    },
+    [
+      assistantArrived,
+      commit,
+      messageAccepted,
+      messageFailed,
+      messageSubmitted,
+    ],
+  );
+
   const submit = useCallback(async () => {
     const value = current.current;
     if (
@@ -462,7 +501,6 @@ export function useChat() {
     )
       return;
     const text = value.draft;
-    const submittedDraftRevision = draftRevision.current;
     const attachments = pendingFiles.attachments;
     const destination = value.selectedTaskId;
     const assistantSequence = latestAssistantSequence(
@@ -473,7 +511,7 @@ export function useChat() {
     const reply = value.selectedReply;
     const createdAt = new Date().toISOString();
     const outgoing = new Map(value.outgoing);
-    outgoing.set(idempotencyKey, {
+    const message: Message = {
       source: 'web',
       originDestinationId: 'web',
       mainVisible: false,
@@ -506,69 +544,18 @@ export function useChat() {
       phase: null,
       attachments,
       actions: null,
-    });
+    };
+    outgoing.set(idempotencyKey, message);
     commit({
       draft: '',
       localSendKey: idempotencyKey,
       outgoing,
-      sendFailure: undefined,
+      selectedReply: undefined,
       submitting: true,
     });
-    messageSubmitted(idempotencyKey, assistantSequence);
-    try {
-      await sendMessage({
-        text,
-        idempotencyKey,
-        taskId: destination,
-        replyToMessageId: reply?.id,
-        attachmentIds: attachments.map((file) => file.id),
-      });
-      messageAccepted(idempotencyKey);
-      assistantArrived(
-        latestAssistantSequence(current.current.stored, destination),
-      );
-      pendingFiles.clear(destination ?? 'main');
-      if (current.current.outgoing.has(idempotencyKey))
-        await controller.current.synchronize();
-      commit((latest) => ({
-        ...latest,
-        selectedReply:
-          latest.selectedReply?.id === reply?.id
-            ? undefined
-            : latest.selectedReply,
-      }));
-    } catch (error) {
-      messageFailed(idempotencyKey);
-      const nextOutgoing = new Map(current.current.outgoing);
-      nextOutgoing.delete(idempotencyKey);
-      const uncertain = !(error instanceof RequestError) || error.status >= 500;
-      const draftChanged = draftRevision.current !== submittedDraftRevision;
-      commit((latest) => ({
-        ...latest,
-        draft: draftChanged ? latest.draft : text,
-        outgoing: nextOutgoing,
-        sendFailure: {
-          failedText: text,
-          message: `Could not send. ${error instanceof Error ? error.message : 'Please try again.'}${
-            uncertain
-              ? ' Your message may already be saved. Sending again creates a new submission.'
-              : ''
-          }`,
-          restore: draftChanged && !!text,
-        },
-      }));
-      void controller.current.synchronize();
-    } finally {
-      commit({ submitting: false });
-    }
-  }, [
-    assistantArrived,
-    commit,
-    messageAccepted,
-    messageFailed,
-    messageSubmitted,
-    pendingFiles,
-  ]);
+    pendingFiles.clear(destination ?? 'main');
+    await deliverMessage(message, assistantSequence);
+  }, [commit, deliverMessage, pendingFiles]);
 
   const loadMoreTasks = useCallback(async () => {
     const value = current.current;
@@ -766,6 +753,10 @@ export function useChat() {
       state.stored,
       state.outgoing,
       state.selectedTaskId,
+    ).filter(
+      (message) =>
+        !message.idempotencyKey ||
+        !state.hiddenMessageKeys.has(message.idempotencyKey),
     );
     const latestUser = visible.findLast((message) => message.role === 'user');
     return visible.map<MessageView>((message) => {
@@ -773,9 +764,11 @@ export function useChat() {
       const messageKey = message.idempotencyKey ?? message.id;
       const receiptSlot = message.id === latestUser?.id;
       return {
+        failed: state.failedSends.has(messageKey),
         message,
         persisted,
         receiptSlot,
+        retrying: state.retryingSendKey === messageKey,
         showQuote: !!(
           message.replyTo && quoteVisible(message.replyTo, state.selectedTaskId)
         ),
@@ -788,7 +781,10 @@ export function useChat() {
   }, [
     activeMessageKey,
     receiptMessageKey,
+    state.failedSends,
+    state.hiddenMessageKeys,
     state.outgoing,
+    state.retryingSendKey,
     state.loaded,
     state.selectedTaskId,
     state.stored,
@@ -835,7 +831,6 @@ export function useChat() {
         commit({ selectedReply: message });
     },
     setDraft(draft: string) {
-      draftRevision.current++;
       commit({ draft });
     },
     setTaskArchived,
@@ -843,21 +838,36 @@ export function useChat() {
     tasks,
     toggleArchive,
     typing: typingVisible,
-    dismissSendFailure() {
-      commit({ sendFailure: undefined });
+    async retryFailedMessage(idempotencyKey: string) {
+      const value = current.current;
+      const message = value.failedSends.get(idempotencyKey);
+      if (
+        !message ||
+        !value.connected ||
+        !value.loaded ||
+        value.syncing ||
+        value.submitting
+      )
+        return;
+      commit({ retryingSendKey: idempotencyKey, submitting: true });
+      await deliverMessage(
+        message,
+        latestAssistantSequence(value.stored, message.taskId ?? undefined),
+      );
+    },
+    dismissFailedMessage(idempotencyKey: string) {
+      const value = current.current;
+      if (!value.failedSends.has(idempotencyKey)) return;
+      const failedSends = new Map(value.failedSends);
+      const hiddenMessageKeys = new Set(value.hiddenMessageKeys);
+      const outgoing = new Map(value.outgoing);
+      failedSends.delete(idempotencyKey);
+      hiddenMessageKeys.add(idempotencyKey);
+      outgoing.delete(idempotencyKey);
+      commit({ failedSends, hiddenMessageKeys, outgoing });
     },
     clearNavigationTarget() {
       commit({ navigationTarget: undefined });
-    },
-    restoreFailedText() {
-      const failure = current.current.sendFailure;
-      if (!failure) return;
-      commit({
-        draft: current.current.draft
-          ? `${current.current.draft}\n\n${failure.failedText}`
-          : failure.failedText,
-        sendFailure: { ...failure, restore: false },
-      });
     },
   };
 }

@@ -1,4 +1,4 @@
-import { Alert, Button, FileButton, Textarea } from '@mantine/core';
+import { FileButton, Textarea } from '@mantine/core';
 import { ArrowUp, Paperclip, X } from 'lucide-react';
 import { useLayoutEffect, useRef } from 'react';
 import { PendingFiles } from '../attachments/PendingFiles';
@@ -37,35 +37,6 @@ export function Composer({ chat }: { chat: ChatController }) {
 
   return (
     <footer ref={footer} className="footer">
-      {chat.sendFailure && (
-        <Alert id="send-error" className="send-error" role="alert" color="red">
-          <span id="send-error-text">{chat.sendFailure.message}</span>
-          {chat.sendFailure.restore && (
-            <Button
-              id="restore"
-              type="button"
-              variant="transparent"
-              size="compact-sm"
-              onClick={() => {
-                chat.restoreFailedText();
-                focusDraft();
-              }}
-            >
-              Restore message
-            </Button>
-          )}
-          <Button
-            id="dismiss"
-            type="button"
-            variant="transparent"
-            size="compact-sm"
-            aria-label="Dismiss send error"
-            onClick={chat.dismissSendFailure}
-          >
-            Dismiss
-          </Button>
-        </Alert>
-      )}
       {chat.selectedReply && (
         <div id="composer-reply" className="composer-reply">
           <div className="composer-reply-content">

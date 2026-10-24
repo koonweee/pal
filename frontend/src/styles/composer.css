@@ -76,15 +76,6 @@
 .composer-textarea::placeholder {
   color: var(--pal-text-muted);
 }
-.send-error {
-  margin-bottom: 12px;
-}
-.send-error .mantine-Alert-message {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
 .send {
   display: grid;
   place-items: center;

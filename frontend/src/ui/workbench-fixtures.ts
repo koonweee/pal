@@ -88,24 +88,30 @@ const third = message(
 
 export const workbenchMessages: MessageView[] = [
   {
+    failed: false,
     message: first,
     persisted: true,
     receiptSlot: false,
     read: false,
+    retrying: false,
     showQuote: false,
   },
   {
+    failed: false,
     message: second,
     persisted: true,
     receiptSlot: false,
     read: false,
+    retrying: false,
     showQuote: false,
   },
   {
+    failed: false,
     message: third,
     persisted: true,
     receiptSlot: true,
     read: true,
+    retrying: false,
     showQuote: true,
   },
 ];

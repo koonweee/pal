@@ -212,6 +212,35 @@ textarea::-webkit-scrollbar-thumb,
   border-radius: 22px;
   min-width: 0;
 }
+.message-content {
+  min-width: 0;
+}
+.message.user .message-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.message-failure {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 4px 0 0;
+  color: var(--pal-danger-foreground);
+  font-size: 11px;
+  line-height: 28px;
+}
+.message-failure-action {
+  --pal-icon-action-size: 28px;
+  color: inherit;
+}
+.message-failure-action.is-retrying svg {
+  animation: failed-message-retry 800ms linear infinite;
+}
+@keyframes failed-message-retry {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .message-body {
   font-size: 14px;
   line-height: 1.55;

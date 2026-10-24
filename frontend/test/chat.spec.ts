@@ -750,9 +750,12 @@ test('composes replies and navigates to quoted messages in older history', async
   await draft.fill('About the recent one');
   backend.failNextSend = true;
   await draft.press('Enter');
-  await expect(page.locator('#send-error')).toBeVisible();
-  await expect(page.locator('#composer-reply')).toContainText('Prior 65');
-  await draft.press('Enter');
+  await expect(draft).toHaveValue('');
+  await expect(page.locator('#composer-reply')).toBeHidden();
+  const failedReply = page.locator('article.user').last();
+  await failedReply
+    .getByRole('button', { name: 'Retry sending message' })
+    .click();
   await expect.poll(() => backend.submissions.length).toBe(2);
   await expect
     .poll(() => backend.submissions.at(-1)?.replyToMessageId)
@@ -1027,6 +1030,9 @@ test('keeps touch sends focused and preserves later keyboard navigation', async 
       await expect.poll(() => Boolean(backend.releaseAcceptance)).toBe(true);
       backend.releaseAcceptance!();
       await expect(composer).toHaveValue('');
+      await expect(
+        page.getByRole('button', { name: 'Attach files' }),
+      ).toBeEnabled();
       await expect(moveAway ? previousReply : composer).toBeFocused();
       if (!moveAway) await expect(composer).not.toHaveAttribute('data-blurred');
       backend.releasePersistence = undefined;
@@ -1160,7 +1166,9 @@ test('shows an ephemeral typing bubble after an accepted message', async ({
   backend.failNextSend = true;
   await composer.fill('This one fails');
   await composer.press('Enter');
-  await expect(page.getByRole('alert')).toContainText('Could not send.');
+  await expect(page.locator('article.user').last()).toContainText(
+    'Couldn’t send',
+  );
   await expect(typing).toBeHidden();
 });
 
@@ -1304,7 +1312,7 @@ test('swipes a persisted message to reply with a touch pointer', async ({
   await context.close();
 });
 
-test('preserves a failed submission and resends only on explicit input with a fresh key', async ({
+test('keeps a failed submission in the conversation for retry or dismissal', async ({
   page,
 }) => {
   await page.goto('/');
@@ -1318,27 +1326,45 @@ test('preserves a failed submission and resends only on explicit input with a fr
   await expect(button).toBeEnabled();
   backend.failNextSend = true;
   await button.click();
-  await expect(page.locator('#send-error')).toContainText(
-    'Your message may already be saved',
-  );
-  await expect(composer).toHaveValue('Keep this draft');
-  await expect(composer).toBeFocused();
-  await expect(page.locator('article.user')).toHaveCount(1);
-  await expect(page.locator('article.user .message-read')).toHaveAttribute(
-    'data-status',
-    'read',
-  );
-  await expect(button).toBeEnabled();
-  expect(backend.submissions).toHaveLength(1);
-  await button.click();
   await expect(composer).toHaveValue('');
   await expect(composer).toBeFocused();
-  await expect(page.locator('article.user')).toHaveCount(2);
-  expect(backend.submissions).toHaveLength(2);
-  expect(backend.submissions[1]!.idempotencyKey).not.toBe(
-    backend.submissions[0]!.idempotencyKey,
-  );
-  await expect(page.locator('#send-error')).toBeHidden();
+  const users = page.locator('article.user');
+  await expect(users).toHaveCount(1);
+  const failed = users.last();
+  await expect(failed).toContainText('Keep this draft');
+  await expect(failed).toContainText('Couldn’t send');
+  await expect(
+    failed.getByRole('button', { name: 'Retry sending message' }),
+  ).toBeVisible();
+  await expect(
+    failed.getByRole('button', { name: 'Dismiss failed message' }),
+  ).toBeVisible();
+  await expect(failed.locator('.message-read')).toHaveCount(0);
+  await expect(button).toBeDisabled();
+  expect(backend.submissions).toHaveLength(1);
+  const originalKey = backend.submissions[0]!.idempotencyKey;
+  await failed.getByRole('button', { name: 'Retry sending message' }).click();
+  await expect.poll(() => backend.submissions.length).toBe(2);
+  expect(backend.submissions[1]!.idempotencyKey).toBe(originalKey);
+  await expect(users).toHaveCount(1);
+  await expect(
+    failed.getByRole('button', { name: 'Retry sending message' }),
+  ).toBeHidden();
+
+  await composer.fill('Dismiss this failed message');
+  backend.failNextSend = true;
+  await button.click();
+  await expect(users).toHaveCount(2);
+  const dismissed = users.last();
+  await expect(dismissed).toContainText('Dismiss this failed message');
+  await dismissed
+    .getByRole('button', { name: 'Dismiss failed message' })
+    .click();
+  await expect(users).toHaveCount(1);
+  await expect(page.getByText('Dismiss this failed message')).toBeHidden();
+  await expect(composer).toHaveValue('');
+  await expect(button).toBeDisabled();
+  await expect(page.locator('#send-error')).toHaveCount(0);
 });
 
 test('shows one attached agent reaction and restores its replacement after reload', async ({

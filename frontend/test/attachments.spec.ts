@@ -521,16 +521,25 @@ test('preserves selected files and destination through upload retry, chat switch
   ).toBeEnabled();
   backend.failNextSend = true;
   await composer.press('Enter');
-  await expect(page.locator('#send-error')).toBeVisible();
-  await expect(page.locator('#pending-files')).toContainText('notes.txt');
-  await expect(composer).toHaveValue('Read these notes');
+  await expect(page.locator('#pending-files')).toBeHidden();
+  await expect(composer).toHaveValue('');
+  await expect(page.locator('#composer-reply')).toBeHidden();
+  const failed = page.locator('article.user').last();
+  await expect(failed).toContainText('Read these notes');
+  await expect(failed).toContainText('notes.txt');
+  await expect(failed.locator('.message-quote')).toContainText(
+    'Earlier file instructions',
+  );
   expect(backend.submissions[0].taskId).toBe(task.id);
   expect(backend.submissions[0].replyToMessageId).toBe(quoted.id);
   expect(backend.submissions[0].attachmentIds).toEqual(['retried']);
-  await composer.press('Enter');
-  await expect(page.locator('#pending-files')).toBeHidden();
+  await failed.getByRole('button', { name: 'Retry sending message' }).click();
+  await expect.poll(() => backend.submissions.length).toBe(2);
   expect(backend.submissions[1].taskId).toBe(task.id);
   expect(backend.submissions[1].attachmentIds).toEqual(['retried']);
+  expect(backend.submissions[1].idempotencyKey).toBe(
+    backend.submissions[0].idempotencyKey,
+  );
 });
 
 test('accepts dropped and pasted files with three concurrent uploads and preserves selection order', async ({

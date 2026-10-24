@@ -213,31 +213,36 @@ const server = createServer(async (request, response) => {
     submissions.push(input);
     const replyTarget = rows.find((item) => item.id === input.replyToMessageId);
     const createdAt = new Date().toISOString();
-    const row = {
-      ...message(input.text, 'user'),
-      createdAt,
-      updatedAt: createdAt,
-      idempotencyKey: input.idempotencyKey,
-      replyToMessageId: replyTarget?.id ?? null,
-      replyTo: replyTarget
-        ? {
-            id: replyTarget.id,
-            sequence: replyTarget.sequence,
-            role: replyTarget.role,
-            textPreview: replyTarget.text.slice(0, 160),
-            taskId: replyTarget.taskId,
-            phase: replyTarget.phase,
-            mainVisible: false,
-          }
-        : null,
-      taskId: input.taskId ?? null,
-      phase: null,
-      mainVisible: false,
-      attachments: input.attachmentIds
-        .map((id) => uploadedFiles.get(id)!)
-        .filter(Boolean),
-    };
-    if (input.text === 'Delegate tickets') {
+    const existing = rows.find(
+      (candidate) => candidate.idempotencyKey === input.idempotencyKey,
+    );
+    const row =
+      existing ??
+      ({
+        ...message(input.text, 'user'),
+        createdAt,
+        updatedAt: createdAt,
+        idempotencyKey: input.idempotencyKey,
+        replyToMessageId: replyTarget?.id ?? null,
+        replyTo: replyTarget
+          ? {
+              id: replyTarget.id,
+              sequence: replyTarget.sequence,
+              role: replyTarget.role,
+              textPreview: replyTarget.text.slice(0, 160),
+              taskId: replyTarget.taskId,
+              phase: replyTarget.phase,
+              mainVisible: false,
+            }
+          : null,
+        taskId: input.taskId ?? null,
+        phase: null,
+        mainVisible: false,
+        attachments: input.attachmentIds
+          .map((id) => uploadedFiles.get(id)!)
+          .filter(Boolean),
+      } satisfies Message);
+    if (!existing && input.text === 'Delegate tickets') {
       const task: TaskDetails = {
         id: 'ticket-task',
         title: 'F1 tickets',
@@ -258,16 +263,16 @@ const server = createServer(async (request, response) => {
       await new Promise<void>((resolve) => {
         releasePersistence = resolve;
       });
-      publish(row);
+      if (!existing) publish(row);
       await new Promise<void>((resolve) => {
         releaseAcceptance = resolve;
       });
-    } else publish(row);
+    } else if (!existing) publish(row);
     if (failNextSend) {
       failNextSend = false;
       json(response, 503, {
         message:
-          'Agent could not accept the message. Send again with a new idempotency key.',
+          'Agent could not accept the message. Retry with the same idempotency key.',
       });
     } else {
       working = true;

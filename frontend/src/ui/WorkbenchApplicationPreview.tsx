@@ -68,6 +68,9 @@ function useWorkbenchChat(
   const [selectedReply, setSelectedReply] = useState(
     composerScene === 'reply' ? workbenchMessages[1]!.message : undefined,
   );
+  const [failureState, setFailureState] = useState<
+    'failed' | 'retrying' | 'sent' | 'dismissed'
+  >(composerScene === 'error' ? 'failed' : 'sent');
   const files = useMemo<PendingFile[]>(
     () => [
       {
@@ -101,7 +104,23 @@ function useWorkbenchChat(
   );
   const messages = ['empty', 'loading'].includes(conversationScene)
     ? []
-    : workbenchMessages;
+    : workbenchMessages
+        .filter(
+          (_, index) =>
+            failureState !== 'dismissed' ||
+            index !== workbenchMessages.length - 1,
+        )
+        .map((view, index) =>
+          index === workbenchMessages.length - 1 &&
+          (failureState === 'failed' || failureState === 'retrying')
+            ? {
+                ...view,
+                failed: true,
+                receiptSlot: false,
+                retrying: failureState === 'retrying',
+              }
+            : view,
+        );
   const connected = conversationScene !== 'offline';
   const loaded = conversationScene !== 'loading';
   const selectedTask = selectedTaskId
@@ -118,8 +137,11 @@ function useWorkbenchChat(
           pendingEntries.every((entry) => entry.state === 'ready'))),
     clearNavigationTarget() {},
     connected,
-    dismissSendFailure() {},
+    dismissFailedMessage() {
+      setFailureState('dismissed');
+    },
     draft,
+    failedSends: new Map(),
     async ensureMessage() {
       return true;
     },
@@ -128,6 +150,7 @@ function useWorkbenchChat(
         ? 'Could not refresh history. Retrying automatically…'
         : undefined,
     loaded,
+    hiddenMessageKeys: new Set(),
     async loadMoreTasks() {},
     async loadOlder() {},
     loadingOlder: false,
@@ -151,9 +174,6 @@ function useWorkbenchChat(
       remove() {},
       retry() {},
     },
-    restoreFailedText() {
-      setDraft('Please retry this message.');
-    },
     selectedDetails:
       selectedTaskId === workbenchTaskDetails.id
         ? workbenchTaskDetails
@@ -170,20 +190,21 @@ function useWorkbenchChat(
     selectReply(message) {
       setSelectedReply(message);
     },
-    sendFailure:
-      composerScene === 'error'
-        ? {
-            failedText: 'Please retry this message.',
-            message: 'Could not send. The connection was interrupted.',
-            restore: true,
-          }
+    retryingSendKey:
+      failureState === 'retrying'
+        ? (workbenchMessages.at(-1)?.message.idempotencyKey ?? undefined)
         : undefined,
+    async retryFailedMessage() {
+      setFailureState('retrying');
+      await Promise.resolve();
+      setFailureState('sent');
+    },
     setDraft,
     setTaskArchived() {},
     stored: new Map(
       workbenchMessages.map(({ message }) => [message.id, message]),
     ),
-    submitting: false,
+    submitting: failureState === 'retrying',
     async submit() {
       setDraft('');
     },
