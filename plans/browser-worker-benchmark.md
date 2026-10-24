@@ -73,6 +73,8 @@ python3 backend/scripts/browser-benchmark/run.py --variants control,sol-medium -
 
 ## Runtime Hardening
 
+- Validation of vault refresh: seven regression tests and targeted lint pass; two Astra-low billing dev runs passed with clean teardown (`.local/browser-benchmark/fix-vault-sync/`).
+- Refresh the vault on a lookup miss: a reproduced CLI inconsistency made an item retrievable by ID but absent from lists; sync restored visibility. Refresh and retry deletion on 404 as well.
 - Verify each saved dummy credential is discoverable at the login URL before starting the timed sample; fail setup if readiness cannot be established.
 - Remove created credentials on setup failure, tolerate an already absent credential during deletion, and attempt credential cleanup even if route removal fails.
 - Label cleanup errors by browser, fixture or task stage without logging secret-bearing responses.

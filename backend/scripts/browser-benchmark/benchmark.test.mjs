@@ -153,15 +153,26 @@ test('scoring accepts equivalent wording and rejects numeric/status substrings',
   assert.equal(score(support, state, 'High').success, true);
 });
 
-test('billing waits for credential lookup and tolerates an already absent cleanup item', async (t) => {
+test('billing refreshes a stale credential list and tolerates an already absent cleanup item', async (t) => {
+  let synced = false,
+    deletes = 0,
+    syncs = 0;
   let lookups = 0,
     removedRoute = false;
   t.mock.method(globalThis, 'fetch', async (_url, options) => {
-    if (options.method === 'DELETE') return new Response(null, { status: 404 });
+    if (_url.endsWith('/sync')) {
+      synced = true;
+      syncs++;
+      return Response.json({ success: true, data: {} });
+    }
+    if (options.method === 'DELETE') {
+      deletes++;
+      return new Response(null, { status: 404 });
+    }
     const data =
       options.method === 'POST'
         ? { id: 'fixture-id' }
-        : { data: ++lookups === 1 ? [] : [{ id: 'fixture-id' }] };
+        : { data: (++lookups, synced) ? [{ id: 'fixture-id' }] : [] };
     return Response.json({ success: true, data });
   });
   const context = {
@@ -179,4 +190,6 @@ test('billing waits for credential lookup and tolerates an already absent cleanu
   assert.equal(lookups, 2);
   await fixture.close();
   assert.equal(removedRoute, true);
+  assert.equal(deletes, 2);
+  assert.equal(syncs, 2);
 });

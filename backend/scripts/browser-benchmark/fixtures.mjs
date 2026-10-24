@@ -159,13 +159,17 @@ export async function installFixture(browserService, scenario, tag) {
   };
   await context.route(predicate, handler);
   let accountId;
-  const bw = async (path, method = 'GET', body) => {
+  const bw = async (path, method = 'GET', body, refreshed = false) => {
     const response = await fetch('http://127.0.0.1:8087' + path, {
       method,
       headers: { 'content-type': 'application/json' },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
-    if (method === 'DELETE' && response.status === 404) return;
+    if (method === 'DELETE' && response.status === 404) {
+      if (refreshed) return;
+      await bw('/sync', 'POST');
+      return bw(path, method, body, true);
+    }
     const result = await response.json();
     if (!response.ok || !result.success)
       throw Error(`Benchmark vault ${method} failed (HTTP ${response.status})`);
@@ -184,7 +188,7 @@ export async function installFixture(browserService, scenario, tag) {
         },
       });
       accountId = result.id;
-      // The vault's local lookup can lag a successful create response.
+      // A successful create can leave the CLI's item list stale until sync.
       let ready = false;
       for (let attempt = 0; attempt < 20; attempt++) {
         const matches = await bw(
@@ -195,6 +199,7 @@ export async function installFixture(browserService, scenario, tag) {
           ready = true;
           break;
         }
+        if (attempt === 0) await bw('/sync', 'POST');
         await new Promise((resolve) => setTimeout(resolve, 250));
       }
       if (!ready)
