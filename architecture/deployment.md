@@ -34,6 +34,8 @@ Before policy readiness, execution has no usable internet route. If egress stops
 
 `PAL_EXECUTION_NETWORK_PREFIX` selects the transit /24 using three IPv4 octets (default `172.30.235`). Compose derives the subnet, gateway `.1` and router `.2` from it. Dynamic clients use the upper half of the /24 so startup order cannot consume the router address. Choose a prefix that does not overlap existing Docker, LAN or routed networks. Isolated smoke tests use a separate prefix.
 
+Execution uses public DNS resolvers 1.1.1.1 and 1.0.0.1. Docker service discovery remains available; external lookups do not inherit a private host/Tailnet resolver that the egress policy blocks.
+
 Web rejects gateway requests originating from the execution subnet, derived from its Compose-named palexec0 interface. Additional ingress networks do not change this boundary. Web's default route uses the service network. Agent-service and PostgreSQL are on the separate service network. The only published production port is the loopback-bound PWA gateway. CDP forwarding remains a private Docker endpoint.
 
 Pal remains Tailscale-only. Do not expose its gateway to the public internet.
@@ -52,7 +54,7 @@ Use `./scripts/dev-local` from the repository root:
 
 The first upgrade from the proxy layout replaces the execution network and execution container. In development, run `./scripts/dev-local down` followed by `./scripts/dev-local up`; named volumes and browser profile persist, and running desktop applications stop. Ordinary backend rebuilds preserve execution after that migration.
 
-A production network migration needs reviewed immutable web, execution and egress images, updated deployment Compose and health checks, and a coordinated replacement of the execution network. Validate the production architecture/kernel and a full Docker-daemon or VM reboot before accepting that release. Keep the existing paired application state and previous image/network definitions available for rollback.
+A production network migration needs reviewed immutable web, execution and egress images, updated deployment Compose and health checks, and a coordinated replacement of the execution network. Validate the production architecture/kernel and independent router recovery. A shared Docker-daemon or VM reboot requires its own maintenance window. Keep the existing paired application state and previous image/network definitions available for rollback.
 
 Database migrations remain explicit deployment steps, run from agent-service before the application starts. Production supplies a shared opaque `PAL_RELEASE_ID` to backend and frontend builds. The development web build uses the `Pal Dev` installation identity.
 

@@ -51,6 +51,7 @@ services:
       target: execution
     image: pal-execution-local
     hostname: pal
+    dns: [1.1.1.1, 1.0.0.1]
     labels:
       mastra.sandbox.id: ${PAL_EXECUTION_ID:-pal-execution}
     environment:

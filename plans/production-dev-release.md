@@ -88,5 +88,5 @@ All application commits are pushed to `origin/main`. Four AMD64 images from `73b
 
 - Recovery material is retained at `/srv/backups/pal-sf-release-20261024-001032`; the earlier verified backup is also preserved. Legacy writers are stopped with restart disabled.
 - All six runtime services are healthy, API/PWA release identity is `73bc06e`, and the first-party contract is 5. Native API/PWA/SSE checks pass. The desktop WebSocket returns a real RFB greeting without reading screen contents.
-- The initial combined native filesystem/network fixture fails. Its updated verifier reports individual secret-free checks and continues the independent fixtures; all 17 updated filesystem/network checks pass in dev. Production browser, credential/OTP, memory, data counts and independent router-restart acceptance remain pending.
+- Native filesystem, numeric public TCP/UDP, private/IPv6/capability boundaries, synthetic credential/OTP filling, compaction budgets, record retention and execution/Chrome survival across an egress restart pass. Hostname HTTPS/browser checks expose the inherited private Tailnet resolver; explicit public execution DNS is required before final acceptance.
 - Restore the temporary unused-image-pruning pause and remove exact delivery/private-plan artifacts after acceptance. A shared host/daemon reboot remains a separate maintenance-window check.
