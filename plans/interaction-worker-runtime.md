@@ -19,18 +19,18 @@ Deploy a Sol-medium Task with local execution, web search and MCP, plus a Luna-h
 
 ### 1. Runtime and guidance
 
-- Split native Task/interaction workspaces and model settings.
-- Keep MCP discovery on Task and share code-mode construction with the interaction role.
-- Remove inherited delegation history, move authentication guidance/skills to interaction and make assignments explicit.
-- Preserve secure-entry tabs across user input and fresh assignments; cancel pending entry on failed or interrupted workers.
-- Update the existing native regression and browser smoke checks, keeping one owner for shared policies.
+- [x] Split native Task/interaction workspaces and model settings.
+- [x] Keep MCP discovery on Task and share code-mode construction with the interaction role.
+- [x] Remove inherited delegation history, move authentication guidance/skills to interaction and make assignments explicit.
+- [x] Preserve secure-entry tabs across user input and fresh assignments; cancel pending entry on failed or interrupted workers.
+- [x] Update the existing native regression and browser smoke checks, keeping one owner for shared policies.
 
 Exit: build/lint and focused native checks verify actual tools/models, no inherited history, MCP execution on Task, native media, no recursion and cleanup/cancellation.
 
 ### 2. Dev validation
 
-- Rebuild through `./scripts/dev-local rebuild` while preserving execution/profile state.
-- Verify running inventories and bounded real-model MCP/file-to-browser/computer handoffs and cleanup.
+- [x] Rebuild through `./scripts/dev-local rebuild` while preserving execution/profile state.
+- [x] Verify running inventories and bounded real-model MCP/file-to-browser/computer handoffs and cleanup.
 
 Exit: dev health and role/handoff checks pass with retained desktop state.
 
@@ -40,7 +40,7 @@ Exit: dev health and role/handoff checks pass with retained desktop state.
 - Update agent-service and matching web release identity while retaining execution/profile/data.
 - Verify health, native role configuration and scoped read-only/synthetic acceptance.
 
-Exit: production runs the validated release with healthy services and verified boundaries. Docker/Komodo administration currently requires an operator sudo step on `sf-internal`.
+Exit: production runs the validated release with healthy services and verified boundaries. Komodo uses the configured native operator. Host-only preflight and deployed-role inspection use the owner’s read-only sudo verifier.
 
 ## Tests
 
@@ -67,6 +67,6 @@ cd ..
 
 - Backend build/lint and boundaries pass; 68 integration tests and 37 end-to-end tests pass on a disposable database, including secure-entry continuation and submission/cleanup ordering.
 - Dev runs the role split. Native inspection verifies Sol-medium Task, Luna interaction, role-specific tools/processors/skills, zero inherited messages and no active runs/pending entry. The execution container identity/start time is unchanged.
-- Disposable real-service MCP/code-mode and Task PDF/image/publication/restart checks pass. Native browser/media/ownership/cancellation checks and two real screenshot/form Task fixtures pass. The concurrent interaction fixture is being verified after correcting missing model defaults and waiting for queued Main publication.
+- Disposable real-service MCP/code-mode and Task PDF/image/publication/restart checks pass. Native browser/media/ownership/cancellation checks and two real screenshot/form Task fixtures pass. Two/three concurrent Luna interaction branches, private synthesis, Main responsiveness and browser restart/suspension checks pass after updating the fixture to the current native sendToUser tool.
 - The wrapper's host PWA navigation timed out before agent checks; no frontend source changes are part of this release.
-- Production image builds, Komodo rollout and final role verification remain pending. Existing production data/profile and unrelated services must remain intact.
+- Production image publication is in progress; Komodo rollout and final role verification remain pending. Existing production data/profile and unrelated services must remain intact.

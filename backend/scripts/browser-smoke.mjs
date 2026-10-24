@@ -516,6 +516,8 @@ try {
       await import('@mastra/core/request-context');
     const { createMainSession, MAIN_RESOURCE_ID } =
       await import('../dist/agent/main-session.js');
+    const { sendToUserTool } =
+      await import('../dist/agent/send-to-user.tool.js');
     const { mainTaskTools, taskStatusTool, taskUpdateTool } =
       await import('../dist/agent/task-tools.js');
     const { TaskToolDiscoveryProcessor } =
@@ -631,9 +633,17 @@ try {
         semanticRecall: false,
         workingMemory: { enabled: false },
       },
-      tools: mainTaskTools(tasks, chat, delegate, { manifest: async () => [] }),
-      publish: async (output) => {
-        mainPublications.push(output.text);
+      tools: {
+        ...mainTaskTools(tasks, chat, delegate, { manifest: async () => [] }),
+        sendToUser: sendToUserTool(
+          async (output) => {
+            mainPublications.push(output.text);
+            return { sequence: mainPublications.length };
+          },
+          async () => {
+            throw new Error('Reactions are not part of this fixture');
+          },
+        ),
       },
       onEvent: () => {},
       task: {

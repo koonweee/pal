@@ -115,6 +115,7 @@ try {
         privateWorkerToolResults: delegation.includeSubAgentToolResultsInModelContext === false,
         activeTaskRuns: r.main.taskAgent.listActiveThreadRuns().length,
         pendingSecureEntry: (await r.login.repository.active()).length,
+        taskMcpCatalogCount: Object.keys(r.mcp.tools()).length,
       };
     }`,
   });
