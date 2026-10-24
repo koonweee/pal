@@ -2,7 +2,7 @@
 
 ## Status
 
-Done; full benchmark collection pending
+Blocked: nine-lane execution needs additional Docker memory capacity
 
 ## Goal
 
@@ -40,6 +40,15 @@ Exit: fixture validators pass positive/negative cases and browser interactions c
 - Add subset, repetition, timeout and resume controls; cleanup benchmark-owned resources.
 
 Exit: reports reproduce recorded results; documented commands run the requested matrix.
+
+### 4. Nine isolated configuration lanes
+
+- Provision one Compose project per configuration using existing immutable dev images, private home/service/database volumes and distinct routed execution networks.
+- Copy only model authentication into private lane storage; isolate local vault processes and synthetic hosts while retaining the same hosted account.
+- Gate startup and parallel smoke on Docker VM memory headroom; record CPU, memory, swaps and provider throttling.
+- Run a sequential reference and nine concurrent browser/desktop smoke samples before launching 36 samples per lane.
+
+Exit: nine lanes pass isolation and contention checks, or measured capacity limits are reported with safe teardown. Full collection remains pending if capacity is insufficient.
 
 ## Tests
 
@@ -84,3 +93,12 @@ python3 backend/scripts/browser-benchmark/run.py --variants control,sol-medium -
 
 - Collect the full 324-sample matrix and review live answers before ranking configurations.
 - Evaluate production observational-memory behavior separately from the controlled raw-context experiment.
+
+
+## Nine-Lane Capacity Result
+
+- Provisioning uses pinned available images, per-lane Compose volumes/networks, copied model authentication and independent local vault processes. Hosted account limits remain shared.
+- Host: 16 GiB physical RAM; Docker VM: 7.82 GiB and 10 CPUs. Initial available VM memory was 4.44 GiB.
+- Four lanes became healthy. Available memory fell to 2.09 GiB and swap usage grew by 414 MiB before browser tasks. Startup was interrupted during lane five; all benchmark containers were stopped and dev remained running.
+- Evidence: `.local/browser-benchmark/nine-lanes/capacity.jsonl` and `manifest.json`. Automatic provisioning gates require 1 GiB available and no more than 256 MiB additional swap.
+- Nine concurrent model/browser runs, provider-contention checks and full parallel collection remain unvalidated. Additional capacity is needed before continuing at nine lanes.

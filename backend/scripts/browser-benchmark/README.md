@@ -105,3 +105,12 @@ node --test backend/scripts/browser-benchmark/benchmark.test.mjs
 node backend/scripts/browser-benchmark/fixtures-check.mjs
 python3 backend/scripts/browser-benchmark/run.py --check
 ```
+
+
+## Isolated lane capacity probe
+
+`python3 backend/scripts/browser-benchmark/lanes.py prepare` provisions up to nine isolated Compose projects, one per configuration, using pinned local images. Each has independent database, service/home volumes, local vault process and routed desktop network; ChatGPT and hosted vault accounts remain shared. Only model authentication is copied from dev. No ports are published.
+
+The probe records VM memory/swap and per-container CPU/memory in `.local/browser-benchmark/nine-lanes/capacity.jsonl`. It stops owned containers if available VM memory drops below 1 GiB or additional swap exceeds 256 MiB. `status` reports capacity and the saved manifest; `stop` stops the manifest's containers. Existing manifests require inspection before another provisioning attempt. Volumes and evidence persist.
+
+This is a provisioning/capacity gate. Parallel sample dispatch and contention smoke remain pending: this host reached significant swap growth after four idle lanes with Docker limited to 8 GiB. The existing sample runner remains sequential and its global lock must not be bypassed to run multiple lanes.
