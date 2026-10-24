@@ -2,7 +2,7 @@
 
 ## Status
 
-Blocked: host swap guard stopped four-lane collection at 45 of 126 samples
+In Progress: two-lane validation and fresh 126-sample collection
 
 ## Goal
 
@@ -75,3 +75,10 @@ python3 backend/scripts/browser-benchmark/run.py --check --variants luna-coordin
 - The four-lane workflow stopped at 45/126 rows when host swap rose from 1368.38 to 2065.75 MiB, exceeding the 512 MiB growth guard. VM swap stayed unused and VM available memory was about 4.8 GiB at the guard. The available data does not identify the cause of host pressure.
 - All four started jobs settled with verified cleanup, preserved artifacts and released locks. Four final rows labeled timeout were cancellations from the resource guard; they do not establish model timeouts or task failures.
 - This dataset is incomplete and cannot support the final three-arm ranking. Recovery needs a capacity/concurrency decision before a new collection; the guard remains enforced.
+
+
+## Two-Lane Follow-Up
+
+- The user selected two concurrent slots after the four-lane resource stop. Lanes3 and4 services are stopped; lanes5 and6 remain stopped. Docker allocation stays 12 GiB. Available VM memory after stopping unused stacks was 7.6 GiB with no VM swap use.
+- Fresh workflow: `.local/browser-benchmark/delegation-two-20261024T054936Z/`. It runs sequential and two-lane contention validation, then starts all 126 matrix samples only if validation passes. The stopped four-lane evidence remains separate.
+- The same tmux progress pane and automation follow this workflow. Checks remain every two minutes with ETA; initial collection estimate is 70–110 minutes after validation, excluding live semantic review.
