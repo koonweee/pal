@@ -1,3 +1,4 @@
+import { delegationVariants } from './delegation.mjs';
 export const variants = [
   { id: 'control', model: 'gpt-6.1-sol', effort: 'medium', delegated: false },
   ...['low', 'medium', 'high'].map((effort) => ({
@@ -19,6 +20,7 @@ export const variants = [
     delegated: true,
   })),
 ];
+export const allVariants = [...variants, ...delegationVariants];
 export const cases = [
   {
     id: 'billing',
@@ -96,6 +98,19 @@ export const cases = [
       'Check opening date May 27, 1937, total length 2,737 m and main span 1,280 m against the captured source. Alternative numeric formatting is acceptable.',
   },
 ];
+
+// The same support objective with essential facts available only in a file.
+export const supportBrief =
+  'Acme Studio workspace. CSV exports fail with E42 in Chrome and Firefox since October 21, 2026. All 12 teammates are affected. Month-end reporting is blocked. Clearing cache and retrying did not help.';
+cases.push({
+  ...cases.find((c) => c.id === 'support'),
+  id: 'support-file',
+  attachment: true,
+  constraints:
+    'Prepare a high-priority support draft from the supplied local troubleshooting brief. Preserve all facts. Save only; do not submit.',
+  prompt:
+    'Read the supplied troubleshooting brief, prepare and save a high-priority support draft in the website, and report its title and priority. Preserve all facts from the brief. Do not submit.',
+});
 
 // Explicit synthetic history: the same bytes are supplied to both arms. It is
 // meaningful project conversation, not a copy of a private user thread.

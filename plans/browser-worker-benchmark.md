@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress: four-lane collection with control, Sol medium, Luna high and Luna low
+In Progress: collection complete; live semantic review pending
 
 ## Goal
 
@@ -91,7 +91,7 @@ python3 backend/scripts/browser-benchmark/run.py --variants control,sol-medium -
 
 ## Remaining Benchmark Operations
 
-- Collect the full 324-sample matrix and review live answers before ranking configurations.
+- Review live answers from the user-selected four-configuration matrix and Astra-low follow-up. The larger model matrix was pruned by user choice.
 - Evaluate production observational-memory behavior separately from the controlled raw-context experiment.
 
 
@@ -116,3 +116,10 @@ python3 backend/scripts/browser-benchmark/run.py --variants control,sol-medium -
 - Preserve the incomplete six-lane dataset: 101 rows before host swap growth triggered the guard; all runners settled.
 - User-selected follow-up: four configurations, six cases, two contexts, three repetitions (144 samples). Use four lanes with two unused lanes stopped and fresh service processes before validation.
 - Retain the same scoring, model settings, resource guards and live-review requirements. A new four-lane smoke gates detached collection; the same automation follows its health snapshot.
+
+
+## Completed Collections
+
+- The user-selected control/Sol-medium/Luna-high/Luna-low matrix collected 144 unique rows with verified cleanup: 93 passed, 5 failed and 46 live answers pending review.
+- The separate Astra-low follow-up collected 36 unique rows with verified cleanup: all 24 synthetic cases passed and 12 live answers remain pending review.
+- API-equivalent Standard cost estimates include Task and Worker, cached-input discounts, missing-usage exclusions and cache-write uncertainty. The three Task-boundary comparison is tracked in [Interaction delegation benchmark](interaction-delegation-benchmark.md).

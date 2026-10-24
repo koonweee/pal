@@ -20,7 +20,12 @@ test('matrix contains exact settings with paired contexts and counterbalanced re
       'astra-medium',
     ],
   );
-  const jobs = schedule(variants, cases, ['fresh', 'established'], 3);
+  const jobs = schedule(
+    variants,
+    cases.filter((c) => !c.attachment),
+    ['fresh', 'established'],
+    3,
+  );
   assert.equal(jobs.length, 324);
   assert.equal(new Set(jobs.map((j) => j.key)).size, 324);
   assert.ok(
@@ -195,10 +200,21 @@ test('billing refreshes a stale credential list and tolerates an already absent 
 });
 
 test('partitioned variant/round jobs preserve all 324 unique matrix keys', () => {
-  const expected = schedule(variants, cases, ['fresh', 'established'], 3);
+  const expected = schedule(
+    variants,
+    cases.filter((c) => !c.attachment),
+    ['fresh', 'established'],
+    3,
+  );
   const partitioned = [0, 1, 2].flatMap((round) =>
     variants.flatMap((variant) =>
-      schedule([variant], cases, ['fresh', 'established'], 1, round),
+      schedule(
+        [variant],
+        cases.filter((c) => !c.attachment),
+        ['fresh', 'established'],
+        1,
+        round,
+      ),
     ),
   );
   assert.equal(partitioned.length, 324);
@@ -236,4 +252,93 @@ test('billing retries an explicit hosted rate limit wrapped in HTTP 400', async 
   assert.equal(creates, 2);
   assert.equal(fixture.state.vaultRateLimitRetries, 1);
   await fixture.close();
+});
+
+// Tool availability is an enforced experimental boundary, independent of prompts.
+test('delegation arms retain only their declared Task capabilities', async () => {
+  const { taskToolAllowed, delegationVariants } =
+    await import('./delegation.mjs');
+  assert.equal(delegationVariants.length, 3);
+  for (const { boundary } of delegationVariants) {
+    for (const name of [
+      'browser',
+      'login_inspect',
+      'secure_fill',
+      'mastra_workspace_computer_click',
+      'skill',
+    ])
+      assert.equal(taskToolAllowed(boundary, name), false);
+    assert.equal(taskToolAllowed(boundary, 'agent-general'), true);
+    assert.equal(taskToolAllowed(boundary, 'set_task_status'), true);
+  }
+  assert.equal(
+    taskToolAllowed('coordinator', 'mastra_workspace_read_file'),
+    false,
+  );
+  assert.equal(taskToolAllowed('services', 'mastra_workspace_read_file'), true);
+  assert.equal(
+    taskToolAllowed('services', 'mastra_workspace_execute_command'),
+    false,
+  );
+  assert.equal(
+    taskToolAllowed('execution', 'mastra_workspace_execute_command'),
+    true,
+  );
+  const briefCase = cases.find((c) => c.id === 'support-file');
+  assert.equal(score(briefCase, initialState(), 'High').success, false);
+  assert.ok(
+    !history('established', briefCase).some((m) => m.content.includes('E42')),
+  );
+});
+
+test('general-worker requests contribute to usage and missing-usage status', () => {
+  const report = summarize(
+    [{ sample: 'general', generalModel: 'gpt-6.1-sol' }],
+    [
+      { sample: 'general', event: 'model.start', role: 'general' },
+      {
+        sample: 'general',
+        event: 'model.finish',
+        role: 'general',
+        inputTokens: 100,
+        cachedTokens: 50,
+        outputTokens: 10,
+        reasoningTokens: 2,
+        ms: 1000,
+      },
+    ],
+  );
+  assert.equal(report.samples[0].inputTokens, 100);
+  assert.equal(report.samples[0].outputTokens, 10);
+  assert.equal(report.samples[0].usageComplete, true);
+  const incomplete = summarize(
+    [{ sample: 'general', generalModel: 'gpt-6.1-sol' }],
+    [{ sample: 'general', event: 'model.start', role: 'general' }],
+  );
+  assert.equal(incomplete.samples[0].usageComplete, false);
+});
+
+test('result boundary validation works after generation and rejects forbidden tools', async () => {
+  const { validBoundaries } = await import('./delegation.mjs');
+  const variant = { delegated: true, boundary: 'services' };
+  const worker = { role: 'worker', tools: ['browser'] };
+  assert.equal(
+    validBoundaries(variant, [
+      { role: 'task', tools: ['mastra_workspace_read_file'] },
+      worker,
+    ]),
+    true,
+  );
+  assert.equal(
+    validBoundaries(variant, [
+      { role: 'task', tools: ['mastra_workspace_execute_command'] },
+      worker,
+    ]),
+    false,
+  );
+  assert.equal(
+    validBoundaries(variant, [{ role: 'general', tools: ['browser'] }, worker]),
+    false,
+  );
+  assert.equal(validBoundaries(variant, [{ role: 'task', tools: [] }]), false);
 });

@@ -18,7 +18,7 @@ export function summarize(results, traces) {
   const samples = results.map((row) => {
     const events = traces.filter((e) => e.sample === row.sample);
     const roleUsage = {};
-    for (const role of ['task', 'worker']) {
+    for (const role of ['task', 'worker', ...(row.generalModel ? ['general'] : [])]) {
       const starts = events.filter(
         (e) => e.event === 'model.start' && e.role === role,
       );

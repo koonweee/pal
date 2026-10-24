@@ -15,7 +15,8 @@ import time
 from lanes import BASE, ROOT, capacity
 
 SCRIPTS = Path(__file__).resolve().parent
-VARIANTS = ['control', 'sol-low', 'sol-medium', 'sol-high', 'luna-low', 'luna-high', 'luna-xhigh', 'astra-low', 'astra-medium']
+DEFAULT_CASES = ['billing', 'stays', 'support', 'desktop', 'live-mdn', 'live-wikipedia']
+VARIANTS = ['control', 'sol-low', 'sol-medium', 'sol-high', 'luna-low', 'luna-high', 'luna-xhigh', 'astra-low', 'astra-medium', 'luna-coordinator', 'luna-services', 'luna-execution']
 
 def write(path, value):
     tmp = path.with_suffix(path.suffix + '.tmp')
@@ -38,7 +39,7 @@ def contention(snapshot, baseline):
         problems.append('Host additional swap exceeded 512 MiB')
     return problems
 
-def execute(output, lanes, jobs, expected):
+def execute(output, lanes, jobs, expected, cases=None):
     output.mkdir(parents=True, exist_ok=False)
     baseline = capacity()
     state = {'startedAt': datetime.now(timezone.utc).isoformat(), 'status': 'running', 'expectedSamples': expected, 'jobs': [], 'maxConcurrency': len(lanes), 'laneManifest': str(BASE/'manifest.json'), 'contentionIssues': [], 'baselineCapacity': baseline}
@@ -54,6 +55,7 @@ def execute(output, lanes, jobs, expected):
             with mutex: state['jobs'].append(entry)
             command = [sys.executable, '-u', str(SCRIPTS/'run.py'), '--container', lane['container'], '--variants', job['variant'], '--repetitions', '1', '--round-offset', str(job['round']), '--output', str(path)]
             if job.get('smoke'): command += ['--cases', 'billing,desktop', '--contexts', 'fresh']
+            elif cases: command += ['--cases', ','.join(cases)]
             with path.with_suffix('.log').open('w') as log:
                 process = subprocess.Popen(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
                 try:
@@ -72,7 +74,7 @@ def execute(output, lanes, jobs, expected):
                         process.wait(timeout=90)
             runtime = read(path/'runtime.json')
             progress = read(path/'progress.json')
-            expected_job = 2 if job.get('smoke') else 12
+            expected_job = 2 if job.get('smoke') else 2 * len(cases or DEFAULT_CASES)
             with mutex:
                 entry.update(exitCode=process.returncode, endedAt=datetime.now(timezone.utc).isoformat(), status='completed' if process.returncode == 0 and runtime.get('cleanupVerified') and not runtime.get('interrupted') and progress.get('completed') == expected_job else 'error')
                 if entry['status'] == 'error': stop.set()
@@ -143,11 +145,14 @@ parser.add_argument('command',choices=['smoke','run'])
 parser.add_argument('--output',type=Path,required=True)
 parser.add_argument('--validated-smoke',type=Path)
 parser.add_argument('--lanes',type=int,default=6,choices=range(1,7))
-parser.add_argument('--variants',default=','.join(VARIANTS))
+parser.add_argument('--variants',default=','.join(VARIANTS[:9]))
+parser.add_argument('--cases',default=','.join(DEFAULT_CASES))
 args=parser.parse_args()
 manifest=read(BASE/'manifest.json')
 if manifest.get('status')!='ready' or len(manifest.get('lanes',[]))<args.lanes: parser.error('Requested lanes must be provisioned')
 selected=args.variants.split(',')
+selected_cases=args.cases.split(',')
+if len(set(selected_cases))!=len(selected_cases) or any(c not in DEFAULT_CASES+['support-file'] for c in selected_cases): parser.error('Choose unique supported case IDs')
 if not selected or len(set(selected))!=len(selected) or any(v not in VARIANTS for v in selected): parser.error('Choose unique supported variant IDs')
 lanes=manifest['lanes'][:args.lanes]; output=args.output.resolve()
 if args.command=='smoke':
@@ -173,6 +178,6 @@ else:
         shift=round_index % len(selected)
         order=selected[shift:]+selected[:shift]
         jobs += [{'variant':v,'round':round_index} for v in order]
-    state, rows, events=execute(output,lanes,jobs,len(selected)*36)
+    state, rows, events=execute(output,lanes,jobs,len(selected)*len(selected_cases)*6,selected_cases)
     if len({x.get('key') for x in rows})!=len(rows): raise RuntimeError('Duplicate matrix keys')
     raise SystemExit(0 if state['status']=='complete' else 1)

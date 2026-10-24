@@ -1,7 +1,14 @@
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { variants, cases, history, schedule, score } from './cases.mjs';
+import {
+  allVariants as variants,
+  cases,
+  history,
+  schedule,
+  score,
+  supportBrief,
+} from './cases.mjs';
 import { installFixture, initialState } from './fixtures.mjs';
 import { trace, toolTiming } from './trace.mjs';
 import { Agent } from '/opt/pal/node_modules/@mastra/core/dist/agent/index.js';
@@ -11,6 +18,15 @@ import {
   MASTRA_THREAD_ID_KEY,
   MASTRA_RESOURCE_ID_KEY,
 } from '/opt/pal/node_modules/@mastra/core/dist/request-context/index.js';
+import {
+  Workspace,
+  WORKSPACE_TOOLS,
+} from '/opt/pal/node_modules/@mastra/core/dist/workspace/index.js';
+import {
+  taskToolAllowed,
+  delegationGuidance,
+  validBoundaries,
+} from './delegation.mjs';
 import { Memory } from '/opt/pal/node_modules/@mastra/memory/dist/index.js';
 import { MastraAgentRuntime } from '/opt/pal/dist/agent/mastra-agent-runtime.js';
 import { chatgptModel } from '/opt/pal/dist/agent/chatgpt-model.js';
@@ -172,7 +188,7 @@ scope.run = async () => {
         end;
       const liveState = initialState(),
         workerIds = new Set();
-      let originalCommand;
+      let originalCommand, briefPath;
       const workerOutputs = [];
       let cleanupFailed = false;
       const row = {
@@ -187,6 +203,13 @@ scope.run = async () => {
         taskEffort: 'medium',
         workerModel: variant.delegated ? variant.model : null,
         workerEffort: variant.delegated ? variant.effort : null,
+        ...(variant.boundary
+          ? {
+              delegationBoundary: variant.boundary,
+              generalModel: 'gpt-6.1-sol',
+              generalEffort: 'medium',
+            }
+          : {}),
       };
       try {
         task = await r.tasks.create({
@@ -214,6 +237,11 @@ scope.run = async () => {
             accountId: fixture.accountId,
           });
         const url = fixture?.url ?? scenario.url;
+        if (scenario.attachment) {
+          briefPath = `/home/pal/tmp/pal-bench-${sample}-brief.txt`;
+          await r.main.workspace.filesystem.writeFile(briefPath, supportBrief);
+          emit('owned.file', { sample, path: briefPath });
+        }
         originalCommand = r.browser.command;
         // Only this benchmark task is intercepted. Synthetic navigation uses an
         // adopted blank target so routing is installed before its first request.
@@ -289,7 +317,7 @@ scope.run = async () => {
             /^(browser|login_|secure_)/.test(name),
           ),
         );
-        const taskTools = variant.delegated
+        let taskTools = variant.delegated
           ? Object.fromEntries(
               Object.entries(baseTools).filter(
                 ([name]) => !/^(browser|login_|secure_|web_search)/.test(name),
@@ -313,6 +341,59 @@ scope.run = async () => {
             ) +
             '\n## Interaction delegation\nDelegate all browser, desktop, website authentication and page verification to agent-worker. Supply a compact complete assignment containing the URL, relevant prior constraints, requested interaction method and required evidence. The worker receives only your assignment, never your conversation history. Own planning, user communication and synthesis. You have no browser, computer, shell or website-authentication tools. Do not perform interaction through other services. Keep necessary work in the worker until complete.';
         }
+        let taskWorkspace, generalWorkspace;
+        const isolatedBoundary = variant.boundary;
+        const cleanExecution = withoutSection(
+          withoutSection(sharedFile('execution'), 'Secure browser entry'),
+          'Choosing an interaction method',
+        );
+        if (isolatedBoundary) {
+          taskTools = Object.fromEntries(
+            Object.entries(baseTools).filter(([name]) =>
+              taskToolAllowed(isolatedBoundary, name),
+            ),
+          );
+          taskInstructions =
+            ['voice', 'texting', 'files', 'preferences', 'preference-learning']
+              .map(sharedFile)
+              .join('\n') +
+            '\n' +
+            withoutSection(
+              withoutSection(sharedFile('task'), 'Browser'),
+              'Workers',
+            ) +
+            '\n' +
+            (isolatedBoundary === 'coordinator' ? '' : cleanExecution) +
+            delegationGuidance(isolatedBoundary);
+          const noComputerTools = Object.fromEntries(
+            Object.values(WORKSPACE_TOOLS.COMPUTER).map((name) => [
+              name,
+              { enabled: false },
+            ]),
+          );
+          generalWorkspace = new Workspace({
+            id: 'bench-general-workspace-' + sample,
+            filesystem: r.main.workspace.filesystem,
+            sandbox: r.main.workspace.sandbox,
+            tools: { requireApproval: false, ...noComputerTools },
+          });
+          if (isolatedBoundary !== 'coordinator')
+            taskWorkspace = new Workspace({
+              id: 'bench-task-workspace-' + sample,
+              filesystem: r.main.workspace.filesystem,
+              ...(isolatedBoundary === 'execution'
+                ? { sandbox: r.main.workspace.sandbox }
+                : {}),
+              tools:
+                isolatedBoundary === 'services'
+                  ? {
+                      enabled: false,
+                      requireApproval: false,
+                      [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: { enabled: true },
+                    }
+                  : { requireApproval: false, ...noComputerTools },
+            });
+        }
         // Browser-only tasks explicitly exercise the UI; APIs/search would measure a different workflow.
         const benchmarkGuidance =
           '\nFor this benchmark the user requests browser UI interaction (or screenshot/computer interaction when explicitly specified). Use visible page content and UI controls. Do not bypass the UI with fetch, hidden APIs, source-code inspection or direct network/shell requests. DOM inspection and normal browser actions are allowed for browser cases. Do not interact with unrelated tabs or real accounts. Return evidence and state uncertainty honestly.';
@@ -324,7 +405,7 @@ scope.run = async () => {
             workingMemory: { enabled: false },
           },
         });
-        let worker, delegation;
+        let worker, general, delegation;
         if (variant.delegated) {
           worker = new Agent({
             id: 'bench-worker-' + sample,
@@ -336,11 +417,49 @@ scope.run = async () => {
             model: model(variant.model, variant.effort),
             memory,
             skills: agentSkillPaths('worker'),
-            tools: interactionTools,
+            tools: isolatedBoundary
+              ? {
+                  ...interactionTools,
+                  web_search: baseTools.web_search,
+                  read_preferences: baseTools.read_preferences,
+                  inspect_message: baseTools.inspect_message,
+                }
+              : interactionTools,
             workspace: r.main.workspace,
-            inputProcessors: [toolTiming(emit, sample, 'worker')],
+            inputProcessors: [
+              ...(isolatedBoundary
+                ? [new TaskToolDiscoveryProcessor(() => r.mcp.tools())]
+                : []),
+              toolTiming(emit, sample, 'worker'),
+            ],
             defaultOptions: options(sample, 'worker'),
           });
+          if (isolatedBoundary)
+            general = new Agent({
+              id: 'bench-general-' + sample,
+              name: 'General worker',
+              description:
+                'Non-interaction research and file processing. No browser, computer or login tools. Supply the complete assignment and file paths.',
+              instructions:
+                ['voice', 'files', 'preferences'].map(sharedFile).join('\n') +
+                '\n' +
+                cleanExecution +
+                '\nComplete non-interaction assignments and return findings, sources and output paths to the parent. Do not operate websites, browsers, computer or login flows. Return proposed interaction work to the parent for its interaction worker.' +
+                benchmarkGuidance,
+              model: model('gpt-6.1-sol', 'medium'),
+              memory,
+              workspace: generalWorkspace,
+              tools: {
+                web_search: baseTools.web_search,
+                read_preferences: baseTools.read_preferences,
+                inspect_message: baseTools.inspect_message,
+              },
+              inputProcessors: [
+                new TaskToolDiscoveryProcessor(() => r.mcp.tools()),
+                toolTiming(emit, sample, 'general'),
+              ],
+              defaultOptions: options(sample, 'general'),
+            });
           const hooks = taskWorkerDelegation(async (_taskId, workerId) => {
             workerIds.add(workerId);
           });
@@ -384,10 +503,18 @@ scope.run = async () => {
           skills: variant.delegated ? [] : agentSkillPaths('task'),
           memory,
           ...(variant.delegated
-            ? { agents: { worker } }
+            ? {
+                agents: { worker, ...(general ? { general } : {}) },
+                ...(taskWorkspace ? { workspace: taskWorkspace } : {}),
+              }
             : { workspace: r.main.workspace }),
           inputProcessors: variant.delegated
-            ? [toolTiming(emit, sample, 'task')]
+            ? [
+                ...(isolatedBoundary && isolatedBoundary !== 'coordinator'
+                  ? [new TaskToolDiscoveryProcessor(() => r.mcp.tools())]
+                  : []),
+                toolTiming(emit, sample, 'task'),
+              ]
             : [
                 new TaskToolDiscoveryProcessor(() => r.mcp.tools()),
                 toolTiming(emit, sample, 'task'),
@@ -400,12 +527,19 @@ scope.run = async () => {
         });
         // Register with a separate host using existing storage; do not start schedulers.
         new Mastra({
-          agents: { task: agent, ...(worker ? { worker } : {}) },
+          agents: {
+            task: agent,
+            ...(worker ? { worker } : {}),
+            ...(general ? { general } : {}),
+          },
           storage: r.main.storage,
         });
         const messages = [
           ...history(context, scenario),
-          { role: 'user', content: `${scenario.prompt}\nWebsite: ${url}` },
+          {
+            role: 'user',
+            content: `${scenario.prompt}\nWebsite: ${url}${briefPath ? '\nTroubleshooting brief: ' + briefPath : ''}`,
+          },
         ];
         scope.abort = new AbortController();
         timer = setTimeout(() => scope.abort.abort(), settings.timeout * 1000);
@@ -447,85 +581,86 @@ scope.run = async () => {
         clearTimeout(timer);
         end ??= Date.now();
         if (originalCommand) r.browser.command = originalCommand;
-        const events = telemetry.rows.filter((e) => e.sample === sample);
-        const toolNames = events
-          .filter((e) => e.event === 'tool.start')
-          .map((e) => e.tool);
-        const grading = score(
-          scenario,
-          fixture?.state ?? liveState,
-          answer,
-          toolNames,
-        );
-        const boundaries = events.filter((e) => e.event === 'model.start');
-        const interactionName = (name) =>
-          /^(browser|login_|secure_|mastra_workspace_|execute_typescript|skill)/.test(
-            name,
+        try {
+          const events = telemetry.rows.filter((e) => e.sample === sample);
+          const toolNames = events
+            .filter((e) => e.event === 'tool.start')
+            .map((e) => e.tool);
+          const grading = score(
+            scenario,
+            fixture?.state ?? liveState,
+            answer,
+            toolNames,
           );
-        const boundaryValid =
-          !variant.delegated ||
-          (boundaries
-            .filter((e) => e.role === 'task')
-            .every((e) => !e.tools.some(interactionName)) &&
-            boundaries.some((e) => e.role === 'worker'));
-        result({
-          ...row,
-          status,
-          errorType,
-          elapsedMs: start ? end - start : null,
-          setupMs: start ? start - startedSetup : end - startedSetup,
-          websiteMs:
-            fixture?.state.completedAt && start
-              ? fixture.state.completedAt - start
-              : null,
-          ...grading,
-          success:
-            status === 'completed' && boundaryValid ? grading.success : false,
-          boundaryValid,
-          answer,
-          websiteState: fixture?.state ?? liveState,
-          workerOutputs,
-        });
-        // Continue cleanup even if one operation fails. Errors remain visible in traces.
-        for (const [stage, cleanup] of [
-          [
-            'browser',
-            async () => {
-              if (task) {
-                for (const workerId of workerIds)
-                  await r.browser.closeSession(task.id, workerId);
-                await r.browser.closeGroup(task.id);
-              }
-            },
-          ],
-          ['fixture', async () => fixture?.close()],
-          [
-            'task',
-            async () => {
-              if (task)
-                await r.tasks.update(task.id, {
-                  archived: true,
-                  status: 'completed',
-                });
-            },
-          ],
-        ]) {
-          try {
-            await cleanup();
-          } catch (error) {
-            cleanupFailed = true;
-            emit('cleanup.error', {
-              sample,
-              stage,
-              error: error.name,
-              ...(stage === 'fixture' &&
-              error.message.startsWith('Benchmark vault ')
-                ? { message: error.message }
-                : {}),
-            });
+          const boundaries = events.filter((e) => e.event === 'model.start');
+          const boundaryValid = validBoundaries(variant, boundaries);
+          result({
+            ...row,
+            status,
+            errorType,
+            elapsedMs: start ? end - start : null,
+            setupMs: start ? start - startedSetup : end - startedSetup,
+            websiteMs:
+              fixture?.state.completedAt && start
+                ? fixture.state.completedAt - start
+                : null,
+            ...grading,
+            success:
+              status === 'completed' && boundaryValid ? grading.success : false,
+            boundaryValid,
+            answer,
+            websiteState: fixture?.state ?? liveState,
+            workerOutputs,
+          });
+        } finally {
+          // Continue cleanup even if one operation fails. Errors remain visible in traces.
+          for (const [stage, cleanup] of [
+            [
+              'browser',
+              async () => {
+                if (task) {
+                  for (const workerId of workerIds)
+                    await r.browser.closeSession(task.id, workerId);
+                  await r.browser.closeGroup(task.id);
+                }
+              },
+            ],
+            ['fixture', async () => fixture?.close()],
+            [
+              'file',
+              async () => {
+                if (briefPath)
+                  await r.main.workspace.filesystem.deleteFile(briefPath);
+              },
+            ],
+            [
+              'task',
+              async () => {
+                if (task)
+                  await r.tasks.update(task.id, {
+                    archived: true,
+                    status: 'completed',
+                  });
+              },
+            ],
+          ]) {
+            try {
+              await cleanup();
+            } catch (error) {
+              cleanupFailed = true;
+              emit('cleanup.error', {
+                sample,
+                stage,
+                error: error.name,
+                ...(stage === 'fixture' &&
+                error.message.startsWith('Benchmark vault ')
+                  ? { message: error.message }
+                  : {}),
+              });
+            }
           }
+          scope.abort = null;
         }
-        scope.abort = null;
       }
       if (cleanupFailed)
         throw Error(

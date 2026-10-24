@@ -126,3 +126,22 @@ The combined `results.jsonl` and `trace.jsonl` identify lane and job index; orig
 Memory guards stop new work and settle active jobs below 1 GiB available VM memory, above 256 MiB additional VM swap, or above 512 MiB additional host swap. Provider HTTP errors and task failures remain visible. The smoke also rejects a model-request median above three times its sequential reference. This small same-model check cannot establish the absence of contention: caching, output length, shared-account limits and changing active concurrency still affect results. Preserve capacity timelines when interpreting full-run latency.
 
 The current reduced matrix selects control, Sol medium, Luna high and Luna low. Pass `--lanes 4 --variants control,sol-medium,luna-high,luna-low` to both `parallel.py smoke` and `parallel.py run`. It produces 144 samples across twelve variant/round jobs. Smoke validation must match the requested lane count and images. Stop unused lane services before collecting capacity measurements.
+
+
+## Delegation boundary experiment
+
+All three arms keep Task and the separate general worker on Sol medium, interaction on Luna high, and both worker histories empty except for explicit assignments. Production agents are unchanged.
+
+| Variant | Task capabilities | Worker capabilities |
+| --- | --- | --- |
+| `luna-coordinator` | Planning, task tools, preferences, publication | Interaction: browser/computer/login and execution; general: non-interaction execution |
+| `luna-services` | Above plus file reading, web search and service/MCP discovery | Same workers |
+| `luna-execution` | Above plus shell and file processing | Same workers |
+
+The interaction worker has authentication skill discovery; Task and general workers do not. Native workspace tool configuration excludes computer tools from Task and general workers. Shell-enabled roles can technically reach shared execution; instructions prohibit operating websites from those roles. Request telemetry verifies the declared tool boundaries, distinct models and empty inherited history.
+
+Use `--variants luna-coordinator,luna-services,luna-execution --cases billing,stays,support,desktop,live-mdn,live-wikipedia,support-file`. The three-round matrix contains 126 samples. The new support-file case supplies essential troubleshooting facts only in a temporary local text file, so the comparison includes file inspection followed by browser work. Files are created before timing and removed during cleanup. It uses the existing support-draft checks. The other six cases retain their original scoring.
+
+`parallel.py run` accepts the same `--cases` list and distributes nine variant/round jobs on the existing four-lane pool. Its default nine-model/six-case matrix remains 324 samples. Use a new output directory after any source change.
+
+`python3 backend/scripts/browser-benchmark/cost.py RUN` prints a reproducible Standard API-equivalent cost summary, including Task, interaction and general worker calls. Rates were verified on October 24, 2026 from official OpenAI pricing; they are not actual ChatGPT subscription charges. Cached input receives its model-specific rate and reasoning is already in output. Trace data lacks cache-write counts: ranges assume ordinary input versus default 30-minute cache-write pricing for all noncached input. Twelve-hour writes would cost more. Requests over 272k input tokens require per-request long-context costing. Samples with missing usage stay in accuracy/latency and are excluded from cost means. Setup/probes and infrastructure are excluded.

@@ -11,8 +11,8 @@ from datetime import datetime, timezone
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = Path(__file__).resolve().parent
 REMOTE = '/tmp/pal-browser-benchmark-' + uuid.uuid4().hex[:10]
-VARIANTS = ['control', 'sol-low', 'sol-medium', 'sol-high', 'luna-low', 'luna-high', 'luna-xhigh', 'astra-low', 'astra-medium']
-CASES = ['billing', 'stays', 'support', 'desktop', 'live-mdn', 'live-wikipedia']
+VARIANTS = ['control', 'sol-low', 'sol-medium', 'sol-high', 'luna-low', 'luna-high', 'luna-xhigh', 'astra-low', 'astra-medium', 'luna-coordinator', 'luna-services', 'luna-execution']
+CASES = ['billing', 'stays', 'support', 'desktop', 'live-mdn', 'live-wikipedia', 'support-file']
 
 def selected(value, choices):
     values = value.split(',')
@@ -21,8 +21,8 @@ def selected(value, choices):
     return values
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--variants', type=lambda v: selected(v, VARIANTS), default=VARIANTS)
-parser.add_argument('--cases', type=lambda v: selected(v, CASES), default=CASES)
+parser.add_argument('--variants', type=lambda v: selected(v, VARIANTS), default=VARIANTS[:9])
+parser.add_argument('--cases', type=lambda v: selected(v, CASES), default=CASES[:6])
 parser.add_argument('--contexts', type=lambda v: selected(v, ['fresh', 'established']), default=['fresh', 'established'])
 parser.add_argument('--repetitions', type=int, default=3)
 parser.add_argument('--round-offset', type=int, default=0, help='First repetition index for partitioned runs')
