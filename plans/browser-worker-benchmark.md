@@ -2,7 +2,7 @@
 
 ## Status
 
-Blocked: nine-lane execution needs additional Docker memory capacity
+In Progress: six-lane validation with a 12 GiB Docker VM
 
 ## Goal
 
@@ -41,14 +41,14 @@ Exit: fixture validators pass positive/negative cases and browser interactions c
 
 Exit: reports reproduce recorded results; documented commands run the requested matrix.
 
-### 4. Nine isolated configuration lanes
+### 4. Six isolated execution lanes
 
-- Provision one Compose project per configuration using existing immutable dev images, private home/service/database volumes and distinct routed execution networks.
+- Provision six Compose execution lanes using existing immutable dev images, private home/service/database volumes and distinct routed execution networks.
 - Copy only model authentication into private lane storage; isolate local vault processes and synthetic hosts while retaining the same hosted account.
-- Gate startup and parallel smoke on Docker VM memory headroom; record CPU, memory, swaps and provider throttling.
-- Run a sequential reference and nine concurrent browser/desktop smoke samples before launching 36 samples per lane.
+- Gate startup and parallel smoke on VM/host memory and swap; record container CPU/memory and provider throttling.
+- Run a sequential browser/desktop reference and six concurrent equivalents, then distribute all 27 variant/round jobs (324 samples) across six lanes. Preserve unique round keys and record lane ownership.
 
-Exit: nine lanes pass isolation and contention checks, or measured capacity limits are reported with safe teardown. Full collection remains pending if capacity is insufficient.
+Exit: six lanes pass isolation and contention checks; the complete matrix starts detached with compact monitoring and graceful stop support.
 
 ## Tests
 
@@ -102,3 +102,11 @@ python3 backend/scripts/browser-benchmark/run.py --variants control,sol-medium -
 - Four lanes became healthy. Available memory fell to 2.09 GiB and swap usage grew by 414 MiB before browser tasks. Startup was interrupted during lane five; all benchmark containers were stopped and dev remained running.
 - Evidence: `.local/browser-benchmark/nine-lanes/capacity.jsonl` and `manifest.json`. Automatic provisioning gates require 1 GiB available and no more than 256 MiB additional swap.
 - Nine concurrent model/browser runs, provider-contention checks and full parallel collection remain unvalidated. Additional capacity is needed before continuing at nine lanes.
+
+## Six-Lane Validation
+
+- OrbStack memory allocation is 12,288 MiB; Linux reports 11.73 GiB usable and 10 CPUs. Six isolated lanes are healthy.
+- Eight focused tests, Python syntax checks, scoped Oxlint and matrix validation pass. A simulated worker I/O failure verifies graceful SIGINT fallback and child settlement.
+- Initial smoke: sequential 2/2 passed, concurrent 11/12 passed. One model request hit the existing 120-second first-content timeout. All eight runner cleanup records verified settlement and artifact preservation.
+- Completed model-request medians were 3.30s sequential and 3.49s concurrent (1.06×); this excludes the failed request and cannot establish tail-latency behavior. No HTTP errors or memory guard breaches occurred.
+- Evidence remains in `.local/browser-benchmark/six-lane-smoke/`. The bounded repeat in `six-lane-smoke-repeat/` was stopped and cleaned up after a vault setup rejection. A six-way vault-only diagnostic reproduced hosted HTTP 429 wrapped in local HTTP 400. Fixture setup now backs off only for explicit rate-limit responses, with three retries maximum and a recorded retry count. Nine focused tests and scoped lint pass. The patched fixture setup, discovery and cleanup passed concurrently on all six dev lanes (`six-vault-fixed.json`). A new smoke dataset gates full collection.

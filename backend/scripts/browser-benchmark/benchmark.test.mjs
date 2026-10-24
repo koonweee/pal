@@ -193,3 +193,47 @@ test('billing refreshes a stale credential list and tolerates an already absent 
   assert.equal(deletes, 2);
   assert.equal(syncs, 2);
 });
+
+test('partitioned variant/round jobs preserve all 324 unique matrix keys', () => {
+  const expected = schedule(variants, cases, ['fresh', 'established'], 3);
+  const partitioned = [0, 1, 2].flatMap((round) =>
+    variants.flatMap((variant) =>
+      schedule([variant], cases, ['fresh', 'established'], 1, round),
+    ),
+  );
+  assert.equal(partitioned.length, 324);
+  assert.deepEqual(
+    new Set(partitioned.map((x) => x.key)),
+    new Set(expected.map((x) => x.key)),
+  );
+});
+
+test('billing retries an explicit hosted rate limit wrapped in HTTP 400', async (t) => {
+  let creates = 0;
+  t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    if (options.method === 'POST' && ++creates === 1)
+      return Response.json(
+        {
+          success: false,
+          message: 'CreateCipherError: status code 429 Too Many Requests',
+        },
+        { status: 400 },
+      );
+    return Response.json({
+      success: true,
+      data:
+        options.method === 'POST'
+          ? { id: 'owned-id' }
+          : { data: [{ id: 'owned-id' }] },
+    });
+  });
+  const context = { route: async () => {}, unroute: async () => {} };
+  const fixture = await installFixture(
+    { connect: async () => ({ contexts: () => [context] }) },
+    { id: 'billing', path: '/login' },
+    'rate-limit',
+  );
+  assert.equal(creates, 2);
+  assert.equal(fixture.state.vaultRateLimitRetries, 1);
+  await fixture.close();
+});

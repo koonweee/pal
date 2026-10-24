@@ -1,4 +1,4 @@
-"""Provision nine isolated Compose lanes and record host contention before model runs."""
+"""Provision six isolated Compose lanes and record host contention before model runs."""
 import argparse
 import json
 import os
@@ -7,24 +7,25 @@ import subprocess
 from datetime import datetime, timezone
 
 ROOT = Path(__file__).resolve().parents[3]
-BASE = ROOT / '.local/browser-benchmark/nine-lanes'
-VARIANTS = ['control', 'sol-low', 'sol-medium', 'sol-high', 'luna-low', 'luna-high', 'luna-xhigh', 'astra-low', 'astra-medium']
+BASE = ROOT / '.local/browser-benchmark/six-lanes'
+LANES = [f'lane{i+1}' for i in range(6)]
 SOURCE = 'pal-dev-split-agent-service-1'
 ENV_FILE = ROOT / 'backend/.env.development'
 
 def run(command, capture=False, check=True):
-    return subprocess.run(command, cwd=ROOT, text=True, capture_output=capture, check=check)
+    return subprocess.run(command, cwd=ROOT, text=True, capture_output=capture, check=check, timeout=30)
 
 def compose(index, *args, capture=False, check=True):
-    variant = VARIANTS[index]
+    variant = LANES[index]
     env = dict(os.environ, PAL_ENV_FILE=str(ENV_FILE), PAL_EXECUTION_ID=f'pal-bench-{variant}-execution', PAL_EXECUTION_NETWORK_PREFIX=f'172.30.{180 + index}')
-    return subprocess.run(['docker', 'compose', '--env-file', str(ENV_FILE), '--project-name', f'pal-bench-{variant}', '-f', str(ROOT / 'backend/compose.yaml'), '-f', str(BASE / 'override.yaml'), *args], cwd=ROOT, env=env, text=True, capture_output=capture, check=check)
+    return subprocess.run(['docker', 'compose', '--env-file', str(ENV_FILE), '--project-name', f'pal-bench-{variant}', '-f', str(ROOT / 'backend/compose.yaml'), '-f', str(BASE / 'override.yaml'), *args], cwd=ROOT, env=env, text=True, capture_output=capture, check=check, timeout=300)
 
 def capacity():
     raw = run(['docker', 'exec', SOURCE, 'cat', '/proc/meminfo'], capture=True).stdout
     mem = {line.split(':')[0]: int(line.split()[1]) for line in raw.splitlines() if len(line.split()) >= 2}
+    host_swap = run(['sysctl', '-n', 'vm.swapusage'], capture=True).stdout.strip()
     stats = run(['docker', 'stats', '--no-stream', '--format', '{{json .}}'], capture=True).stdout
-    return {'at': datetime.now(timezone.utc).isoformat(), 'memoryKiB': {k: mem.get(k) for k in ['MemTotal', 'MemAvailable', 'SwapTotal', 'SwapFree']}, 'containers': [json.loads(line) for line in stats.splitlines() if line]}
+    return {'at': datetime.now(timezone.utc).isoformat(), 'hostSwap': host_swap, 'memoryKiB': {k: mem.get(k) for k in ['MemTotal', 'MemAvailable', 'SwapTotal', 'SwapFree']}, 'containers': [json.loads(line) for line in stats.splitlines() if line]}
 
 def record(event):
     with (BASE / 'capacity.jsonl').open('a') as handle:
@@ -41,7 +42,7 @@ def prepare():
     networks = run(['docker', 'network', 'inspect', *existing], capture=True).stdout
     import ipaddress
     occupied = [ipaddress.ip_network(c['Subnet']) for n in json.loads(networks) for c in (n.get('IPAM', {}).get('Config') or []) if c.get('Subnet')]
-    for i in range(9):
+    for i in range(6):
         candidate = ipaddress.ip_network(f'172.30.{180+i}.0/24')
         if any(candidate.version == n.version and candidate.overlaps(n) for n in occupied):
             raise RuntimeError('A lane network overlaps an existing Docker network')
@@ -56,27 +57,31 @@ def prepare():
     override += '  postgres:\n    restart: "no"\n'
     (BASE / 'override.yaml').write_text(override)
     auth = BASE / 'auth.json'
-    auth.touch(mode=0o600)
-    run(['docker', 'cp', SOURCE + ':/data/private/agent/auth.json', str(auth)])
-    os.chmod(auth, 0o600)
-    baseline = capacity()
-    record({'stage': 'baseline', **baseline})
+    try:
+        auth.touch(mode=0o600)
+        run(['docker', 'cp', SOURCE + ':/data/private/agent/auth.json', str(auth)])
+        os.chmod(auth, 0o600)
+        baseline = capacity()
+        record({'stage': 'baseline', **baseline})
+    except BaseException:
+        auth.unlink(missing_ok=True)
+        raise
     manifest = {'startedAt': datetime.now(timezone.utc).isoformat(), 'images': images, 'lanes': [], 'status': 'provisioning', 'minimumAvailableKiB': 1048576, 'maximumAdditionalSwapKiB': 262144}
     def save():
         (BASE / 'manifest.json').write_text(json.dumps(manifest, indent=2))
     save()
     try:
-        for i, variant in enumerate(VARIANTS):
-            before = capacity(); record({'stage': 'before', 'variant': variant, **before})
+        for i, variant in enumerate(LANES):
+            before = capacity(); record({'stage': 'before', 'lane': variant, **before})
             if before['memoryKiB']['MemAvailable'] < 1048576:
                 raise RuntimeError('Docker VM has less than 1 GiB available; refusing additional lanes')
-            manifest['lanes'].append({'variant': variant, 'index': i, 'project': f'pal-bench-{variant}', 'container': f'pal-bench-{variant}-agent-service-1'})
+            manifest['lanes'].append({'lane': variant, 'index': i, 'project': f'pal-bench-{variant}', 'container': f'pal-bench-{variant}-agent-service-1'})
             save()
             compose(i, 'up', '-d', '--no-build', '--wait', 'postgres')
             compose(i, 'run', '--rm', '--no-deps', '-v', str(auth)+':/tmp/benchmark-auth.json:ro', 'agent-service', 'node', '-e', "const fs=require('fs');fs.mkdirSync('/data/private/agent',{recursive:true});fs.copyFileSync('/tmp/benchmark-auth.json','/data/private/agent/auth.json');fs.chmodSync('/data/private/agent/auth.json',0o600)")
             compose(i, 'run', '--rm', '--no-deps', 'agent-service', 'node', 'dist/database/migrate.js')
             compose(i, 'up', '-d', '--no-build', '--wait', 'execution', 'egress', 'agent-service', 'web')
-            after = capacity(); record({'stage': 'ready', 'variant': variant, **after})
+            after = capacity(); record({'stage': 'ready', 'lane': variant, **after})
             print(json.dumps({'ready': variant, 'availableGiB': round(after['memoryKiB']['MemAvailable']/1048576, 2)}), flush=True)
             if baseline['memoryKiB']['SwapFree'] - after['memoryKiB']['SwapFree'] > 262144:
                 raise RuntimeError('Docker VM used over 256 MiB additional swap during lane startup')
@@ -96,14 +101,15 @@ def prepare():
     finally:
         auth.unlink(missing_ok=True)
 
-parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('command', choices=['prepare', 'status', 'stop'])
-args = parser.parse_args()
-if args.command == 'prepare':
-    prepare()
-elif args.command == 'status':
-    print(json.dumps({'manifest': json.loads((BASE/'manifest.json').read_text()), 'capacity': capacity()}, indent=2))
-else:
-    manifest = json.loads((BASE/'manifest.json').read_text())
-    for lane in manifest['lanes']:
-        compose(lane['index'], 'stop', '-t', '10')
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('command', choices=['prepare', 'status', 'stop'])
+    args = parser.parse_args()
+    if args.command == 'prepare':
+        prepare()
+    elif args.command == 'status':
+        print(json.dumps({'manifest': json.loads((BASE/'manifest.json').read_text()), 'capacity': capacity()}, indent=2))
+    else:
+        manifest = json.loads((BASE/'manifest.json').read_text())
+        for lane in manifest['lanes']:
+            compose(lane['index'], 'stop', '-t', '10')

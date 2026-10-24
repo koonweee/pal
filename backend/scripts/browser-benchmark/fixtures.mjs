@@ -159,7 +159,13 @@ export async function installFixture(browserService, scenario, tag) {
   };
   await context.route(predicate, handler);
   let accountId;
-  const bw = async (path, method = 'GET', body, refreshed = false) => {
+  const bw = async (
+    path,
+    method = 'GET',
+    body,
+    refreshed = false,
+    retries = 0,
+  ) => {
     const response = await fetch('http://127.0.0.1:8087' + path, {
       method,
       headers: { 'content-type': 'application/json' },
@@ -171,8 +177,22 @@ export async function installFixture(browserService, scenario, tag) {
       return bw(path, method, body, true);
     }
     const result = await response.json();
-    if (!response.ok || !result.success)
-      throw Error(`Benchmark vault ${method} failed (HTTP ${response.status})`);
+    if (!response.ok || !result.success) {
+      // The CLI wraps hosted HTTP 429 responses in a local HTTP 400.
+      const rateLimited =
+        response.status === 429 ||
+        /status code 429\b/.test(String(result.message ?? ''));
+      if (rateLimited && retries < 3) {
+        state.vaultRateLimitRetries = (state.vaultRateLimitRetries ?? 0) + 1;
+        await new Promise((resolve) =>
+          setTimeout(resolve, 1000 * (retries + 1)),
+        );
+        return bw(path, method, body, refreshed, retries + 1);
+      }
+      throw Error(
+        `Benchmark vault ${method} ${path.split('?')[0].replace(/\/object\/item\/.+/, '/object/item/[owned]')} failed (HTTP ${response.status}${rateLimited ? ', hosted rate limit' : ''})`,
+      );
+    }
     return result.data;
   };
   try {

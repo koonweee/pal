@@ -92,9 +92,9 @@ Then regenerate the report. To apply a corrected scorer to saved website state, 
 
 ## Lifecycle
 
-The runner temporarily opens the dev Node inspector on loopback, installs a session-scoped fetch tap and task-scoped synthetic navigation handler, and restores them after the run. It stops if normal dev work is active between samples. The local lock prevents overlapping benchmark runners. Do not run it alongside the older latency probes.
+The runner temporarily opens the dev Node inspector on loopback, installs a session-scoped fetch tap and task-scoped synthetic navigation handler, and restores them after the run. It stops if normal dev work is active between samples. Locks keyed by canonical container ID prevent overlapping runners on the same service; the dev service also retains its legacy lock. A runner writes compact progress and cleanup ownership metadata. Creating `stop.request` in its output directory requests graceful settlement. Do not run it alongside the older latency probes.
 
-Billing setup verifies that its exact dummy account is discoverable through the vault login lookup before timing begins. A lookup miss triggers one vault sync before bounded readiness retries. Deletion also refreshes and retries a 404 before treating the account as absent. Missing credentials fail setup instead of counting as a model login failure.
+Billing setup verifies that its exact dummy account is discoverable through the vault login lookup before timing begins. A lookup miss triggers one vault sync before bounded readiness retries. Deletion also refreshes and retries a 404 before treating the account as absent. Explicit hosted HTTP 429 responses, including CLI-wrapped HTTP 400, receive at most three bounded retries during fixture setup. Retry counts remain in fixture state. Other errors fail setup. Missing credentials fail setup instead of counting as a model login failure.
 
 Cleanup records owned Task/account/session identifiers in the trace, closes benchmark-owned browser groups/sessions, deletes exact created dummy vault entries and archives benchmark Task records. Benchmark private transcripts remain in dev storage. An abrupt process/container kill may leave owned resources; preserve the output and inspect `cleanup.error` events. If the runner reports that settling failed, run the displayed `inspect.mjs stop` command before removing the lock. Never clear unrelated tabs, vault entries or user tasks.
 
@@ -107,10 +107,20 @@ python3 backend/scripts/browser-benchmark/run.py --check
 ```
 
 
-## Isolated lane capacity probe
+## Six-lane execution
 
-`python3 backend/scripts/browser-benchmark/lanes.py prepare` provisions up to nine isolated Compose projects, one per configuration, using pinned local images. Each has independent database, service/home volumes, local vault process and routed desktop network; ChatGPT and hosted vault accounts remain shared. Only model authentication is copied from dev. No ports are published.
+The Docker VM is allocated 12 GiB. `lanes.py prepare` provisions six isolated Compose projects using pinned local images. Each has an independent database, service/home volumes, local vault process and routed desktop network; ChatGPT and hosted vault accounts remain shared. Only model authentication is copied from dev. No ports are published. `status` reports capacity; `stop` stops the manifest's containers while preserving evidence and volumes.
 
-The probe records VM memory/swap and per-container CPU/memory in `.local/browser-benchmark/nine-lanes/capacity.jsonl`. It stops owned containers if available VM memory drops below 1 GiB or additional swap exceeds 256 MiB. `status` reports capacity and the saved manifest; `stop` stops the manifest's containers. Existing manifests require inspection before another provisioning attempt. Volumes and evidence persist.
+```sh
+python3 backend/scripts/browser-benchmark/lanes.py prepare
+python3 backend/scripts/browser-benchmark/parallel.py smoke --output .local/browser-benchmark/SMOKE
+python3 backend/scripts/browser-benchmark/parallel.py run \
+  --output .local/browser-benchmark/PARALLEL \
+  --validated-smoke .local/browser-benchmark/SMOKE
+```
 
-This is a provisioning/capacity gate. Parallel sample dispatch and contention smoke remain pending: this host reached significant swap growth after four idle lanes with Docker limited to 8 GiB. The existing sample runner remains sequential and its global lock must not be bypassed to run multiple lanes.
+The smoke compares a single-lane billing/desktop pair with six concurrent pairs. A full run requires a passing smoke on the same images. The matrix uses a six-slot pool for 27 jobs: nine configurations × three rounds, each containing six cases × two contexts. Variant order rotates by round. `--round-offset` preserves unique matrix keys when partitioning. Each service runs one job at a time.
+
+The combined `results.jsonl` and `trace.jsonl` identify lane and job index; original job artifacts remain intact. The manifest records job start/end times, assignments and baseline capacity. `capacity.jsonl` records VM memory/swap, host swap and container CPU/memory. `health.json` refreshes about every 12 seconds without model calls. Creating `stop.request` in the parallel output directory requests graceful settlement of all active jobs. Incomplete jobs, unverified cleanup and interrupted runs cannot mark the matrix complete.
+
+Memory guards stop new work and settle active jobs below 1 GiB available VM memory, above 256 MiB additional VM swap, or above 512 MiB additional host swap. Provider HTTP errors and task failures remain visible. The smoke also rejects a model-request median above three times its sequential reference. This small same-model check cannot establish the absence of contention: caching, output length, shared-account limits and changing active concurrency still affect results. Preserve capacity timelines when interpreting full-run latency.

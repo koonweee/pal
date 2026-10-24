@@ -132,6 +132,7 @@ scope.run = async () => {
     cases.filter((c) => settings.cases.includes(c.id)),
     settings.contexts,
     settings.repetitions,
+    settings.round_offset ?? 0,
   );
   const completed = new Set();
   try {

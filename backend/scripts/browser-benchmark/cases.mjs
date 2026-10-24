@@ -152,9 +152,10 @@ export function schedule(
   selectedCases,
   contexts,
   repetitions,
+  roundOffset = 0,
 ) {
   const rows = [];
-  for (let round = 0; round < repetitions; round++)
+  for (let round = roundOffset; round < roundOffset + repetitions; round++)
     for (const [index, scenario] of selectedCases.entries())
       for (const context of contexts) {
         const shift =
