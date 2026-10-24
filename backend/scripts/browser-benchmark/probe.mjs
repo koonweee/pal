@@ -486,28 +486,42 @@ scope.run = async () => {
           workerOutputs,
         });
         // Continue cleanup even if one operation fails. Errors remain visible in traces.
-        for (const cleanup of [
-          async () => {
-            if (task) {
-              for (const workerId of workerIds)
-                await r.browser.closeSession(task.id, workerId);
-              await r.browser.closeGroup(task.id);
-            }
-          },
-          async () => fixture?.close(),
-          async () => {
-            if (task)
-              await r.tasks.update(task.id, {
-                archived: true,
-                status: 'completed',
-              });
-          },
+        for (const [stage, cleanup] of [
+          [
+            'browser',
+            async () => {
+              if (task) {
+                for (const workerId of workerIds)
+                  await r.browser.closeSession(task.id, workerId);
+                await r.browser.closeGroup(task.id);
+              }
+            },
+          ],
+          ['fixture', async () => fixture?.close()],
+          [
+            'task',
+            async () => {
+              if (task)
+                await r.tasks.update(task.id, {
+                  archived: true,
+                  status: 'completed',
+                });
+            },
+          ],
         ]) {
           try {
             await cleanup();
           } catch (error) {
             cleanupFailed = true;
-            emit('cleanup.error', { sample, error: error.name });
+            emit('cleanup.error', {
+              sample,
+              stage,
+              error: error.name,
+              ...(stage === 'fixture' &&
+              error.message.startsWith('Benchmark vault ')
+                ? { message: error.message }
+                : {}),
+            });
           }
         }
         scope.abort = null;

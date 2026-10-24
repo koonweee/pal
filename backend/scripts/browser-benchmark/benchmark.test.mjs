@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { variants, cases, schedule, score, history } from './cases.mjs';
-import { initialState, transition } from './fixtures.mjs';
+import { initialState, transition, installFixture } from './fixtures.mjs';
 import { summarize } from './report.mjs';
 
 test('matrix contains exact settings with paired contexts and counterbalanced repetitions', () => {
@@ -151,4 +151,32 @@ test('scoring accepts equivalent wording and rejects numeric/status substrings',
       'E42 in Chrome and Firefox since October 21. All twelve teammates affected, blocking month-end reporting. Cleared the cache and retried.',
   };
   assert.equal(score(support, state, 'High').success, true);
+});
+
+test('billing waits for credential lookup and tolerates an already absent cleanup item', async (t) => {
+  let lookups = 0,
+    removedRoute = false;
+  t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    if (options.method === 'DELETE') return new Response(null, { status: 404 });
+    const data =
+      options.method === 'POST'
+        ? { id: 'fixture-id' }
+        : { data: ++lookups === 1 ? [] : [{ id: 'fixture-id' }] };
+    return Response.json({ success: true, data });
+  });
+  const context = {
+    route: async () => {},
+    unroute: async () => {
+      removedRoute = true;
+    },
+  };
+  const browser = { connect: async () => ({ contexts: () => [context] }) };
+  const fixture = await installFixture(
+    browser,
+    { id: 'billing', path: '/login' },
+    'test',
+  );
+  assert.equal(lookups, 2);
+  await fixture.close();
+  assert.equal(removedRoute, true);
 });

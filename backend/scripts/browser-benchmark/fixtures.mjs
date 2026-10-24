@@ -165,9 +165,10 @@ export async function installFixture(browserService, scenario, tag) {
       headers: { 'content-type': 'application/json' },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
+    if (method === 'DELETE' && response.status === 404) return;
     const result = await response.json();
     if (!response.ok || !result.success)
-      throw Error('Benchmark vault fixture failed');
+      throw Error(`Benchmark vault ${method} failed (HTTP ${response.status})`);
     return result.data;
   };
   try {
@@ -183,9 +184,29 @@ export async function installFixture(browserService, scenario, tag) {
         },
       });
       accountId = result.id;
+      // The vault's local lookup can lag a successful create response.
+      let ready = false;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const matches = await bw(
+          '/list/object/items?url=' +
+            encodeURIComponent(origin + scenario.path),
+        );
+        if (matches.data.some((item) => item.id === accountId)) {
+          ready = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      if (!ready)
+        throw Error('Benchmark credential was not discoverable during setup');
     }
   } catch (error) {
-    await context.unroute(predicate, handler);
+    try {
+      if (accountId)
+        await bw('/object/item/' + encodeURIComponent(accountId), 'DELETE');
+    } finally {
+      await context.unroute(predicate, handler);
+    }
     throw error;
   }
   return {
@@ -195,9 +216,12 @@ export async function installFixture(browserService, scenario, tag) {
     host,
     url: origin + scenario.path,
     async close() {
-      await context.unroute(predicate, handler);
-      if (accountId)
-        await bw('/object/item/' + encodeURIComponent(accountId), 'DELETE');
+      try {
+        await context.unroute(predicate, handler);
+      } finally {
+        if (accountId)
+          await bw('/object/item/' + encodeURIComponent(accountId), 'DELETE');
+      }
     },
   };
 }

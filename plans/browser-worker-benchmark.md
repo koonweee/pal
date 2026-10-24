@@ -2,7 +2,7 @@
 
 ## Status
 
-Done
+Done; full benchmark collection pending
 
 ## Goal
 
@@ -70,6 +70,13 @@ python3 backend/scripts/browser-benchmark/run.py --variants control,sol-medium -
 - Both live reference cases completed with verified visits, captured public source text, complete token usage and valid Task/worker tool boundaries. Live semantic grades remain pending human review.
 - Diagnostic hooks and owned browser/vault resources were restored without cleanup errors.
 - Reports are under `.local/browser-benchmark/smoke-billing/`, `smoke-suite/` and `smoke-live-evidence/`.
+
+## Runtime Hardening
+
+- Verify each saved dummy credential is discoverable at the login URL before starting the timed sample; fail setup if readiness cannot be established.
+- Remove created credentials on setup failure, tolerate an already absent credential during deletion, and attempt credential cleanup even if route removal fails.
+- Label cleanup errors by browser, fixture or task stage without logging secret-bearing responses.
+- Validation: seven focused tests, targeted lint and syntax checks pass. All three Sol-high billing reruns passed with no cleanup errors; evidence is in `.local/browser-benchmark/fix-vault-readiness/`. The original cleanup exception lacked a stage, so its precise cause remains unproven.
 
 ## Remaining Benchmark Operations
 

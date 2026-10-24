@@ -94,6 +94,8 @@ Then regenerate the report. To apply a corrected scorer to saved website state, 
 
 The runner temporarily opens the dev Node inspector on loopback, installs a session-scoped fetch tap and task-scoped synthetic navigation handler, and restores them after the run. It stops if normal dev work is active between samples. The local lock prevents overlapping benchmark runners. Do not run it alongside the older latency probes.
 
+Billing setup verifies that its exact dummy account is discoverable through the vault login lookup before timing begins. Missing credentials fail setup instead of counting as a model login failure.
+
 Cleanup records owned Task/account/session identifiers in the trace, closes benchmark-owned browser groups/sessions, deletes exact created dummy vault entries and archives benchmark Task records. Benchmark private transcripts remain in dev storage. An abrupt process/container kill may leave owned resources; preserve the output and inspect `cleanup.error` events. If the runner reports that settling failed, run the displayed `inspect.mjs stop` command before removing the lock. Never clear unrelated tabs, vault entries or user tasks.
 
 ## Validation
