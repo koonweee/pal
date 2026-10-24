@@ -34,8 +34,8 @@ Exit criteria:
 Implementation tasks:
 
 - [x] Update the Komodo-owned configuration with immutable images, current service/network definitions and matching release identity.
-- [ ] Preserve previous deployment definitions/images and a paired backup of stopped home, service data and PostgreSQL.
-- [ ] Apply explicit database migrations and migrate the execution network without deleting persistent state.
+- [x] Preserve previous deployment definitions/images and a paired backup of stopped home, service data and PostgreSQL.
+- [x] Apply explicit database migrations and migrate the execution network without deleting persistent state.
 - [ ] Deploy and verify application/API/PWA, native browser/desktop/filesystem, network isolation and router recovery on production AMD64.
 
 Exit criteria:
@@ -78,14 +78,15 @@ npm run test:pwa
 - Frontend ownership checks, 27 component tests, strict production TypeScript/build checks and all 10 PWA tests pass. Both secure-entry browser cases pass.
 - The full browser suite reports 59/65 passing. All six failing layout/focus cases reproduce on the published `origin/main` baseline: mobile desktop focus, two standalone safe-area cases, two workbench cases and intermittent keyboard-anchor retention. The keyboard case also fails on an isolated current-source rerun and two of three additional baseline runs. These existing failures remain outside this release's changed scope.
 - AMD64 agent-service, execution, web and egress images build successfully with a shared application revision and production PWA identity.
-- Production inventory is reviewed. The app-owned infrastructure revision `1a848eb` is pushed and validated. The owner selected the dev Pal vault, and its settings are stored in internal BWS. The secret-sync service reports a fresh successful startup after its repository mount refresh. Native secret and Pal resource syncs succeed; all three vault variables are marked secret, and only the reviewed four settings plus description changed. All immutable images are pulled and verified on native AMD64. Production application containers remain unchanged pending the paired stopped-state backup and execution-network preparation.
+- Production runs application release `73bc06e` through infrastructure revision `7e7504e`. Migrations and the execution-network upgrade complete with retained persistent directories. Paired backups pass integrity checks; trusted HTTPS/API/PWA/desktop WebSocket checks and vault prewarm pass. Native acceptance remains in progress.
 
 ## Published Artifacts
 
 All application commits are pushed to `origin/main`. Four AMD64 images from `73bc06e` are published and their immutable remote manifests are verified. Agent-service, execution and web use their existing package names with tag `73bc06e`; the router uses `pal:73bc06e-egress` because the registry rejected publishing a new router package. Immutable pins and staged runtime verification assets are retained privately for the pending production cutover.
 
-## Production preparation checkpoint
+## Production acceptance
 
-- The first stopped-state database/directory and execution-filesystem backups pass integrity checks. The final network guard made no removals and restored the original canonical runtime. Its stopped-endpoint assumption is corrected; the next bounded attempt takes a fresh backup and verifies the deployment with owned fixtures. Retained legacy agents remain stopped with restart disabled.
-
-- A subsequent retry stops during image preflight without downtime because the pre-pulled unused images are gone. The infrastructure operator temporarily pauses unused-image cleanup and repulls the exact pins before retry; restoring that policy is required before release completion.
+- Recovery material is retained at `/srv/backups/pal-sf-release-20261024-001032`; the earlier verified backup is also preserved. Legacy writers are stopped with restart disabled.
+- All six runtime services are healthy, API/PWA release identity is `73bc06e`, and the first-party contract is 5. Native API/PWA/SSE checks pass. The desktop WebSocket returns a real RFB greeting without reading screen contents.
+- The initial combined native filesystem/network fixture fails. Its updated verifier reports individual secret-free checks and continues the independent fixtures; all 17 updated filesystem/network checks pass in dev. Production browser, credential/OTP, memory, data counts and independent router-restart acceptance remain pending.
+- Restore the temporary unused-image-pruning pause and remove exact delivery/private-plan artifacts after acceptance. A shared host/daemon reboot remains a separate maintenance-window check.
