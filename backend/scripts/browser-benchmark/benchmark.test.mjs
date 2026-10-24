@@ -256,9 +256,20 @@ test('billing retries an explicit hosted rate limit wrapped in HTTP 400', async 
 
 // Tool availability is an enforced experimental boundary, independent of prompts.
 test('delegation arms retain only their declared Task capabilities', async () => {
-  const { taskToolAllowed, delegationVariants } =
+  const { taskToolAllowed, delegationVariants, delegationGuidance } =
     await import('./delegation.mjs');
-  assert.equal(delegationVariants.length, 3);
+  assert.equal(delegationVariants.length, 4);
+  const both = delegationVariants.find((v) => v.id === 'luna-coordinator-both');
+  assert.equal(both.boundary, 'coordinator');
+  assert.equal(both.model, 'gpt-6-luna');
+  assert.equal(both.effort, 'high');
+  assert.equal(both.generalModel, 'gpt-6-luna');
+  assert.equal(both.generalEffort, 'high');
+  assert.match(delegationGuidance(both), /agent-general \(Luna high\)/);
+  assert.match(
+    delegationGuidance(delegationVariants[0]),
+    /agent-general \(Sol medium\)/,
+  );
   for (const { boundary } of delegationVariants) {
     for (const name of [
       'browser',

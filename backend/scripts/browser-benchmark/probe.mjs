@@ -206,8 +206,8 @@ scope.run = async () => {
         ...(variant.boundary
           ? {
               delegationBoundary: variant.boundary,
-              generalModel: 'gpt-6.1-sol',
-              generalEffort: 'medium',
+              generalModel: variant.generalModel ?? 'gpt-6.1-sol',
+              generalEffort: variant.generalEffort ?? 'medium',
             }
           : {}),
       };
@@ -364,7 +364,7 @@ scope.run = async () => {
             ) +
             '\n' +
             (isolatedBoundary === 'coordinator' ? '' : cleanExecution) +
-            delegationGuidance(isolatedBoundary);
+            delegationGuidance(variant);
           const noComputerTools = Object.fromEntries(
             Object.values(WORKSPACE_TOOLS.COMPUTER).map((name) => [
               name,
@@ -446,7 +446,10 @@ scope.run = async () => {
                 cleanExecution +
                 '\nComplete non-interaction assignments and return findings, sources and output paths to the parent. Do not operate websites, browsers, computer or login flows. Return proposed interaction work to the parent for its interaction worker.' +
                 benchmarkGuidance,
-              model: model('gpt-6.1-sol', 'medium'),
+              model: model(
+                variant.generalModel ?? 'gpt-6.1-sol',
+                variant.generalEffort ?? 'medium',
+              ),
               memory,
               workspace: generalWorkspace,
               tools: {

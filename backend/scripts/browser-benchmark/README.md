@@ -130,7 +130,7 @@ The current reduced matrix selects control, Sol medium, Luna high and Luna low. 
 
 ## Delegation boundary experiment
 
-All three arms keep Task and the separate general worker on Sol medium, interaction on Luna high, and both worker histories empty except for explicit assignments. Production agents are unchanged.
+The three boundary arms keep Task and the separate general worker on Sol medium, interaction on Luna high, and both worker histories empty except for explicit assignments. Production agents are unchanged.
 
 | Variant | Task capabilities | Worker capabilities |
 | --- | --- | --- |
@@ -145,3 +145,5 @@ Use `--variants luna-coordinator,luna-services,luna-execution --cases billing,st
 `parallel.py run` accepts the same `--cases` list and distributes nine variant/round jobs on the existing four-lane pool. Its default nine-model/six-case matrix remains 324 samples. Use a new output directory after any source change.
 
 `python3 backend/scripts/browser-benchmark/cost.py RUN` prints a reproducible Standard API-equivalent cost summary, including Task, interaction and general worker calls. Rates were verified on October 24, 2026 from official OpenAI pricing; they are not actual ChatGPT subscription charges. Cached input receives its model-specific rate and reasoning is already in output. Trace data lacks cache-write counts: ranges assume ordinary input versus default 30-minute cache-write pricing for all noncached input. Twelve-hour writes would cost more. Requests over 272k input tokens require per-request long-context costing. Samples with missing usage stay in accuracy/latency and are excluded from cost means. Setup/probes and infrastructure are excluded.
+
+The opt-in `luna-coordinator-both` follow-up keeps the coordinator boundary and Sol-medium Task, with both interaction and general workers on Luna high. Select it with the same seven cases for 42 samples. Worker assignments, tools, empty inherited history and scoring stay the same. General-worker selection remains model judgment; report its actual use and price each role from the recorded model.

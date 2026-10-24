@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = Path(__file__).resolve().parent
 REMOTE = '/tmp/pal-browser-benchmark-' + uuid.uuid4().hex[:10]
-VARIANTS = ['control', 'sol-low', 'sol-medium', 'sol-high', 'luna-low', 'luna-high', 'luna-xhigh', 'astra-low', 'astra-medium', 'luna-coordinator', 'luna-services', 'luna-execution']
+VARIANTS = ['control', 'sol-low', 'sol-medium', 'sol-high', 'luna-low', 'luna-high', 'luna-xhigh', 'astra-low', 'astra-medium', 'luna-coordinator', 'luna-services', 'luna-execution', 'luna-coordinator-both']
 CASES = ['billing', 'stays', 'support', 'desktop', 'live-mdn', 'live-wikipedia', 'support-file']
 
 def selected(value, choices):

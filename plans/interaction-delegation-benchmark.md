@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress: collection and comparison complete; live semantic review pending.
+In Progress: three-arm collection complete; coordinator follow-up with two Luna-high workers in validation; live semantic review pending.
 
 ## Goal
 
@@ -89,3 +89,9 @@ python3 backend/scripts/browser-benchmark/cost.py .local/browser-benchmark/deleg
 ```
 
 Pricing references: [Standard rates](https://developers.openai.com/api/docs/pricing?latest-pricing-expanded=true), [prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching).
+
+## Coordinator Follow-Up
+
+The user requested `luna-coordinator-both`: Sol-medium Task with Luna-high interaction and general workers. The coordinator boundary, worker tools, explicit assignments, zero inherited history, seven cases, two contexts and three rounds stay fixed. The fresh dataset contains 42 samples and uses two isolated lanes with Docker at 12 GiB. Fresh capacity and boundary validation precede collection. General-worker use remains model judgment and must be reported; only two of six earlier coordinator support-file samples used it. Compare paired results against the completed coordinator arm, retaining separate datasets and disclosing timing, source and concurrency differences.
+
+Twelve focused tests, changed-file lint, Python syntax and the 42-sample matrix check pass. The cost script prices the general worker from each sample's recorded model. Production agent behavior is unchanged.

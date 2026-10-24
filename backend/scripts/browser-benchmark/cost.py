@@ -21,7 +21,7 @@ for arg in sys.argv[1:]:
     assert max((e.get('inputTokens') or 0 for e in events),default=0)<=272000, 'Long-context requests require per-request pricing'
     assert len(rows)==len({r['key'] for r in rows})
     allrows.extend(dict(r,dataset=str(p)) for r in rows)
-result={'pricingSource':SOURCE,'ratesVerifiedAt':'2026-10-24','ratesPerMillionInputCachedOutput':RATES,'basis':'API-equivalent Standard short-context model inference, not actual ChatGPT subscription charges. Task plus worker. Setup/probes and infrastructure excluded. Output already includes reasoning.','uncertainty':'Trace does not retain cache-write counts. Range assumes none versus all noncached input charged at default 30-minute write rate (1.25x); 12-hour caching would cost more. Incomplete-usage samples excluded from cost means, retained in accuracy and latency.','groups':[]}
+result={'pricingSource':SOURCE,'ratesVerifiedAt':'2026-10-24','ratesPerMillionInputCachedOutput':RATES,'basis':'API-equivalent Standard short-context model inference, not actual ChatGPT subscription charges. Task plus interaction worker plus general worker. Setup/probes and infrastructure excluded. Output already includes reasoning.','uncertainty':'Trace does not retain cache-write counts. Range assumes none versus all noncached input charged at default 30-minute write rate (1.25x); 12-hour caching would cost more. Incomplete-usage samples excluded from cost means, retained in accuracy and latency.','groups':[]}
 for v in dict.fromkeys(r['variant'] for r in allrows):
     for kind in ['synthetic','live']:
         rows=[r for r in allrows if r['variant']==v and (r['kind']=='synthetic')==(kind=='synthetic')]
