@@ -23,6 +23,13 @@ for (const device of [
 
       await expect(page.locator('html')).toHaveClass(/pal-standalone/);
       const surface = page.locator('.pwa-safe-area');
+      expect(
+        await surface.evaluate(
+          (node) =>
+            node.parentElement === document.body &&
+            node.nextElementSibling?.id === 'root',
+        ),
+      ).toBe(true);
       const bounds = (await surface.boundingBox())!;
       expect(bounds).toMatchObject({
         x: 0,
@@ -43,7 +50,7 @@ for (const device of [
       const avatarBounds = (await profile
         .locator('.agent-avatar')
         .boundingBox())!;
-      const nameBounds = (await page.locator('.agent-name').boundingBox())!;
+      const nameBounds = (await page.locator('.agent-label').boundingBox())!;
       const desktopBounds = (await page
         .getByRole('button', { name: 'Open desktop' })
         .boundingBox())!;

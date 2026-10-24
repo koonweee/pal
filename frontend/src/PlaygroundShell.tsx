@@ -51,11 +51,6 @@ export function PlaygroundShellView({
 
   return (
     <>
-      <div
-        className="pwa-safe-area"
-        data-preferences-open={preferencesOpen || undefined}
-        aria-hidden="true"
-      />
       <div ref={shell} className="shell">
         <AppHeader
           chat={chat}

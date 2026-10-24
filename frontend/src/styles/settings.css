@@ -254,7 +254,7 @@
 }
 
 @media (max-width: 600px) {
-  .pwa-safe-area[data-preferences-open] {
+  body:has(.preferences-dialog) > .pwa-safe-area {
     background: var(--mantine-color-body);
   }
   .preferences-dialog-inner {
