@@ -14,7 +14,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Task execution and interaction worker](interaction-worker-runtime.md) | In Progress | Task owns MCP/local execution; compact Luna-high interaction worker; dev and production deployment. |
+| [Task execution and interaction worker](interaction-worker-runtime.md) | In Progress | Deployed to dev/prod: Task MCP/local execution and Luna-high interaction; final host-only role/record audit pending. |
 | [Interaction delegation benchmark](interaction-delegation-benchmark.md) | In Progress | Three-arm, coordinator and interaction-MCP comparisons complete; live semantic review pending. |
 | [Browser worker benchmark](browser-worker-benchmark.md) | In Progress | Direct Task versus compact interaction workers, realistic synthetic/live workflows, timing, correctness and token reporting. |
 | [Production dev release](production-dev-release.md) | Complete | Publish validated dev changes and immutable images, migrate production routed egress and verify preserved state. |
