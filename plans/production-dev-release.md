@@ -87,3 +87,5 @@ All application commits are pushed to `origin/main`. Four AMD64 images from `73b
 ## Production preparation checkpoint
 
 - The first stopped-state database/directory and execution-filesystem backups pass integrity checks. The final network guard made no removals and restored the original canonical runtime. Its stopped-endpoint assumption is corrected; the next bounded attempt takes a fresh backup and verifies the deployment with owned fixtures. Retained legacy agents remain stopped with restart disabled.
+
+- A subsequent retry stops during image preflight without downtime because the pre-pulled unused images are gone. The infrastructure operator temporarily pauses unused-image cleanup and repulls the exact pins before retry; restoring that policy is required before release completion.
