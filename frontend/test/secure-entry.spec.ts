@@ -184,8 +184,14 @@ for (const width of [900, 390]) {
       await page.locator('#thread-open').click();
       await page.locator('#main-chat').click();
       await page.getByRole('button', { name: 'Use a new account' }).click();
+      const username = page.getByLabel(/^Username/);
       const password = page.getByLabel(/^Password/);
+      await expect(username).toHaveAttribute('autocomplete', 'username');
       await expect(password).toBeVisible();
+      await expect(password).toHaveAttribute(
+        'autocomplete',
+        'current-password',
+      );
       await expect(page.getByLabel('Save to', { exact: true })).toHaveCount(0);
       await expect(
         page.getByRole('checkbox', { name: 'Keep me signed in' }),
@@ -200,7 +206,7 @@ for (const width of [900, 390]) {
         page.getByRole('img', { name: /Selected fields/ }),
       ).toHaveAttribute('src', /login-preview\/image$/);
       await page.getByRole('button', { name: 'Hide browser preview' }).click();
-      await page.getByLabel(/^Username/).fill('dummy-user');
+      await username.fill('dummy-user');
       await password.fill('dummy-password');
       if (width === 390) {
         expect(

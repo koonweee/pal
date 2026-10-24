@@ -394,7 +394,7 @@ function SecureEntryForm({
                 onChange={(event) => setUsername(event.currentTarget.value)}
                 required
                 maxLength={1024}
-                autoComplete="off"
+                autoComplete="username"
                 autoCapitalize="off"
                 spellCheck={false}
                 disabled={busy}
@@ -406,7 +406,7 @@ function SecureEntryForm({
                 onChange={(event) => setPassword(event.currentTarget.value)}
                 required
                 maxLength={4096}
-                autoComplete="new-password"
+                autoComplete="current-password"
                 disabled={busy}
               />
             </>
