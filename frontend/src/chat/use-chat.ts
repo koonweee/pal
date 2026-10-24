@@ -152,6 +152,7 @@ export function useChat() {
   const buffered = useRef<Message[]>([]);
   const taskBuffered = useRef<Task[]>([]);
   const taskDrafts = useRef(new Map<string, string>());
+  const draftRevision = useRef(0);
   const chatReplies = useRef(new Map<string, Message | undefined>());
   const mounted = useRef(true);
   const controller = useRef<{
@@ -461,6 +462,7 @@ export function useChat() {
     )
       return;
     const text = value.draft;
+    const submittedDraftRevision = draftRevision.current;
     const attachments = pendingFiles.attachments;
     const destination = value.selectedTaskId;
     const assistantSequence = latestAssistantSequence(
@@ -506,6 +508,7 @@ export function useChat() {
       actions: null,
     });
     commit({
+      draft: '',
       localSendKey: idempotencyKey,
       outgoing,
       sendFailure: undefined,
@@ -529,7 +532,6 @@ export function useChat() {
         await controller.current.synchronize();
       commit((latest) => ({
         ...latest,
-        draft: latest.draft === text ? '' : latest.draft,
         selectedReply:
           latest.selectedReply?.id === reply?.id
             ? undefined
@@ -540,7 +542,10 @@ export function useChat() {
       const nextOutgoing = new Map(current.current.outgoing);
       nextOutgoing.delete(idempotencyKey);
       const uncertain = !(error instanceof RequestError) || error.status >= 500;
-      commit({
+      const draftChanged = draftRevision.current !== submittedDraftRevision;
+      commit((latest) => ({
+        ...latest,
+        draft: draftChanged ? latest.draft : text,
         outgoing: nextOutgoing,
         sendFailure: {
           failedText: text,
@@ -549,9 +554,9 @@ export function useChat() {
               ? ' Your message may already be saved. Sending again creates a new submission.'
               : ''
           }`,
-          restore: current.current.draft !== text,
+          restore: draftChanged && !!text,
         },
-      });
+      }));
       void controller.current.synchronize();
     } finally {
       commit({ submitting: false });
@@ -830,6 +835,7 @@ export function useChat() {
         commit({ selectedReply: message });
     },
     setDraft(draft: string) {
+      draftRevision.current++;
       commit({ draft });
     },
     setTaskArchived,

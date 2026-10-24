@@ -529,15 +529,15 @@ test('paces Read after persistence and restores receipts from snapshots', async 
   );
   await expect(page.locator('article.assistant .message-read')).toHaveCount(0);
   backend.holdNextSend = true;
-  await page
-    .getByRole('textbox', { name: 'Message pal' })
-    .fill('Read this promptly');
+  const composer = page.getByRole('textbox', { name: 'Message pal' });
+  await composer.fill('Read this promptly');
   // The transparent padding around the visible send circle remains tappable.
   await page.getByRole('button', { name: 'Send message', exact: true }).click({
     position: { x: 1, y: 18 },
   });
   try {
     await expect.poll(() => Boolean(backend.releasePersistence)).toBe(true);
+    await expect(composer).toHaveValue('');
     await expect(users).toHaveCount(2);
     await expect(users.last()).toContainText('Read this promptly');
     await expect(page.locator('.message-read')).toHaveCount(0);
@@ -586,14 +586,12 @@ test('paces Read after persistence and restores receipts from snapshots', async 
       page.getByRole('button', { name: 'Send message', exact: true }),
     ).toBeDisabled();
     backend.releaseAcceptance!();
-    await expect(
-      page.getByRole('textbox', { name: 'Message pal' }),
-    ).toHaveValue('');
+    await expect(composer).toHaveValue('');
     // Lose an SSE publication and reconcile the optimistic bubble by snapshot.
     backend.holdNextSend = true;
     backend.releasePersistence = undefined;
     backend.releaseAcceptance = undefined;
-    await page.getByRole('textbox', { name: 'Message pal' }).fill('hi');
+    await composer.fill('hi');
     await page
       .getByRole('button', { name: 'Send message', exact: true })
       .click();
@@ -608,9 +606,7 @@ test('paces Read after persistence and restores receipts from snapshots', async 
       'read',
     );
     backend.releaseAcceptance!();
-    await expect(
-      page.getByRole('textbox', { name: 'Message pal' }),
-    ).toHaveValue('');
+    await expect(composer).toHaveValue('');
     await page.reload();
     await expect(users).toHaveCount(3);
     await expect(page.locator('article.user .message-read')).toHaveCount(1);
