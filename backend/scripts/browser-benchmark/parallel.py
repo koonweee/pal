@@ -1,4 +1,4 @@
-"""Run the browser matrix on a six-lane pool with contention telemetry."""
+"""Run the browser matrix on an isolated lane pool with contention telemetry."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -142,32 +142,37 @@ parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('command',choices=['smoke','run'])
 parser.add_argument('--output',type=Path,required=True)
 parser.add_argument('--validated-smoke',type=Path)
+parser.add_argument('--lanes',type=int,default=6,choices=range(1,7))
+parser.add_argument('--variants',default=','.join(VARIANTS))
 args=parser.parse_args()
 manifest=read(BASE/'manifest.json')
-if manifest.get('status')!='ready' or len(manifest.get('lanes',[]))!=6: parser.error('Six lanes must be provisioned and healthy')
-lanes=manifest['lanes']; output=args.output.resolve()
+if manifest.get('status')!='ready' or len(manifest.get('lanes',[]))<args.lanes: parser.error('Requested lanes must be provisioned')
+selected=args.variants.split(',')
+if not selected or len(set(selected))!=len(selected) or any(v not in VARIANTS for v in selected): parser.error('Choose unique supported variant IDs')
+lanes=manifest['lanes'][:args.lanes]; output=args.output.resolve()
 if args.command=='smoke':
     output.mkdir(parents=True,exist_ok=False)
     one={'variant':'control','round':0,'smoke':True}
     baseline, br, be = execute(output/'baseline',lanes[:1],[one],2)
     if baseline['status']!='complete' or not all(x.get('success') for x in br):
         write(output/'contention.json',{'status':'failed','reason':'Sequential smoke failed'});raise SystemExit(1)
-    parallel, pr, pe = execute(output/'concurrent',lanes,[one.copy() for _ in lanes],12)
+    parallel, pr, pe = execute(output/'concurrent',lanes,[one.copy() for _ in lanes],2*len(lanes))
     throttles=[x for x in pe if x.get('event')=='model.headers' and x.get('status',0)>=400]
     ratio=model_median(pe)/model_median(be) if model_median(be) and model_median(pe) else None
     issues=parallel['contentionIssues']
     if throttles: issues+=['Provider HTTP errors during concurrent smoke']
     if ratio and ratio>3: issues+=['Median provider request time exceeded 3x sequential smoke']
     success=parallel['status']=='complete' and all(x.get('success') for x in pr) and not issues
-    write(output/'contention.json',{'status':'passed' if success else 'failed','sequentialSamples':len(br),'concurrentSamples':len(pr),'baselineModelMedianMs':model_median(be),'concurrentModelMedianMs':model_median(pe),'modelMedianRatio':ratio,'providerHttpErrors':len(throttles),'issues':issues,'images':manifest['images'],'limitation':'Small same-model browser/desktop smoke; different output lengths and caching also affect request times.'})
+    write(output/'contention.json',{'status':'passed' if success else 'failed','lanes':len(lanes),'sequentialSamples':len(br),'concurrentSamples':len(pr),'baselineModelMedianMs':model_median(be),'concurrentModelMedianMs':model_median(pe),'modelMedianRatio':ratio,'providerHttpErrors':len(throttles),'issues':issues,'images':manifest['images'],'limitation':'Small same-model browser/desktop smoke; different output lengths and caching also affect request times.'})
     raise SystemExit(0 if success else 1)
 else:
     check=read(args.validated_smoke/'contention.json') if args.validated_smoke else {}
-    if check.get('status')!='passed' or check.get('images')!=manifest['images']: parser.error('A passing contention smoke on these lane images is required')
+    if check.get('status')!='passed' or check.get('images')!=manifest['images'] or check.get('lanes')!=len(lanes): parser.error('A passing contention smoke on these lane images is required')
     jobs=[]
     for round_index in range(3):
-        order=VARIANTS[round_index*3:]+VARIANTS[:round_index*3]
+        shift=round_index % len(selected)
+        order=selected[shift:]+selected[:shift]
         jobs += [{'variant':v,'round':round_index} for v in order]
-    state, rows, events=execute(output,lanes,jobs,324)
+    state, rows, events=execute(output,lanes,jobs,len(selected)*36)
     if len({x.get('key') for x in rows})!=len(rows): raise RuntimeError('Duplicate matrix keys')
     raise SystemExit(0 if state['status']=='complete' else 1)

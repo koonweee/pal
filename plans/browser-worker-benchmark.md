@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress: six-lane validation with a 12 GiB Docker VM
+In Progress: four-lane collection with control, Sol medium, Luna high and Luna low
 
 ## Goal
 
@@ -110,3 +110,9 @@ python3 backend/scripts/browser-benchmark/run.py --variants control,sol-medium -
 - Initial smoke: sequential 2/2 passed, concurrent 11/12 passed. One model request hit the existing 120-second first-content timeout. All eight runner cleanup records verified settlement and artifact preservation.
 - Completed model-request medians were 3.30s sequential and 3.49s concurrent (1.06×); this excludes the failed request and cannot establish tail-latency behavior. No HTTP errors or memory guard breaches occurred.
 - Evidence remains in `.local/browser-benchmark/six-lane-smoke/`. The bounded repeat in `six-lane-smoke-repeat/` was stopped and cleaned up after a vault setup rejection. A six-way vault-only diagnostic reproduced hosted HTTP 429 wrapped in local HTTP 400. Fixture setup now backs off only for explicit rate-limit responses, with three retries maximum and a recorded retry count. Nine focused tests and scoped lint pass. The patched fixture setup, discovery and cleanup passed concurrently on all six dev lanes (`six-vault-fixed.json`). A new smoke dataset gates full collection.
+
+## Reduced Matrix
+
+- Preserve the incomplete six-lane dataset: 101 rows before host swap growth triggered the guard; all runners settled.
+- User-selected follow-up: four configurations, six cases, two contexts, three repetitions (144 samples). Use four lanes with two unused lanes stopped and fresh service processes before validation.
+- Retain the same scoring, model settings, resource guards and live-review requirements. A new four-lane smoke gates detached collection; the same automation follows its health snapshot.
