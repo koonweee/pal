@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress: Task-execution/interaction-MCP follow-up in preparation; earlier collections and comparisons complete, with live semantic review pending.
+In Progress: Task-execution/interaction-MCP validation running; earlier collections and comparisons complete, with live semantic review pending.
 
 ## Goal
 
@@ -37,12 +37,14 @@ Exit validated: 126 unique matrix rows, all nine jobs with cleanupVerified/artif
 
 Exit: every live row has a documented semantic disposition and the production-boundary decision states the evidence and tested limits.
 
-### 4. Task execution and interaction MCP — in preparation
+### 4. Task execution and interaction MCP — validation running
 
 - Add `luna-interaction-mcp`: Sol-medium Task owns shell, files, web search, task management, preferences and local code mode; Luna-high interaction owns browser/computer/login, MCP discovery and code mode. No general worker is registered. Workers receive explicit assignments and zero inherited history.
 - Enforce exposed tool inventories, including no local file/shell/web-search tools on interaction and no MCP catalog/discovery on Task. Code mode retains the shared execution sandbox; exposed-tool separation is not a filesystem/process security boundary.
 - Validate native tool inventories, request settings, file inspection by Task, computer-only behavior, cleanup and a two-lane capacity gate before collecting 42 samples in a new dataset with Docker fixed at 12 GiB.
 - Compare the same seven cases, contexts and rounds against saved matched earlier arms, keeping datasets separate. Report Task/interaction costs and live-review uncertainty. The existing cases test UI workflows and file inspection; they do not measure MCP service effectiveness.
+
+Preparation validated: thirteen focused tests, changed-file lint, JavaScript/Python syntax and exact 42-sample matrix check. Fresh workflow `.local/browser-benchmark/interaction-mcp-20261024T171747Z/` uses harness source `362ef54`. The existing collection automation and progress pane monitor its validation gates and ensuing matrix.
 
 Exit: 42 unique case/context/round rows, all three job cleanup and artifact checks verified, ownership locks released, role-priced costs and qualified matched comparisons saved. Preserve experimental grading failures and timeouts.
 
