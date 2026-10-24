@@ -15,10 +15,11 @@ const instructionFiles = {
     'files',
     'preferences',
     'preference-learning',
+    'workspace',
     'execution',
     'task',
   ],
-  worker: ['voice', 'files', 'preferences', 'execution', 'worker'],
+  worker: ['voice', 'workspace', 'interaction', 'worker'],
 } as const;
 
 export type AgentRole = keyof typeof instructionFiles;

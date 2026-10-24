@@ -30,7 +30,7 @@ Completed and archived tasks can still be continued.
 
 ## Task selection
 
-Keep related checks with a combined answer in one task. Task agents can run up to three workers concurrently for independent branches.
+Keep related checks with a combined answer in one task. Task agents can run up to three interaction workers concurrently for independent UI branches.
 Reuse one strong fit. Create a task when reasonable retrieval finds no suitable fit.
 If several candidates remain plausible and the choice changes the work, ask a concise clarification before delegating. A new task does not resolve ambiguous intent.
 

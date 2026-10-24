@@ -204,7 +204,7 @@ try {
     idempotencyKey: randomUUID(),
     attachmentIds: [],
     replyToMessageId: original.messageId,
-    text: 'Use a task for this validation. Have the task call its native agent-worker tool for an independent verification of the quoted PDF and picture. The worker must use native workspace read_file on both supplied local paths and return the exact reference code and panel colors. Wait for that worker result before creating the outputs, even though Main already inspected the files. Create report.txt containing the document’s exact reference code and the colors of the left and right image panels. Make an unchanged copy of the attached image named result.png. Declare report.txt and result.png together in the files array of your structured final answer, with local paths, download filenames, and contentType. Do not call external services.',
+    text: 'Use a task for this validation. Have Task inspect the quoted PDF and picture itself using native workspace read_file on both supplied local paths before creating outputs, even though Main already inspected the files. Create report.txt containing the document’s exact reference code and the colors of the left and right image panels. Make an unchanged copy of the attached image named result.png. Declare report.txt and result.png together in the files array of your structured final answer, with local paths, download filenames, and contentType. Do not call external services.',
   });
   const result = await finalFor();
   assert.equal(
@@ -251,17 +251,20 @@ try {
   const threadId = 'pal-task:' + result.taskId;
   const memoryStore = await storage.getStore('memory');
   const saved = await memoryStore.listMessages({ threadId, perPage: false });
-  assert(
-    saved.messages.some((message) =>
-      message.content.parts.some(
-        (part) =>
-          part.type === 'tool-invocation' &&
-          part.toolInvocation.toolName === 'agent-worker' &&
-          part.toolInvocation.state === 'result',
+  for (const input of [document, image])
+    assert(
+      saved.messages.some((message) =>
+        message.content.parts.some(
+          (part) =>
+            part.type === 'tool-invocation' &&
+            part.toolInvocation.toolName ===
+              WORKSPACE_TOOLS.FILESYSTEM.READ_FILE &&
+            part.toolInvocation.state === 'result' &&
+            String(part.toolInvocation.args?.path).includes(input.id),
+        ),
       ),
-    ),
-    'No completed native worker delegation',
-  );
+      `Task did not inspect ${input.filename}`,
+    );
   const mainHistory = await memoryStore.listMessages({
     threadId: 'pal-main',
     perPage: false,
@@ -308,7 +311,7 @@ try {
     observation: { messageTokens: 30000 },
   });
   console.log(
-    'PASS: real HTTP upload, Main read-only document/image inspection, native worker reading, structured Task file delivery and download',
+    'PASS: real HTTP upload, Main read-only document/image inspection, Task document/image inspection, structured Task file delivery and download',
   );
   await memory.settled();
   await storage.close();

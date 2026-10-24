@@ -53,7 +53,7 @@ it('keeps discovery contextual and runs core/workspace tools with native media k
   try {
     await workspace.init();
     const nativeTools = createSkillTools(
-      resolveAgentSkills(agentSkillPaths('task')),
+      resolveAgentSkills(agentSkillPaths('worker')),
     );
     const tools = {
       ...nativeTools,

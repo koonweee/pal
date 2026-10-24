@@ -426,7 +426,7 @@ try {
       connectionString: url.toString(),
       schemaName: schema,
       model: chatgptModel(
-        process.env.PAL_AGENT_MODEL,
+        process.env.PAL_AGENT_MODEL ?? 'gpt-6.1-sol',
         process.env.PAL_AGENT_AUTH_PATH,
         process.env.PAL_AGENT_THINKING_EFFORT,
       ),
@@ -520,6 +520,8 @@ try {
       await import('../dist/agent/task-tools.js');
     const { TaskToolDiscoveryProcessor } =
       await import('../dist/agent/task-tool-discovery.processor.js');
+    const { CodeModeProcessor } =
+      await import('../dist/agent/code-mode.processor.js');
     const { chatgptModel } = await import('../dist/agent/chatgpt-model.js');
     const { default: pg } = await import('pg');
     const url = new URL(process.env.TEST_DATABASE_URL);
@@ -620,7 +622,7 @@ try {
       sandbox: execution.sandbox,
       filesystem: execution.filesystem,
       model: chatgptModel(
-        process.env.PAL_AGENT_MODEL,
+        process.env.PAL_AGENT_MODEL ?? 'gpt-6.1-sol',
         process.env.PAL_AGENT_AUTH_PATH,
         process.env.PAL_AGENT_THINKING_EFFORT,
       ),
@@ -629,7 +631,7 @@ try {
         semanticRecall: false,
         workingMemory: { enabled: false },
       },
-      tools: mainTaskTools(tasks, chat, delegate),
+      tools: mainTaskTools(tasks, chat, delegate, { manifest: async () => [] }),
       publish: async (output) => {
         mainPublications.push(output.text);
       },
@@ -648,7 +650,6 @@ try {
           '\nCurrent UTC: ' +
           new Date().toISOString(),
         tools: () => ({
-          ...browserTools(service),
           set_task_status: taskStatusTool(tasks),
           update_task: taskUpdateTool(tasks),
         }),
@@ -660,10 +661,15 @@ try {
           });
         },
         worker: {
+          model: chatgptModel(
+            'gpt-6-luna',
+            process.env.PAL_AGENT_AUTH_PATH,
+            'high',
+          ),
           instructions:
             workerInstructions + '\nCurrent UTC: ' + new Date().toISOString(),
           tools: browserTools(service),
-          inputProcessors: [new TaskToolDiscoveryProcessor(() => ({}))],
+          inputProcessors: [new CodeModeProcessor()],
           cleanup: async (taskId, workerId) => {
             await service.closeSession(taskId, workerId);
             const interval = active.get(workerId);
@@ -755,6 +761,11 @@ try {
         await main.session.sendMessage({
           content: 'While those checks run, what is 2 + 2? Answer briefly.',
         });
+        // Controller input is queued; wait for the published reply.
+        await until(
+          () => mainPublications.some((text) => /4|four/i.test(text)),
+          60000,
+        );
         assert.match(mainPublications.at(-1), /4|four/i);
       }
       const output = await runs.at(-1).completion;

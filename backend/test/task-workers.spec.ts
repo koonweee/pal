@@ -12,6 +12,7 @@ import {
   MAIN_RESOURCE_ID,
 } from '../dist/agent/main-session.js';
 import { PARENT_TASK_ID, WORKER_ID } from '../dist/agent/task-workers.js';
+import { CodeModeProcessor } from '../dist/agent/code-mode.processor.js';
 import { TaskToolDiscoveryProcessor } from '../dist/agent/task-tool-discovery.processor.js';
 import { until } from './helpers.js';
 
@@ -53,13 +54,17 @@ it('runs native workers concurrently with per-task limits, private output, and f
     doStream: async (input) => {
       const header = input.headers?.['session-id'];
       if (!header) throw new Error('Missing session header');
-      const count = (calls.get(header) ?? 0) + 1;
-      calls.set(header, count);
       const worker = header.startsWith('pal-worker:');
       const prompt = JSON.stringify(input.prompt);
       const branch = [...prompt.matchAll(/branch:([a-z]+-\d)/g)].at(-1)?.[1];
+      const callKey = worker ? header + ':' + branch : header;
+      const count = (calls.get(callKey) ?? 0) + 1;
+      calls.set(callKey, count);
+      if (worker && branch === 'alpha-5')
+        expect(prompt).not.toContain('private finding alpha-1');
       if (worker && branch === 'alpha-2' && count > 1)
         throw new Error('Fixture worker failed');
+      if (worker) expect(prompt).not.toContain('parent-only-sentinel');
       if (worker) toolSets.push((input.tools ?? []).map((tool) => tool.name));
       const parent = header.slice('pal-task:'.length);
       if (!worker && count > 1) parentResults.push(prompt);
@@ -118,6 +123,10 @@ it('runs native workers concurrently with per-task limits, private output, and f
       };
     },
   });
+  const workerModel = new MockLanguageModelV3({
+    modelId: 'interaction-fixture',
+    doStream: (input) => model.doStream(input),
+  });
   let main: Awaited<ReturnType<typeof createMainSession>> | undefined;
   const runs: import('@mastra/core/stream').MastraModelOutput<unknown>[] = [];
   try {
@@ -140,6 +149,11 @@ it('runs native workers concurrently with per-task limits, private output, and f
           publications.push(output.text);
         },
         worker: {
+          model: workerModel,
+          resume: async (_, assignment) =>
+            assignment.includes('branch:alpha-5')
+              ? started.find((run) => run.branch === 'alpha-1')?.workerId
+              : undefined,
           instructions: 'Return private findings.',
           tools: {
             hold: createTool({
@@ -177,7 +191,7 @@ it('runs native workers concurrently with per-task limits, private output, and f
               },
             }),
           },
-          inputProcessors: [new TaskToolDiscoveryProcessor(() => ({}))],
+          inputProcessors: [new CodeModeProcessor()],
           cleanup: async (_, id) => {
             cleaned.push(id);
           },
@@ -191,7 +205,7 @@ it('runs native workers concurrently with per-task limits, private output, and f
         [MASTRA_RESOURCE_ID_KEY, MAIN_RESOURCE_ID],
       ]);
       const delivery = await main!.taskAgent!.sendMessage(
-        'Run independent branches',
+        'parent-only-sentinel. Run independent branches',
         {
           resourceId: MAIN_RESOURCE_ID,
           threadId,
@@ -217,6 +231,7 @@ it('runs native workers concurrently with per-task limits, private output, and f
     gates.beta.resolve();
     await Promise.all([alpha.getFullOutput(), beta.getFullOutput()]);
     expect(cleaned).toHaveLength(4);
+    expect(workerModel.doStreamCalls.length).toBeGreaterThan(0);
     expect(
       parentResults.some((result) => result.includes('three active workers')),
     ).toBe(true);
@@ -225,7 +240,8 @@ it('runs native workers concurrently with per-task limits, private output, and f
       toolSets.every(
         (tools) =>
           tools.includes('hold') &&
-          tools.includes('search_tools') &&
+          !tools.includes('search_tools') &&
+          tools.includes('execute_typescript') &&
           !tools.includes('agent-worker') &&
           !tools.includes('set_task_status'),
       ),
@@ -237,6 +253,9 @@ it('runs native workers concurrently with per-task limits, private output, and f
     ).toBe(true);
     await (await run('alpha')).getFullOutput();
     expect(started).toHaveLength(7);
+    expect(started.find((run) => run.branch === 'alpha-5')?.workerId).toBe(
+      started.find((run) => run.branch === 'alpha-1')?.workerId,
+    );
     expect(cleaned).toHaveLength(7);
     const cancelled = await run('cancel');
     await until(() => started.length === 10, 10000);

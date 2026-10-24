@@ -11,9 +11,11 @@ import {
   MAIN_RESOURCE_ID,
 } from '../dist/agent/main-session.js';
 import { loadAgentInstructions } from '../dist/agent/agent-instructions.js';
+import { WORKER_ID } from '../dist/agent/task-workers.js';
+import { CodeModeProcessor } from '../dist/agent/code-mode.processor.js';
 import { TaskToolDiscoveryProcessor } from '../dist/agent/task-tool-discovery.processor.js';
 
-it('loads packaged skills on demand for Task/Worker and retains native results across restart', async () => {
+it('loads authentication skills only on interaction and starts fresh after restart', async () => {
   const connectionString =
     process.env.TEST_DATABASE_URL ??
     'postgresql://pal:pal@localhost:5433/pal_test';
@@ -23,7 +25,7 @@ it('loads packaged skills on demand for Task/Worker and retains native results a
   let calls = 0;
   const model = new MockLanguageModelV3({
     doStream: async () => {
-      const load = ++calls === 1 || calls === 4;
+      const load = ++calls % 2 === 1;
       return {
         stream: simulateReadableStream({
           chunks: [
@@ -82,8 +84,10 @@ it('loads packaged skills on demand for Task/Worker and retains native results a
       inputProcessors: [new TaskToolDiscoveryProcessor(() => ({}))],
       publish: async () => {},
       worker: {
+        model,
         instructions: await loadAgentInstructions('worker'),
         tools: {},
+        inputProcessors: [new CodeModeProcessor()],
         cleanup: async () => {},
       },
     },
@@ -92,13 +96,11 @@ it('loads packaged skills on demand for Task/Worker and retains native results a
   try {
     session = await createMainSession(options);
     expect(await session.agent.listSkills()).toEqual([]);
-    expect((await session.taskAgent!.listSkills()).map((s) => s.name)).toEqual([
-      'website-authentication',
-    ]);
+    expect(await session.taskAgent!.listSkills()).toEqual([]);
     expect((await session.worker!.listSkills()).map((s) => s.name)).toEqual([
       'website-authentication',
     ]);
-    const skill = await session.taskAgent!.getSkill('website-authentication');
+    const skill = await session.worker!.getSkill('website-authentication');
     expect(skill).toBeDefined();
     const containsBody = (value: unknown) =>
       JSON.stringify(value).includes(
@@ -108,8 +110,9 @@ it('loads packaged skills on demand for Task/Worker and retains native results a
       const requestContext = new RequestContext([
         [MASTRA_THREAD_ID_KEY, threadId],
         [MASTRA_RESOURCE_ID_KEY, MAIN_RESOURCE_ID],
+        [WORKER_ID, randomUUID()],
       ]);
-      const output = await session!.taskAgent!.stream(
+      const output = await session!.worker!.stream(
         'Help me log into the test store.',
         {
           memory: { thread: threadId, resource: MAIN_RESOURCE_ID },
@@ -138,12 +141,13 @@ it('loads packaged skills on demand for Task/Worker and retains native results a
     session = undefined;
     session = await createMainSession(options);
     await run('pal-task:skill-continuation');
-    expect(model.doStreamCalls).toHaveLength(3);
-    expect(containsBody(model.doStreamCalls[2].prompt)).toBe(true);
+    expect(model.doStreamCalls).toHaveLength(4);
+    expect(containsBody(model.doStreamCalls[2].prompt)).toBe(false);
+    expect(containsBody(model.doStreamCalls[3].prompt)).toBe(true);
     await run('pal-task:fresh-skill-context');
-    expect(model.doStreamCalls).toHaveLength(5);
-    expect(containsBody(model.doStreamCalls[3].prompt)).toBe(false);
-    expect(containsBody(model.doStreamCalls[4].prompt)).toBe(true);
+    expect(model.doStreamCalls).toHaveLength(6);
+    expect(containsBody(model.doStreamCalls[4].prompt)).toBe(false);
+    expect(containsBody(model.doStreamCalls[5].prompt)).toBe(true);
   } finally {
     await session?.close();
     const pool = new Pool({ connectionString });

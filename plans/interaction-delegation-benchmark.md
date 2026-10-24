@@ -10,7 +10,7 @@ Compare three Task tool boundaries with a Luna-high interaction worker and a Sol
 
 ## Current Behavior
 
-- Production Task and its shared worker use the same model settings, broad execution tools and inherited delegation context. Production behavior is unchanged by this experiment.
+- The selected production design is Task-owned MCP/local execution with a compact Luna-high UI worker and explicit assignments. Implementation/deployment status is tracked in [Task execution and interaction worker](interaction-worker-runtime.md). The experimental MCP-on-interaction arm remains separate evidence.
 - The three boundary arms use Sol medium for Task and general workers, and Luna high for the interaction worker. The coordinator follow-up uses Luna high for both workers. Browser, computer and login tools belong to the interaction worker.
 - Coordinator Task plans and delegates; services Task also reads files, searches and discovers MCP; execution Task also has shell and file processing. General-worker use is model judgment.
 - The two-role `luna-interaction-mcp` arm removes the general worker: Task owns local execution and web search, while interaction owns UI/login and MCP. Each retains code mode for its available tools.

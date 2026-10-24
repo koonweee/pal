@@ -180,6 +180,17 @@ export class LoginRepository {
       .where(inArray(loginRequests.status, active))
       .orderBy(desc(loginRequests.createdAt));
   }
+  async workerRequests(taskId: string, workerId: string) {
+    return this.database.db
+      .select()
+      .from(loginRequests)
+      .where(
+        and(
+          eq(loginRequests.taskId, taskId),
+          eq(loginRequests.workerId, workerId),
+        ),
+      );
+  }
   async preview(id: string) {
     const [row] = await this.database.db
       .select({ image: loginInspections.image, at: loginInspections.createdAt })

@@ -11,7 +11,7 @@ Let each task agent run up to three focused workers concurrently, one level deep
 ## Current Behavior
 
 - Main delegates to persistent native Task Agent threads through `delegate_task`.
-- Task Agent exposes native `agent-worker` alongside browser, MCP discovery/code execution, workspace, task metadata, and schedule tools. Workers receive execution tools and return private findings to their parent.
+- Task exposes native `agent-worker` alongside MCP/code mode, local execution, metadata and schedules. The interaction worker uses Luna high for browser/computer/login and code mode, returning private findings from explicit assignments without inherited history. See [current runtime deployment](interaction-worker-runtime.md).
 - BrowserService pins independent task/worker CLI sessions; the extension maintains parent task groups, per-session/tab ownership, and cleanup membership.
 
 ## Milestones
@@ -22,7 +22,7 @@ Implementation tasks:
 
 - [x] Register one reusable native worker through Task Agent's `agents` configuration.
 - [x] Enforce three active workers per task with native delegation hooks and trusted parent/worker identities.
-- [x] Give workers execution tools and MCP discovery, with private results, no task management tools, and no child agents.
+- [x] Give interaction workers UI/login tools and code mode, with private results, no task management tools or child agents; Task owns MCP/local execution.
 - [x] Propagate cancellation and release worker slots after success, failure, or abort.
 - [x] Add concise guidance for independent substantial branches and parent synthesis.
 
@@ -59,7 +59,7 @@ Exit criteria:
 
 ## Tests
 
-- One native worker integration test covers concurrency/limit, separate parent tasks, private output, discovery/context, failure, cancellation, and slot reuse.
+- One native worker integration test covers concurrency/limit, separate parent tasks, private output, zero inherited context, failure, cancellation, and slot reuse.
 - Extend the existing browser fixture for worker sessions/group cleanup and moved-tab preservation.
 - A bounded real-model smoke uses local ticket/event fixtures and similar user prompts; external read-only research checks may be used to validate live behavior.
 
@@ -77,7 +77,7 @@ npm run workers:smoke
 ## Overall Exit Criteria
 
 - [x] One extra worker level with at most three active workers per task; no new public task records or API contracts.
-- [x] Workers run independently, return private findings, inherit execution guidance, and clean up browser resources on exit.
+- [x] Workers run independently, return private findings, receive explicit assignments and interaction guidance, and clean up browser resources on exit.
 - [x] Independent browser sessions share the parent group and profile without action locks.
 - [x] Similar real-model prompts, focused checks, deployment, and simplicity review are complete.
 
@@ -87,7 +87,7 @@ Background worker jobs, persistent worker management UI, recursive delegation, g
 
 ## Validation Notes
 
-Native worker integration passes with three overlapping workers, fourth-worker rejection, a separate task allowance, slot reuse after a failed delegation, cancellation cleanup, MCP discovery, and private worker text. Six focused files pass 15 tests; build and lint pass.
+Native worker integration passes with three overlapping workers, fourth-worker rejection, a separate task allowance, slot reuse after a failed delegation, cancellation cleanup, role-scoped code mode, and private worker text. Six focused files pass 15 tests; build and lint pass.
 
 The VM browser fixture verifies three distinct pinned targets starting in one parent group, shared profile state, session recovery, worker popup/member cleanup, moved-tab preservation, and all worker daemons exiting. Worker session names use only worker UUIDs to fit native Unix socket limits. Chromium blocks popup links from inactive tabs; the popup fixture foregrounds its opener, while agents can use explicit `tab new` for background work. Native close replies can precede process exit, so fixture checks wait for teardown to settle.
 

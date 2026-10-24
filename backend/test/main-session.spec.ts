@@ -446,6 +446,7 @@ it('keeps generation failures private, and shuts down silently', async () => {
   );
   try {
     await runtime.onModuleInit();
+    expect(providerSpy).toHaveBeenCalledWith('gpt-6-luna', '/unused', 'high');
     const user = await chat.publish({
       role: 'user',
       text: 'Fail after commentary',
@@ -663,6 +664,59 @@ it('exposes all supported native workspace tools, keeps results private, and sto
     await main.close();
     main = undefined;
     await until(() => isGone(foregroundPid) && isGone(Number(handle.pid)));
+  } finally {
+    await main?.close();
+    main = undefined;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it('separates Task local execution from interaction computer tools', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pal-role-workspaces-'));
+  const model = new MockLanguageModelV3({});
+  try {
+    main = await createMainSession({
+      connectionString: databaseUrl,
+      schemaName: schema,
+      workingDirectory: directory,
+      filesystem: new LocalFilesystem({ basePath: directory, contained: true }),
+      sandbox: new LocalSandbox({
+        workingDirectory: directory,
+        isolation: 'none',
+      }),
+      computer: new X11Computer({ output: async () => Buffer.alloc(0) }),
+      model,
+      onEvent: () => {},
+      task: {
+        instructions: 'Own local execution and delegate UI work.',
+        tools: {},
+        publish: async () => {},
+        worker: {
+          model,
+          instructions: 'Do UI work.',
+          tools: {},
+          cleanup: async () => {},
+        },
+      },
+    });
+    const taskWorkspace = (await main.taskAgent!.getWorkspace())!;
+    const workerWorkspace = (await main.worker!.getWorkspace())!;
+    await taskWorkspace.init();
+    await workerWorkspace.init();
+    const task = await createWorkspaceTools(taskWorkspace);
+    const worker = await createWorkspaceTools(workerWorkspace);
+    expect(task).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+    expect(task).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
+    for (const name of Object.values(WORKSPACE_TOOLS.COMPUTER)) {
+      expect(task).not.toHaveProperty(name);
+      expect(worker).toHaveProperty(name);
+    }
+    for (const name of [
+      ...Object.values(WORKSPACE_TOOLS.FILESYSTEM),
+      ...Object.values(WORKSPACE_TOOLS.SANDBOX),
+      'agent-worker',
+    ])
+      expect(worker).not.toHaveProperty(name);
   } finally {
     await main?.close();
     main = undefined;

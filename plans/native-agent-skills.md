@@ -25,7 +25,7 @@ Load website authentication guidance on demand through native Mastra skills. Mak
 
 Exit criteria:
 
-- Task/Worker advertise the skill, Main does not, and full instructions load only when requested.
+- Interaction advertises the authentication skill; Main/Task do not, and full instructions load only when requested.
 
 ### 2. Verification and documentation
 
@@ -63,7 +63,7 @@ python3 backend/scripts/login-latency/profile.py
 
 ## Validation Findings
 
-- Backend build, type-aware lint/boundaries and 25 focused tests pass: native skills, discovery, browser/vault filling, Task runtime, login APIs and client contracts. Native integration verifies metadata-only initial prompts, full instruction loading, Main/Task/Worker scoping, retained instructions after restart, fresh-context reloading and rejection of skill-read traversal outside its directory.
+- Backend build, type-aware lint/boundaries and 25 focused tests pass: native skills, discovery, browser/vault filling, Task runtime, login APIs and client contracts. Native integration verifies metadata-only initial prompts, full instruction loading, Main/Task/Worker scoping, instructions retained during a worker run, fresh-assignment reloading after restart and rejection of skill-read traversal outside its directory.
 - Always-loaded login guidance is 36 words (previously 744). Login-tool/schema descriptions are 291 words (previously 587). The on-demand skill is 569 words including its metadata. Main receives no new tools or guidance.
 - Real dev-agent run `aea0bea0` passed all three natural-prompt synthetics: Apple-style username/password/code/trust (57.8 s, one credential form and one code form); Amazon-style wrong-password correction (57.4 s, two credential forms); ambiguous saved-account picker (31.6 s, Work selected once). Native skill loading occurred before login tools; no tool execution errors occurred. These are functional acceptance samples, not a controlled latency comparison.
 - Artifacts: `.local/login-latency-detailed/` metadata and reports. Exact-host vault entries/tabs are removed, pending synthetic requests are closed, temporary hooks/files and the debugger are removed. Existing execution desktop identity/start time and normal model settings are preserved.

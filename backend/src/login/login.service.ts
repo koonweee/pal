@@ -36,6 +36,63 @@ export class LoginService implements OnModuleDestroy {
     this.timer.unref();
     void this.flushNotifications();
   }
+  async resumeWorker(taskId: string, assignment: string) {
+    const id =
+      /secure entry request\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i.exec(
+        assignment,
+      )?.[1];
+    if (!id) return;
+    let row;
+    try {
+      row = await this.repository.current(id);
+    } catch (error) {
+      if (error instanceof ApplicationError && error.code === 'not_found')
+        return;
+      throw error;
+    }
+    if (
+      row.taskId !== taskId ||
+      !row.workerId ||
+      row.status === 'cancelled' ||
+      Date.now() - row.createdAt.getTime() >= 24 * 3600_000
+    )
+      return;
+    const group = (await this.browser.groups()).find(
+      (group) => group.taskId === taskId,
+    );
+    return group?.sessions?.includes('worker-' + row.workerId)
+      ? row.workerId
+      : undefined;
+  }
+
+  async retainWorkerSession(
+    taskId: string,
+    workerId: string,
+    completed: boolean,
+    startedAt: number,
+  ) {
+    const requests = await this.repository.workerRequests(taskId, workerId);
+    const pending = requests.filter((row) =>
+      ['pending', 'updating', 'failed'].includes(row.status),
+    );
+    // A user can submit before delegation cleanup runs. Retain that new request
+    // too; a resumed assignment will have a later start time and can close it.
+    if (completed)
+      return (
+        pending.length > 0 ||
+        requests.some(
+          (row) =>
+            row.status !== 'cancelled' && row.createdAt.getTime() >= startedAt,
+        )
+      );
+    for (const row of pending) await this.repository.finish(row.id);
+    if (pending.length) {
+      this.events.publish({ event: 'login.updated', taskId });
+      void this.flushNotifications();
+    }
+    return false;
+  }
+
   async flushNotifications() {
     if (this.notifying || !this.notify) return;
     this.notifying = true;

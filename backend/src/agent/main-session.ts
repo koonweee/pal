@@ -51,12 +51,22 @@ export async function createMainSession(options: {
     inputProcessors?: ConstructorParameters<typeof Agent>[0]['inputProcessors'];
     publish: (output: PublicOutput, context: TextContext) => Promise<void>;
     worker?: {
+      model: Agent['model'];
       instructions: ConstructorParameters<typeof Agent>[0]['instructions'];
       tools: NonNullable<ConstructorParameters<typeof Agent>[0]['tools']>;
       inputProcessors?: ConstructorParameters<
         typeof Agent
       >[0]['inputProcessors'];
-      cleanup: (taskId: string, workerId: string) => Promise<void>;
+      resume?: (
+        taskId: string,
+        assignment: string,
+      ) => Promise<string | undefined>;
+      cleanup: (
+        taskId: string,
+        workerId: string,
+        completed: boolean,
+        startedAt: number,
+      ) => Promise<void>;
     };
   };
   scheduleHooks?: ScheduleHooks<Mastra>;
@@ -194,15 +204,53 @@ export async function createMainSession(options: {
         : {}),
     });
     await controller.init();
+    const taskWorkspace =
+      options.task && workspace
+        ? new Workspace({
+            id: 'pal-task-workspace',
+            filesystem: options.filesystem,
+            sandbox: options.sandbox,
+            tools: {
+              requireApproval: false,
+              [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
+                maxMediaBytes: MAX_FILE_BYTES,
+              },
+              ...Object.fromEntries(
+                Object.values(WORKSPACE_TOOLS.COMPUTER).map((name) => [
+                  name,
+                  { enabled: false },
+                ]),
+              ),
+            },
+          })
+        : undefined;
+    const interactionWorkspace =
+      options.task?.worker && workspace
+        ? new Workspace({
+            id: 'pal-interaction-workspace',
+            filesystem: options.filesystem,
+            sandbox: options.sandbox,
+            tools: {
+              enabled: false,
+              requireApproval: false,
+              ...Object.fromEntries(
+                Object.values(WORKSPACE_TOOLS.COMPUTER).map((name) => [
+                  name,
+                  { enabled: true },
+                ]),
+              ),
+            },
+          })
+        : undefined;
     const worker = options.task?.worker
       ? new Agent({
           id: 'pal-task-worker',
-          name: 'Worker',
+          name: 'Interaction',
           skills: agentSkillPaths('worker'),
           description:
-            'Execute a focused independent branch of this task and return findings to the task agent. Call agent-worker concurrently for up to three substantial independent branches. Supply the assignment, constraints, and required evidence.',
+            'Complete a browser, computer or website-login workflow and return verified findings to Task. Supply all relevant facts, URLs, constraints, requested interaction method and required evidence; no conversation history is inherited.',
           instructions: options.task.worker.instructions,
-          model: options.model,
+          model: options.task.worker.model,
           memory: new Memory({
             storage,
             options: {
@@ -222,11 +270,14 @@ export async function createMainSession(options: {
           }),
           tools: options.task.worker.tools,
           inputProcessors: options.task.worker.inputProcessors,
-          workspace,
+          workspace: interactionWorkspace,
         })
       : undefined;
     const delegation = options.task?.worker
-      ? taskWorkerDelegation(options.task.worker.cleanup)
+      ? taskWorkerDelegation(
+          options.task.worker.cleanup,
+          options.task.worker.resume,
+        )
       : undefined;
     const taskAgent = options.task
       ? new Agent<string, ToolsInput, PublicResponse>({
@@ -294,7 +345,7 @@ export async function createMainSession(options: {
           tools: options.task.tools,
           ...(worker ? { agents: { worker } } : {}),
           inputProcessors: options.task.inputProcessors,
-          workspace,
+          workspace: taskWorkspace,
           maxProcessorRetries: 1,
           outputProcessors: [publishTextProcessor(options.task.publish)],
         })

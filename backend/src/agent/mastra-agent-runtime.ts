@@ -37,6 +37,7 @@ import { messageVisibleInChat } from '../chat/chat.types.js';
 import { AgentHandoffError, type AgentRuntime } from './agent-runtime.js';
 import { AgentActivityService } from './agent-activity.service.js';
 import { TaskToolDiscoveryProcessor } from './task-tool-discovery.processor.js';
+import { CodeModeProcessor } from './code-mode.processor.js';
 import { chatgptModel } from './chatgpt-model.js';
 import { BrowserService } from '../browser/browser.service.js';
 import { PreferencesService } from '../preferences/preferences.service.js';
@@ -230,8 +231,6 @@ export class MastraAgentRuntime
         },
         // Broad task primitives are always available here; Mastra adds workspace tools.
         tools: () => ({
-          ...browserTools(this.browser),
-          ...loginTools(this.login),
           web_search: webSearchTool(),
           inspect_message: inspectMessageTool(this.files, this.chat),
           set_task_status: taskStatusTool(this.tasks),
@@ -249,26 +248,34 @@ export class MastraAgentRuntime
           new TaskToolDiscoveryProcessor(() => this.mcp.tools()),
         ],
         worker: {
+          model: chatgptModel(
+            'gpt-6-luna',
+            this.config.getOrThrow<string>('PAL_AGENT_AUTH_PATH'),
+            'high',
+          ),
           instructions: () =>
             workerInstructions +
-            '\n' +
-            this.mcp.instructions() +
             '\nCurrent time (UTC): ' +
             new Date().toISOString(),
           tools: () => ({
             ...browserTools(this.browser),
             ...loginTools(this.login),
-            web_search: webSearchTool(),
-            inspect_message: inspectMessageTool(this.files, this.chat),
-            read_preferences: preferenceReadTool(this.preferences),
           }),
-          inputProcessors: [
-            new TaskToolDiscoveryProcessor(() => this.mcp.tools()),
-          ],
-          cleanup: (taskId, workerId) =>
-            this.browser
+          inputProcessors: [new CodeModeProcessor()],
+          resume: (taskId, assignment) =>
+            this.login.resumeWorker(taskId, assignment),
+          cleanup: async (taskId, workerId, completed, startedAt) => {
+            const retain = await this.login
+              .retainWorkerSession(taskId, workerId, completed, startedAt)
+              .catch((error: unknown) => {
+                this.logger.warn(error);
+                return false;
+              });
+            if (retain) return;
+            await this.browser
               .closeSession(taskId, workerId)
-              .catch((error: unknown) => this.logger.warn(error)),
+              .catch((error: unknown) => this.logger.warn(error));
+          },
         },
         publish: (output, context) => this.publishTask(output, context),
       },

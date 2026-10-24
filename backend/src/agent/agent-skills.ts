@@ -6,7 +6,7 @@ import type { AgentRole } from './agent-instructions.js';
 type SkillRole = Exclude<AgentRole, 'main'>;
 
 const nativeSkills: Record<string, readonly SkillRole[]> = {
-  'website-authentication': ['task', 'worker'],
+  'website-authentication': ['worker'],
 };
 
 export function agentSkillPaths(role: SkillRole): string[] {

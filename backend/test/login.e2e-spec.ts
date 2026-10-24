@@ -73,6 +73,88 @@ it('keeps request metadata secret-free and saves once across repeated API submis
   save.mockRestore();
 });
 
+it('retains secure-entry sessions across fresh worker assignments and cancels interrupted entry', async () => {
+  const task = await fixture.app.get(TasksService).create({
+    title: 'Interaction continuation',
+    goal: 'Resume secure entry',
+  });
+  const repository = fixture.app.get(LoginRepository);
+  const login = fixture.app.get(LoginService);
+  const workerId = randomUUID();
+  const pending = await repository.request(
+    task.id,
+    'https://resume.example.test',
+    'credentials',
+    undefined,
+    workerId,
+  );
+  const groups = vi
+    .spyOn(fixture.app.get(BrowserService), 'groups')
+    .mockResolvedValue([
+      {
+        taskId: task.id,
+        groupId: 1,
+        lastActivity: Date.now(),
+        sessions: ['worker-' + workerId],
+        tabs: [],
+      },
+    ]);
+  try {
+    expect(await login.retainWorkerSession(task.id, workerId, true, 0)).toBe(
+      true,
+    );
+    const assignment =
+      'Continue secure entry request ' +
+      pending.id +
+      '. Submit the form and report the outcome.';
+    expect(await login.resumeWorker(task.id, assignment)).toBe(workerId);
+    expect(await login.resumeWorker(randomUUID(), assignment)).toBeUndefined();
+    expect(
+      await login.resumeWorker(task.id, 'secure entry request ' + randomUUID()),
+    ).toBeUndefined();
+    groups.mockResolvedValueOnce([]);
+    expect(await login.resumeWorker(task.id, assignment)).toBeUndefined();
+    expect(await login.retainWorkerSession(task.id, workerId, false, 0)).toBe(
+      false,
+    );
+    expect((await repository.get(pending.id)).status).toBe('cancelled');
+    expect(await login.resumeWorker(task.id, assignment)).toBeUndefined();
+    expect(await login.retainWorkerSession(task.id, workerId, true, 0)).toBe(
+      false,
+    );
+    const submitted = await repository.request(
+      task.id,
+      'https://resume.example.test',
+      'credentials',
+      undefined,
+      workerId,
+    );
+    await repository.finish(submitted.id, {
+      kind: 'credentials',
+      status: 'filled',
+      submit: async () => ({ filled: true }),
+    });
+    expect(
+      await login.retainWorkerSession(
+        task.id,
+        workerId,
+        true,
+        submitted.createdAt.getTime(),
+      ),
+    ).toBe(true);
+    expect(
+      await login.retainWorkerSession(
+        task.id,
+        workerId,
+        true,
+        submitted.createdAt.getTime() + 1,
+      ),
+    ).toBe(false);
+  } finally {
+    groups.mockRestore();
+  }
+});
+
 it('connects inspection, direct PWA save, retryable task notification, and browser fill without returning secrets', async () => {
   const browser = await chromium.launch({
     channel: 'chrome',
