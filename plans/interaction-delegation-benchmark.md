@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress: role boundaries and cleanup validated; collection ready
+In Progress: four-lane collection, 126 expected matrix samples
 
 ## Goal
 
@@ -61,3 +61,10 @@ python3 backend/scripts/browser-benchmark/run.py --check --variants luna-coordin
 - All three Task tool inventories, separate Sol-medium general and Luna-high interaction models, empty inherited histories and cleanup were verified from request telemetry. Coordinator used the general worker to read its brief.
 - The initial validation dataset reproduced a checker scope error. Resource cleanup now runs even if result recording throws. Its evidence is preserved; trace-owned groups/tasks were cleaned and the three isolated fixture connections reset before fresh validation.
 - Validation artifacts: `.local/browser-benchmark/delegation-smoke-20261024T052657Z/`.
+
+
+## Active Collection
+
+- Workflow: `.local/browser-benchmark/delegation-20261024T053055Z/`; tmux session `pal-bench-four`.
+- Nine variant/round jobs run on the existing four isolated lanes with unchanged pinned images and 12 GiB Docker allocation. The prior passing four-lane capacity smoke is reused; fresh boundary validation covers the changed harness.
+- Model-free health refreshes every ten seconds; the existing automation checks every two minutes with progress and ETA, investigates new failures and compares speed, accuracy and cost at completion.
