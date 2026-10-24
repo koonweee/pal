@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Complete
 
 ## Goal
 
@@ -11,7 +11,7 @@ Publish all validated dev changes to the repository and deploy the complete rele
 ## Current Behavior
 
 - Dev includes secure browser login, native authentication skills, smaller observational-memory budgets, PWA activation recovery, and routed execution egress.
-- Production uses the prior split runtime and Squid gateway. The routed network upgrade replaces execution and its network; persistent home and service data remain.
+- Production runs the split runtime with routed execution egress and explicit public execution DNS; persistent home and private service data are retained.
 - Komodo manages production. Protected deployment metadata and Docker operations require an operator sudo step on the host.
 
 ## Milestones
@@ -36,7 +36,8 @@ Implementation tasks:
 - [x] Update the Komodo-owned configuration with immutable images, current service/network definitions and matching release identity.
 - [x] Preserve previous deployment definitions/images and a paired backup of stopped home, service data and PostgreSQL.
 - [x] Apply explicit database migrations and migrate the execution network without deleting persistent state.
-- [ ] Deploy and verify application/API/PWA, native browser/desktop/filesystem, network isolation and router recovery on production AMD64.
+- [x] Deploy and verify application/API/PWA, native browser/desktop/filesystem, network isolation and router recovery on production AMD64.
+- [x] Restore temporary host policy, remove exact delivery artifacts, and retain the acceptance report with the paired backup.
 
 Exit criteria:
 
@@ -78,15 +79,16 @@ npm run test:pwa
 - Frontend ownership checks, 27 component tests, strict production TypeScript/build checks and all 10 PWA tests pass. Both secure-entry browser cases pass.
 - The full browser suite reports 59/65 passing. All six failing layout/focus cases reproduce on the published `origin/main` baseline: mobile desktop focus, two standalone safe-area cases, two workbench cases and intermittent keyboard-anchor retention. The keyboard case also fails on an isolated current-source rerun and two of three additional baseline runs. These existing failures remain outside this release's changed scope.
 - AMD64 agent-service, execution, web and egress images build successfully with a shared application revision and production PWA identity.
-- Production runs application release `73bc06e` through infrastructure revision `7e7504e`. Migrations and the execution-network upgrade complete with retained persistent directories. Paired backups pass integrity checks; trusted HTTPS/API/PWA/desktop WebSocket checks and vault prewarm pass. Native acceptance remains in progress.
+- Production runs application release `73bc06e` through infrastructure revision `cf1ff53`, including explicit public execution DNS. Migrations and the execution-network upgrade complete with retained persistent directories. Paired backups pass integrity checks; trusted HTTPS/API/PWA/desktop WebSocket checks, vault prewarm and native acceptance pass.
 
 ## Published Artifacts
 
-All application commits are pushed to `origin/main`. Four AMD64 images from `73bc06e` are published and their immutable remote manifests are verified. Agent-service, execution and web use their existing package names with tag `73bc06e`; the router uses `pal:73bc06e-egress` because the registry rejected publishing a new router package. Immutable pins and staged runtime verification assets are retained privately for the pending production cutover.
+All application commits are pushed to `origin/main`. Four AMD64 images from `73bc06e` are published and their immutable remote manifests are verified. Agent-service, execution and web use their existing package names with tag `73bc06e`; the router uses `pal:73bc06e-egress` because the registry rejected publishing a new router package. Production uses the verified immutable pins. Temporary delivery and verification staging files are removed after acceptance.
 
 ## Production acceptance
 
 - Recovery material is retained at `/srv/backups/pal-sf-release-20261024-001032`; the earlier verified backup is also preserved. Legacy writers are stopped with restart disabled.
 - All six runtime services are healthy, API/PWA release identity is `73bc06e`, and the first-party contract is 5. Native API/PWA/SSE checks pass. The desktop WebSocket returns a real RFB greeting without reading screen contents.
-- Native filesystem, numeric public TCP/UDP, private/IPv6/capability boundaries, synthetic credential/OTP filling, compaction budgets, record retention and execution/Chrome survival across an egress restart pass. Hostname HTTPS/browser checks expose the inherited private Tailnet resolver; explicit public execution DNS is required before final acceptance.
-- Restore the temporary unused-image-pruning pause and remove exact delivery/private-plan artifacts after acceptance. A shared host/daemon reboot remains a separate maintenance-window check.
+- Native filesystem, public DNS/HTTPS/TCP/UDP, private/IPv6/capability boundaries, browser/desktop control, synthetic credential/OTP filling, compaction budgets and record retention pass. Execution and Chrome survive an egress-only restart, and the full network checks pass again afterward. No tracked table counts decrease.
+- The final audit is retained at `/srv/backups/pal-sf-release-20261024-001032/release-acceptance-1792802276968953452.json`. Backup integrity is verified; no restore rehearsal is claimed.
+- Original `sf-internal` image pruning is restored. Exact remote/workstation delivery directories and private configuration plans are removed; backup and legacy recovery state remain. A shared host/daemon reboot remains a separate maintenance-window check.

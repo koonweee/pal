@@ -14,7 +14,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Production dev release](production-dev-release.md) | In Progress | Publish validated dev changes and immutable images, migrate production routed egress and verify preserved state. |
+| [Production dev release](production-dev-release.md) | Complete | Publish validated dev changes and immutable images, migrate production routed egress and verify preserved state. |
 | [Memory compaction budgets](memory-compaction-budgets.md) | Done | Native 12k history/observation thresholds, 3k raw retention and dev deployment verification. |
 | [PWA update activation recovery](pwa-update-activation-recovery.md) | Done | Lifetime-safe waiting-worker activation, bounded reload recovery and dev PWA deployment. |
 | [Native agent skills](native-agent-skills.md) | Done | Developer-owned role registration, native on-demand authentication guidance and verified dev login flows. |
