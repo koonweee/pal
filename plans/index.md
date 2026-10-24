@@ -14,7 +14,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Interaction delegation benchmark](interaction-delegation-benchmark.md) | In Progress | Task-execution/interaction-MCP validation running; earlier comparisons complete, live review pending. |
+| [Interaction delegation benchmark](interaction-delegation-benchmark.md) | In Progress | Three-arm, coordinator and interaction-MCP comparisons complete; live semantic review pending. |
 | [Browser worker benchmark](browser-worker-benchmark.md) | In Progress | Direct Task versus compact interaction workers, realistic synthetic/live workflows, timing, correctness and token reporting. |
 | [Production dev release](production-dev-release.md) | Complete | Publish validated dev changes and immutable images, migrate production routed egress and verify preserved state. |
 | [Memory compaction budgets](memory-compaction-budgets.md) | Done | Native 12k history/observation thresholds, 3k raw retention and dev deployment verification. |
