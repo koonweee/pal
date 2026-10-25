@@ -111,6 +111,10 @@ test('shares agent appearance across clients and keeps color scheme local', asyn
     await other.goto(baseURL!);
     await expect(page.getByPlaceholder('message pal')).toBeVisible();
     await expect(page.locator('#thread-open img')).toHaveCount(0);
+    await expect(page.locator('link[rel="icon"]')).toHaveAttribute(
+      'href',
+      /^data:image\/svg\+xml,/,
+    );
     await page.getByRole('button', { name: 'Preferences' }).click();
     const dialog = page.getByRole('dialog', { name: 'Preferences' });
     await expect(dialog.getByRole('tab', { name: 'Memory' })).toBeVisible();
@@ -136,6 +140,12 @@ test('shares agent appearance across clients and keeps color scheme local', asyn
       'color',
       'rgb(255, 255, 255)',
     );
+
+    for (const client of [page, other])
+      await expect(client.locator('link[rel="icon"]')).toHaveAttribute(
+        'href',
+        new RegExp(encodeURIComponent('#c026d3')),
+      );
 
     const png = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0YkAAAAASUVORK5CYII=',
@@ -175,7 +185,16 @@ test('shares agent appearance across clients and keeps color scheme local', asyn
       'naturalWidth',
       1,
     );
+    for (const client of [page, other])
+      await expect(client.locator('link[rel="icon"]')).toHaveAttribute(
+        'href',
+        new RegExp(`/api/files/${id}/content$`),
+      );
     await page.reload();
+    await expect(page.locator('link[rel="icon"]')).toHaveAttribute(
+      'href',
+      new RegExp(`/api/files/${id}/content$`),
+    );
     await expect(page.getByPlaceholder('message Nova')).toBeVisible();
     await expect(page.locator('#thread-open img')).toHaveJSProperty(
       'naturalWidth',
@@ -198,6 +217,10 @@ test('shares agent appearance across clients and keeps color scheme local', asyn
     await expect(
       other.locator('#thread-open .agent-avatar'),
     ).not.toHaveAttribute('data-image');
+    await expect(other.locator('link[rel="icon"]')).toHaveAttribute(
+      'href',
+      new RegExp(encodeURIComponent('#c026d3')),
+    );
     await other.locator('#thread-open').click();
     await expect(other.locator('#thread-sidebar')).toBeVisible();
     await other.unroute(`**/api/files/${id}/content`);
@@ -210,6 +233,11 @@ test('shares agent appearance across clients and keeps color scheme local', asyn
       1,
     );
 
+    await expect(other.locator('link[rel="icon"]')).toHaveAttribute(
+      'href',
+      new RegExp(`/api/files/${id}/content$`),
+    );
+
     await dialog.getByRole('tab', { name: 'Agent', exact: true }).click();
     await dialog.getByRole('button', { name: 'Reset to defaults' }).click();
     await dialog.getByRole('button', { name: 'Save agent' }).click();
@@ -220,12 +248,21 @@ test('shares agent appearance across clients and keeps color scheme local', asyn
       'background-color',
       'rgb(192, 38, 211)',
     );
+    for (const client of [page, other])
+      await expect(client.locator('link[rel="icon"]')).toHaveAttribute(
+        'href',
+        new RegExp(encodeURIComponent('#c026d3')),
+      );
     await dialog.getByRole('tab', { name: 'Appearance' }).click();
     await dialog.getByRole('button', { name: 'Reset to defaults' }).click();
     await dialog.getByRole('button', { name: 'Save appearance' }).click();
     await expect(other.locator('#send')).toHaveCSS(
       'background-color',
       'rgb(0, 102, 214)',
+    );
+    await expect(other.locator('link[rel="icon"]')).toHaveAttribute(
+      'href',
+      new RegExp(encodeURIComponent('#0066d6')),
     );
     await dialog.getByRole('tab', { name: 'App', exact: true }).click();
     await expect(

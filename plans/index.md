@@ -14,6 +14,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Agent profile favicon](agent-profile-favicon.md) | Done | Browser favicon follows the saved agent image and accent-colored donut fallback. |
 | [Markdown list guidance](markdown-list-guidance.md) | Done | Shared Main/Task Markdown list syntax, validated and deployed to dev/production. |
 | [Task execution and interaction worker](interaction-worker-runtime.md) | In Progress | Deployed to dev/prod: Task MCP/local execution and Luna-high interaction; final host-only role/record audit pending. |
 | [Interaction delegation benchmark](interaction-delegation-benchmark.md) | In Progress | Three-arm, coordinator and interaction-MCP comparisons complete; live semantic review pending. |

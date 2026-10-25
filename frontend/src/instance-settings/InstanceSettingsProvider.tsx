@@ -16,6 +16,7 @@ import {
 } from '../api/client';
 import { lightTheme } from '../theme/tokens';
 import { readAppearanceCache, writeAppearanceCache } from './appearance-cache';
+import { useAgentFavicon } from './use-agent-favicon';
 
 export const defaultInstanceSettings: InstanceSettings = {
   agentName: 'pal',
@@ -42,6 +43,7 @@ export function InstanceSettingsProvider({
     ...defaultInstanceSettings,
     ...(preview ? undefined : readAppearanceCache()),
   }));
+  useAgentFavicon(settings);
   const [ready, setReady] = useState(preview);
   const [error, setError] = useState<string>();
   const read = useRef<AbortController | undefined>(undefined);
