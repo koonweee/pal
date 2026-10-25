@@ -47,7 +47,7 @@ struct MessageRow: View {
               ChatDocument(attachment: attachment, store: store)
             }
           }
-          MessageActions(message: message, store: store)
+          MessageLinks(message: message)
         }
         .padding(PalTheme.spacing)
         .background(
@@ -180,32 +180,9 @@ private struct SendingShimmer: View {
     .accessibilityHidden(true)
   }
 }
-struct MessageActions: View {
+struct MessageLinks: View {
   let message: ChatMessage
-  let store: ConversationStore
-  @State private var selecting = false
   var body: some View {
-    if !message.actions.isEmpty {
-      VStack(alignment: .leading, spacing: 8) {
-        ForEach(message.actions) { action in
-          Button(action.label) {
-            selecting = true
-            Task {
-              await store.select(action, message: message)
-              selecting = false
-            }
-          }
-          .buttonStyle(.bordered)
-          .disabled(selecting || message.actionState != "pending")
-        }
-        if message.actionState == "answered" {
-          Text("Answered").font(.caption).foregroundStyle(.primary)
-        }
-        if message.actionState == "unavailable" {
-          Text("No longer available").font(.caption).foregroundStyle(.primary)
-        }
-      }
-    }
     ForEach(message.links, id: \.url) { link in
       if let url = URL(string: link.url), ["https", "http"].contains(url.scheme ?? "") {
         Link(link.label, destination: url).buttonStyle(.bordered)

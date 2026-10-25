@@ -41,7 +41,7 @@ private final class NoRedirects: NSObject, URLSessionTaskDelegate, @unchecked Se
 }
 
 actor ChatClient: ChatService {
-  private static let contractVersion = "5"
+  private static let contractVersion = "6"
   private let connection: ChatConnection
   private let taskId: String?
   private let session: URLSession

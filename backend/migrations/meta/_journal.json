@@ -183,6 +183,13 @@
       "when": 1792907151756,
       "tag": "0025_pwa_badges",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792908111564,
+      "tag": "0026_suggested_replies",
+      "breakpoints": true
     }
   ]
 }

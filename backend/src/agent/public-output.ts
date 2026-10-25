@@ -1,3 +1,8 @@
+import {
+  parseSuggestedReplies,
+  maxSuggestedReplies,
+  maxSuggestedReplyLength,
+} from '../chat/suggested-replies.js';
 import { isUUID } from 'class-validator';
 import { toStandardSchema } from '@mastra/core/schema';
 import type { JSONSchema7 } from 'json-schema';
@@ -10,6 +15,7 @@ export interface GeneratedFile {
 
 export interface PublicOutput {
   text: string;
+  suggestedReplies?: string[];
   replyTo: number | null;
   attachmentIds: string[];
   files: GeneratedFile[];
@@ -37,6 +43,18 @@ export const publicOutputSchema: JSONSchema7 = {
         { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 } },
       ],
     },
+    suggestedReplies: {
+      type: 'array',
+      description:
+        'Optional short replies the user can tap to send immediately; [] when unhelpful.',
+      maxItems: maxSuggestedReplies,
+      uniqueItems: true,
+      items: {
+        type: 'string',
+        minLength: 1,
+        maxLength: maxSuggestedReplyLength,
+      },
+    },
     replyTo: { type: ['integer', 'null'] },
     attachmentIds: {
       type: 'array',
@@ -59,7 +77,7 @@ export const publicOutputSchema: JSONSchema7 = {
       },
     },
   },
-  required: ['text', 'replyTo', 'attachmentIds', 'files'],
+  required: ['text', 'suggestedReplies', 'replyTo', 'attachmentIds', 'files'],
   additionalProperties: false,
 };
 
@@ -80,12 +98,14 @@ export function parsePublicOutput(value: string): PublicOutput {
     throw new Error('Invalid public agent output');
   // Intermediate commentary can omit unused structured-output fields.
   const replyTo = 'replyTo' in parsed ? parsed.replyTo : null;
-  if (!(
-    replyTo === null ||
-    (typeof replyTo === 'number' &&
-      Number.isSafeInteger(replyTo) &&
-      replyTo > 0)
-  ))
+  if (
+    !(
+      replyTo === null ||
+      (typeof replyTo === 'number' &&
+        Number.isSafeInteger(replyTo) &&
+        replyTo > 0)
+    )
+  )
     throw new Error('Invalid public agent output');
   const attachmentIds = 'attachmentIds' in parsed ? parsed.attachmentIds : [];
   if (
@@ -125,7 +145,11 @@ export function parsePublicOutput(value: string): PublicOutput {
         replyTo,
       },
     );
+  const suggestions = parseSuggestedReplies(
+    'suggestedReplies' in parsed ? parsed.suggestedReplies : undefined,
+  );
   return {
+    ...(suggestions.length ? { suggestedReplies: suggestions } : {}),
     text: parsed.text,
     replyTo,
     attachmentIds,
@@ -158,6 +182,9 @@ export function parsePublicResponse(value: string): PublicOutput[] {
   );
   return texts.map((text, index) => ({
     text,
+    ...(index === texts.length - 1 && output.suggestedReplies?.length
+      ? { suggestedReplies: output.suggestedReplies }
+      : {}),
     replyTo: index === 0 ? output.replyTo : null,
     attachmentIds: index === texts.length - 1 ? output.attachmentIds : [],
     files: index === texts.length - 1 ? output.files : [],

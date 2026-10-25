@@ -5,7 +5,7 @@ import Testing
 
 @Test func decodesPalMessageAndAttachment() throws {
   let data = Data(
-    #"{"id":"11111111-1111-4111-8111-111111111111","createdAt":"2026-10-10T00:00:00.000Z","updatedAt":"2026-10-10T00:00:00.000Z","version":2,"mainVisible":false,"reaction":"👀","sequence":7,"idempotencyKey":"request-1","replyToMessageId":null,"replyTo":null,"role":"user","source":"ios","text":"hello","attachments":[{"id":"22222222-2222-4222-8222-222222222222","createdAt":"2026-10-10T00:00:00.000Z","filename":"photo.jpg","contentType":"image/jpeg","sizeBytes":12}],"actions":null,"taskId":null,"phase":null}"#
+    #"{"id":"11111111-1111-4111-8111-111111111111","createdAt":"2026-10-10T00:00:00.000Z","updatedAt":"2026-10-10T00:00:00.000Z","version":2,"mainVisible":false,"reaction":"👀","sequence":7,"idempotencyKey":"request-1","replyToMessageId":null,"replyTo":null,"role":"user","source":"ios","text":"hello","attachments":[{"id":"22222222-2222-4222-8222-222222222222","createdAt":"2026-10-10T00:00:00.000Z","filename":"photo.jpg","contentType":"image/jpeg","sizeBytes":12}],"suggestedReplies":[],"taskId":null,"phase":null}"#
       .utf8)
   let message = try JSONDecoder().decode(ChatMessage.self, from: data)
   #expect(message.version == 2)
@@ -84,7 +84,7 @@ import Testing
       id: "message-\(sequence)", createdAt: "", updatedAt: "", version: 1,
       sequence: sequence, idempotencyKey: nil, replyToMessageId: nil, replyTo: nil,
       role: "assistant", source: nil, text: "message \(sequence)", attachments: [],
-      actionsEnvelope: nil, taskId: nil, phase: "final_answer")
+      taskId: nil, phase: "final_answer")
   }
 
   _ = store.refreshInBackground(
@@ -140,7 +140,7 @@ import Testing
     id: "assistant-reply", createdAt: "", updatedAt: "", version: 1,
     sequence: 1, idempotencyKey: nil, replyToMessageId: nil, replyTo: nil,
     role: "assistant", source: nil, text: "Hello", attachments: [],
-    actionsEnvelope: nil, taskId: nil, phase: "final_answer")
+    taskId: nil, phase: "final_answer")
 
   store.apply(.message(message), live: true)
 

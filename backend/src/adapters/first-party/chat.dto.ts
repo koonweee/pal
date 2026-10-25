@@ -25,6 +25,11 @@ export class MessageMetadataDto {
   @IsOptional() @IsString() @IsTimeZone() timezone?: string;
 }
 
+export class SuggestedReplySelectionDto {
+  @IsUUID() messageId!: string;
+  @IsInt() @Min(0) index!: number;
+}
+
 export class SendMessageDto {
   @IsOptional() @IsString() @MaxLength(100) destinationId?: string;
   @IsOptional()
@@ -33,7 +38,12 @@ export class SendMessageDto {
   @Type(() => MessageMetadataDto)
   metadata?: MessageMetadataDto;
   @IsString() @MinLength(1) @MaxLength(200) idempotencyKey!: string;
-  @IsString() @MaxLength(100000) text!: string;
+  @IsString() @MaxLength(100000) text: string = '';
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => SuggestedReplySelectionDto)
+  suggestedReply?: SuggestedReplySelectionDto;
   @IsOptional() @IsUUID() taskId?: string;
   @IsOptional() @IsUUID() replyToMessageId?: string;
   @IsArray()
@@ -41,10 +51,4 @@ export class SendMessageDto {
   @ArrayMaxSize(100)
   @IsUUID(undefined, { each: true })
   attachmentIds: string[] = [];
-}
-
-export class SelectActionDto {
-  @IsString() @MinLength(1) @MaxLength(200) idempotencyKey!: string;
-  @IsUUID() messageId!: string;
-  @IsString() @MinLength(1) @MaxLength(200) actionId!: string;
 }

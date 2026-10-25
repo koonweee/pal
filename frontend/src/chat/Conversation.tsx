@@ -650,6 +650,13 @@ export function Conversation({
             <SecureEntryUpdates.Provider value={secureEntryUpdates}>
               <MessageList
                 messages={chat.messages}
+                onSelectSuggestedReply={chat.selectSuggestedReply}
+                suggestionsDisabled={
+                  !chat.connected ||
+                  !chat.loaded ||
+                  chat.syncing ||
+                  chat.submitting
+                }
                 onDismissFailed={chat.dismissFailedMessage}
                 onNavigate={(id) => void chat.ensureMessage(id)}
                 onReply={chat.selectReply}

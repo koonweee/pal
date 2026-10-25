@@ -11,12 +11,10 @@ import { ChatRepository } from './chat.repository.js';
 import { DestinationService } from '../delivery/destination.service.js';
 import { DeliveryJobRepository } from '../delivery/delivery-job.repository.js';
 import { NotificationRepository } from '../notifications/notification.repository.js';
+import { parseSuggestedReplies } from './suggested-replies.js';
+import type { SubmitMessageInput } from '../application/contracts/chat.js';
 import type { ChatViewPort } from '../application/contracts/chat.js';
-import type {
-  MessageActions,
-  MessageMetadata,
-  PublishMessage,
-} from './chat.types.js';
+import type { PublishMessage } from './chat.types.js';
 import { messageVisibleInChat } from './chat.types.js';
 @Injectable()
 export class ChatService implements ChatViewPort {
@@ -33,40 +31,26 @@ export class ChatService implements ChatViewPort {
     @Inject(NotificationRepository)
     private readonly notifications: NotificationRepository,
   ) {}
-  private validateActions(actions?: MessageActions | null) {
-    if (!actions) return;
-    const ids = actions.actions.map((action) => action.id);
-    if (
-      !ids.length ||
-      new Set(ids).size !== ids.length ||
-      actions.actions.some(
-        (action) => !action.id.trim() || !action.label.trim(),
-      )
-    )
-      throw new ApplicationError('invalid_input', 'Invalid message actions');
-    if (
-      actions.state === 'selected'
-        ? !ids.includes(actions.selectedActionId ?? '')
-        : actions.selectedActionId !== null
-    )
-      throw new ApplicationError('invalid_input', 'Invalid selected action');
-  }
   private async insert(
     input: PublishMessage,
     tx: Transaction,
     idempotencyKey?: string,
   ) {
-    this.validateActions(input.actions);
-    if (input.source !== undefined && !input.source.trim())
-      throw new ApplicationError('invalid_input', 'Invalid message source');
+    const suggestedReplies = parseSuggestedReplies(input.suggestedReplies);
     if (
-      !input.text.trim() &&
-      !input.attachmentIds?.length &&
-      !input.actions?.actions.length
+      suggestedReplies.length &&
+      (input.role !== 'assistant' || !input.text.trim())
     )
       throw new ApplicationError(
         'invalid_input',
-        'Message requires text, attachments, or actions',
+        'Suggested replies require an assistant message with text.',
+      );
+    if (input.source !== undefined && !input.source.trim())
+      throw new ApplicationError('invalid_input', 'Invalid message source');
+    if (!input.text.trim() && !input.attachmentIds?.length)
+      throw new ApplicationError(
+        'invalid_input',
+        'Message requires text or attachments',
       );
     if (input.taskId && !(await this.tasks.get(input.taskId, tx)))
       throw new ApplicationError('not_found', 'Task not found');
@@ -128,7 +112,7 @@ export class ChatService implements ChatViewPort {
         taskId,
         mainVisible: !!secureEntryRequestId,
         phase,
-        actions: input.actions ?? null,
+        suggestedReplies,
       },
       tx,
     );
@@ -255,16 +239,7 @@ export class ChatService implements ChatViewPort {
       this.events.publish({ event: 'message.updated', message: updated });
     return updated ?? this.get(result.messageId);
   }
-  async accept(input: {
-    source?: string;
-    originDestinationId?: string;
-    metadata?: MessageMetadata;
-    idempotencyKey: string;
-    text: string;
-    taskId?: string;
-    replyToMessageId?: string;
-    attachmentIds: string[];
-  }) {
+  async accept(input: SubmitMessageInput) {
     const request = {
       ...(input.source && input.source !== 'api'
         ? { source: input.source }
@@ -273,6 +248,7 @@ export class ChatService implements ChatViewPort {
         ? { originDestinationId: input.originDestinationId }
         : {}),
       text: input.text,
+      ...(input.suggestedReply ? { suggestedReply: input.suggestedReply } : {}),
       taskId: input.taskId ?? null,
       ...(input.replyToMessageId
         ? { replyToMessageId: input.replyToMessageId }
@@ -283,19 +259,57 @@ export class ChatService implements ChatViewPort {
         : {}),
     };
     let inserted: Awaited<ReturnType<ChatService['insert']>> | undefined;
+    let consumed;
     const result = await this.database.idempotent(
       'chat.messages',
       input.idempotencyKey,
       request,
       async (tx) => {
+        let text = input.text;
+        if (input.suggestedReply) {
+          if (text || input.attachmentIds.length || input.replyToMessageId)
+            throw new ApplicationError(
+              'invalid_input',
+              'Suggested replies are submitted on their own.',
+            );
+          const { messageId, index } = input.suggestedReply;
+          const source = await this.repository.lock(messageId, tx);
+          if (
+            !source ||
+            source.role !== 'assistant' ||
+            !messageVisibleInChat(source, input.taskId ?? null)
+          )
+            throw new ApplicationError(
+              'invalid_input',
+              'Suggested reply is not in this chat.',
+            );
+          if (
+            !Number.isSafeInteger(index) ||
+            index < 0 ||
+            index >= source.suggestedReplies.length
+          )
+            throw new ApplicationError(
+              'conflict',
+              'Suggested reply is no longer available.',
+            );
+          text = source.suggestedReplies[index]!;
+          const updated = await this.repository.update(
+            source.id,
+            { suggestedReplies: [] },
+            tx,
+          );
+          [consumed] = await this.repository.views([updated], tx);
+        }
         inserted = await this.insert(
-          { ...input, role: 'user' },
+          { ...input, text, role: 'user' },
           tx,
           input.idempotencyKey,
         );
         return { messageId: inserted.message.id };
       },
     );
+    if (consumed)
+      this.events.publish({ event: 'message.updated', message: consumed });
     if (inserted) {
       this.events.publish({
         event: 'message.added',
@@ -331,10 +345,8 @@ export class ChatService implements ChatViewPort {
     id: string,
     input: {
       text?: string;
-      actions?: MessageActions | null;
     },
   ) {
-    this.validateActions(input.actions);
     const message = await this.database.transaction(async (tx) => {
       const current = await this.repository.lock(id, tx);
       if (!current)
@@ -345,44 +357,6 @@ export class ChatService implements ChatViewPort {
     });
     this.events.publish({ event: 'message.updated', message });
     return message;
-  }
-  async selectAction(input: {
-    metadata?: MessageMetadata;
-    idempotencyKey: string;
-    messageId: string;
-    actionId: string;
-  }) {
-    let message;
-    const result = await this.database.idempotent(
-      'chat.actions',
-      input.idempotencyKey,
-      { messageId: input.messageId, actionId: input.actionId },
-      async (tx) => {
-        const row = await this.repository.lock(input.messageId, tx);
-        if (!row) throw new ApplicationError('not_found', 'Message not found');
-        if (
-          !row.actions ||
-          row.actions.state !== 'available' ||
-          !row.actions.actions.some((a) => a.id === input.actionId)
-        )
-          throw new ApplicationError('conflict', 'Action is unavailable');
-        const updated = await this.repository.update(
-          row.id,
-          {
-            actions: {
-              ...row.actions,
-              state: 'selected',
-              selectedActionId: input.actionId,
-            },
-          },
-          tx,
-        );
-        [message] = await this.repository.views([updated], tx);
-        return { messageId: row.id };
-      },
-    );
-    if (message) this.events.publish({ event: 'message.updated', message });
-    return { messageId: result.messageId };
   }
   async history(options: { taskId?: string; before?: number; limit?: number }) {
     return this.database.db.transaction(

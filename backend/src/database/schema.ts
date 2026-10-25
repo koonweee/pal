@@ -17,11 +17,7 @@ import {
   check,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
-import type {
-  MessageActions,
-  MessageMetadata,
-  MessagePhase,
-} from '../chat/chat.types.js';
+import type { MessageMetadata, MessagePhase } from '../chat/chat.types.js';
 import type { TaskStatus } from '../tasks/tasks.types.js';
 import type { McpAuth } from '../mcp/mcp.types.js';
 import type {
@@ -221,7 +217,10 @@ export const messages = pgTable(
     metadata: jsonb('metadata').$type<MessageMetadata>().notNull().default({}),
     taskId: uuid('task_id').references(() => tasks.id),
     phase: text('phase').$type<MessagePhase>(),
-    actions: jsonb('actions').$type<MessageActions>(),
+    suggestedReplies: jsonb('suggested_replies')
+      .$type<string[]>()
+      .notNull()
+      .default([]),
   },
   (t) => [
     index('messages_task_idx').on(t.taskId, t.sequence.desc()),
@@ -264,7 +263,12 @@ export const messageAttachments = pgTable(
   ],
 );
 export type DeliveryJobState =
-  'pending' | 'sending' | 'accepted' | 'failed' | 'uncertain' | 'cancelled';
+  | 'pending'
+  | 'sending'
+  | 'accepted'
+  | 'failed'
+  | 'uncertain'
+  | 'cancelled';
 
 export const deliveryJobs = pgTable(
   'delivery_jobs',

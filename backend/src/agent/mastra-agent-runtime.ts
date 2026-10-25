@@ -171,6 +171,7 @@ export class MastraAgentRuntime
               {
                 role: 'assistant',
                 text: output.text,
+                suggestedReplies: output.suggestedReplies,
                 replyToSequence: output.replyTo,
                 attachmentIds: output.attachmentIds,
                 destinationIds,
@@ -664,6 +665,7 @@ export class MastraAgentRuntime
         {
           role: 'assistant',
           text: output.text,
+          suggestedReplies: output.suggestedReplies,
           taskId,
           phase: context.phase ?? null,
           replyToSequence: output.replyTo,

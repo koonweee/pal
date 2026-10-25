@@ -1,20 +1,4 @@
 export interface paths {
-  '/chat/actions': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations['selectMessageAction'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/chat/history': {
     parameters: {
       query?: never;
@@ -695,16 +679,6 @@ export interface components {
       /** Format: uuid */
       messageId: string;
     };
-    MessageActionResponseDto: {
-      id: string;
-      label: string;
-    };
-    MessageActionsResponseDto: {
-      actions: components['schemas']['MessageActionResponseDto'][];
-      selectedActionId: string | null;
-      /** @enum {string} */
-      state: 'available' | 'selected' | 'disabled';
-    };
     MessageEventResponseDto: {
       /** @enum {string} */
       event: 'message.added' | 'message.updated';
@@ -731,7 +705,6 @@ export interface components {
       textPreview: string;
     };
     MessageResponseDto: {
-      actions: components['schemas']['MessageActionsResponseDto'] | null;
       attachments: components['schemas']['AttachmentResponseDto'][];
       /** Format: date-time */
       createdAt: string;
@@ -754,6 +727,7 @@ export interface components {
       role: 'user' | 'assistant';
       sequence: number;
       source: string | null;
+      suggestedReplies: string[];
       /** Format: uuid */
       taskId: string | null;
       text: string;
@@ -849,12 +823,6 @@ export interface components {
       name?: string;
       url?: string;
     };
-    SelectActionDto: {
-      actionId: string;
-      idempotencyKey: string;
-      /** Format: uuid */
-      messageId: string;
-    };
     SelectLoginAccountDto: {
       accountId: string;
       keepMeSignedIn?: boolean;
@@ -867,12 +835,19 @@ export interface components {
       metadata?: components['schemas']['MessageMetadataDto'];
       /** Format: uuid */
       replyToMessageId?: string;
+      suggestedReply?: components['schemas']['SuggestedReplySelectionDto'];
       /** Format: uuid */
       taskId?: string;
+      /** @default  */
       text: string;
     };
     SubmitCodeDto: {
       code: string;
+    };
+    SuggestedReplySelectionDto: {
+      index: number;
+      /** Format: uuid */
+      messageId: string;
     };
     TaskDetailsEnvelopeResponseDto: {
       task: components['schemas']['TaskDetailsResponseDto'];
@@ -968,37 +943,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-  selectMessageAction: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['SelectActionDto'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['MessageAcceptedResponseDto'];
-        };
-      };
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ApplicationErrorResponseDto'];
-        };
-      };
-    };
-  };
   getChatHistory: {
     parameters: {
       query?: {

@@ -34,7 +34,7 @@ function message(sequence: number, text = `Message ${sequence}`): Message {
     taskId: null,
     phase: sequence % 2 ? null : 'final_answer',
     attachments: [],
-    actions: null,
+    suggestedReplies: [],
   };
 }
 

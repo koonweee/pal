@@ -77,7 +77,7 @@ function validMessage(value: unknown): value is Message {
     record(value.metadata) &&
     Array.isArray(value.attachments) &&
     value.attachments.every(validAttachment) &&
-    (value.actions === null || record(value.actions))
+    stringArray(value.suggestedReplies)
   );
 }
 

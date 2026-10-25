@@ -1,5 +1,6 @@
 import type {
   MessageMetadata,
+  SuggestedReplySelection,
   UserVisibleMessage,
 } from '../../chat/chat.types.js';
 
@@ -10,6 +11,7 @@ export interface SubmitMessageInput {
   metadata?: MessageMetadata;
   idempotencyKey: string;
   text: string;
+  suggestedReply?: SuggestedReplySelection;
   taskId?: string;
   replyToMessageId?: string;
   attachmentIds: string[];
@@ -20,14 +22,6 @@ export interface HistoryInput {
   taskId?: string;
   before?: number;
   limit?: number;
-}
-
-/** Idempotent action selection; actions do not implicitly continue an agent. */
-export interface SelectActionInput {
-  metadata?: MessageMetadata;
-  idempotencyKey: string;
-  messageId: string;
-  actionId: string;
 }
 
 /**
@@ -46,5 +40,4 @@ export interface ChatViewPort {
     messages: UserVisibleMessage[];
     before: number | null;
   }>;
-  selectAction(input: SelectActionInput): Promise<{ messageId: string }>;
 }

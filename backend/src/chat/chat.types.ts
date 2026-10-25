@@ -1,14 +1,9 @@
 import type { MutableEntity } from '../common/entity.types.js';
 import type { Attachment } from '../files/files.types.js';
 export type MessagePhase = 'commentary' | 'final_answer';
-export interface MessageAction {
-  id: string;
-  label: string;
-}
-export interface MessageActions {
-  actions: MessageAction[];
-  state: 'available' | 'selected' | 'disabled';
-  selectedActionId: string | null;
+export interface SuggestedReplySelection {
+  messageId: string;
+  index: number;
 }
 export interface MessageMetadata {
   timezone?: string;
@@ -47,7 +42,7 @@ export interface UserVisibleMessage extends MutableEntity {
   text: string;
   metadata: MessageMetadata;
   attachments: Attachment[];
-  actions: MessageActions | null;
+  suggestedReplies: string[];
   taskId: string | null;
   phase: MessagePhase | null;
 }
@@ -64,5 +59,5 @@ export interface PublishMessage {
   taskId?: string;
   phase?: MessagePhase | null;
   attachmentIds?: string[];
-  actions?: MessageActions | null;
+  suggestedReplies?: string[];
 }

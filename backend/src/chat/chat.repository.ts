@@ -43,7 +43,9 @@ export class ChatRepository {
   }
   async update(
     id: string,
-    input: Partial<Pick<MessageRecord, 'text' | 'actions' | 'reaction'>>,
+    input: Partial<
+      Pick<MessageRecord, 'text' | 'suggestedReplies' | 'reaction'>
+    >,
     tx: Transaction,
   ) {
     const [row] = await tx
@@ -145,7 +147,7 @@ export class ChatRepository {
         notify: row.notificationDestinationIds.length > 0,
         taskId: row.taskId,
         phase: row.phase,
-        actions: row.actions,
+        suggestedReplies: row.suggestedReplies,
         attachments: links
           .filter((link) => link.messageId === row.id)
           .map((link) => attachmentView(link.attachment)),

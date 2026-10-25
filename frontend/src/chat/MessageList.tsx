@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { IconAction } from '../ui/IconAction';
 import { useInstanceSettings } from '../instance-settings/InstanceSettingsProvider';
+import { SuggestedReplies } from './SuggestedReplies';
 import { AssistantMarkdown } from './AssistantMarkdown';
 import {
   conversationDateKey,
@@ -26,6 +27,8 @@ const MessageRow = memo(
     onNavigate,
     onReply,
     onRetryFailed,
+    onSelectSuggestedReply,
+    suggestionsDisabled,
     highlighted,
   }: {
     view: MessageView;
@@ -33,6 +36,8 @@ const MessageRow = memo(
     onNavigate(id: string): void;
     onReply(message: MessageView['message']): void;
     onRetryFailed(idempotencyKey: string): void;
+    onSelectSuggestedReply(messageId: string, index: number): void;
+    suggestionsDisabled: boolean;
     highlighted: boolean;
   }) {
     const { settings } = useInstanceSettings();
@@ -129,6 +134,14 @@ const MessageRow = memo(
                 />
               )}
             </div>
+            {persisted && message.role === 'assistant' && (
+              <SuggestedReplies
+                messageId={message.id}
+                replies={view.suggestedReplies ?? []}
+                disabled={suggestionsDisabled}
+                onSelect={onSelectSuggestedReply}
+              />
+            )}
             {failed && message.idempotencyKey && (
               <div className="message-failure" role="status">
                 <span>{retrying ? 'Sending…' : 'Couldn’t send'}</span>
@@ -218,6 +231,9 @@ const MessageRow = memo(
     previous.view.retrying === next.view.retrying &&
     previous.view.showQuote === next.view.showQuote &&
     previous.view.read === next.view.read &&
+    previous.view.suggestedReplies === next.view.suggestedReplies &&
+    previous.suggestionsDisabled === next.suggestionsDisabled &&
+    previous.onSelectSuggestedReply === next.onSelectSuggestedReply &&
     previous.onNavigate === next.onNavigate &&
     previous.onDismissFailed === next.onDismissFailed &&
     previous.onReply === next.onReply &&
@@ -231,6 +247,8 @@ export function MessageList({
   onNavigate,
   onReply,
   onRetryFailed,
+  onSelectSuggestedReply,
+  suggestionsDisabled,
   virtualizer,
   scrollMargin,
   highlightedMessage,
@@ -241,6 +259,8 @@ export function MessageList({
   onNavigate(id: string): void;
   onReply(message: MessageView['message']): void;
   onRetryFailed(idempotencyKey: string): void;
+  onSelectSuggestedReply(messageId: string, index: number): void;
+  suggestionsDisabled: boolean;
   virtualizer: Virtualizer<HTMLDivElement, Element>;
   scrollMargin: number;
   highlightedMessage?: string;
@@ -285,6 +305,8 @@ export function MessageList({
               view={view}
               onDismissFailed={onDismissFailed}
               onNavigate={onNavigate}
+              onSelectSuggestedReply={onSelectSuggestedReply}
+              suggestionsDisabled={suggestionsDisabled}
               onReply={onReply}
               onRetryFailed={onRetryFailed}
               highlighted={highlightedMessage === view.message.id}

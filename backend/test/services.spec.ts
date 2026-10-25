@@ -1,6 +1,6 @@
 import { sendToUserTool } from '../dist/agent/send-to-user.tool.js';
 import { randomUUID } from 'node:crypto';
-import { startTestApp } from './helpers.js';
+import { openStream, startTestApp, until } from './helpers.js';
 import { TasksService } from '../dist/tasks/tasks.service.js';
 import { mainTaskTools } from '../dist/agent/task-tools.js';
 import { FilesService } from '../dist/files/files.service.js';
@@ -16,46 +16,90 @@ beforeEach(async () => {
   await fixture.reset();
 });
 
-it('keeps Task actions local and allows only one concurrent selection', async () => {
-  const tasks = fixture.app.get(TasksService);
-  const chat = fixture.app.get(ChatService);
-  const task = await tasks.create({ title: 'Choose', goal: 'Choose' });
-  const message = await chat.publish({
-    role: 'assistant',
-    text: 'Choose one',
-    taskId: task.id,
-    phase: 'final_answer',
-    actions: {
-      actions: [
-        { id: 'a', label: 'A' },
-        { id: 'b', label: 'B' },
-      ],
-      state: 'available',
-      selectedActionId: null,
-    },
-  });
-  const requests = ['a', 'b'].map((actionId) => ({
-    actionId,
-    messageId: message.id,
-    idempotencyKey: randomUUID(),
-  }));
-  const results = await Promise.allSettled(
-    requests.map((input) => chat.selectAction(input)),
-  );
-  expect(
-    results.filter((result) => result.status === 'fulfilled'),
-  ).toHaveLength(1);
-  const winner =
-    requests[results.findIndex((result) => result.status === 'fulfilled')];
-  await expect(chat.selectAction(winner)).resolves.toEqual({
-    messageId: message.id,
-  });
-  const main = (await chat.history({})).messages[0];
-  const scoped = (await chat.history({ taskId: task.id })).messages[0];
-  expect(main).toBeUndefined();
-  expect(scoped.version).toBe(2);
-  expect(scoped.actions?.selectedActionId).toBe(winner.actionId);
-});
+it.each([false, true])(
+  'atomically consumes suggestions once, persists events and retries in task scope %s',
+  async (taskScoped) => {
+    const tasks = fixture.app.get(TasksService);
+    const chat = fixture.app.get(ChatService);
+    const task = taskScoped
+      ? await tasks.create({ title: 'Dinner', goal: 'Choose dinner' })
+      : undefined;
+    const source = await chat.publish({
+      role: 'assistant',
+      text: 'How many people?',
+      taskId: task?.id,
+      suggestedReplies: ['Just me', 'Two people'],
+    });
+    const stream = await openStream(fixture.url);
+    try {
+      const inputs = [0, 1].map((index) => ({
+        source: 'web',
+        originDestinationId: 'web',
+        taskId: task?.id,
+        text: '',
+        attachmentIds: [],
+        idempotencyKey: randomUUID(),
+        suggestedReply: { messageId: source.id, index },
+      }));
+      if (taskScoped) {
+        await expect(
+          chat.accept({ ...inputs[0], taskId: undefined }),
+        ).rejects.toMatchObject({ code: 'invalid_input' });
+        expect((await chat.get(source.id)).suggestedReplies).toHaveLength(2);
+      }
+      const results = await Promise.allSettled(
+        inputs.map((input) => chat.accept(input)),
+      );
+      expect(
+        results.filter((result) => result.status === 'fulfilled'),
+      ).toHaveLength(1);
+      const winnerIndex = results.findIndex(
+        (result) => result.status === 'fulfilled',
+      );
+      const winner = results[winnerIndex];
+      if (winner.status !== 'fulfilled') throw new Error('No winner');
+      const replay = await chat.accept(inputs[winnerIndex]);
+      expect(replay).toMatchObject({
+        messageId: winner.value.messageId,
+        created: false,
+      });
+      const sent = await chat.get(replay.messageId);
+      expect(sent).toMatchObject({
+        role: 'user',
+        text: source.suggestedReplies[winnerIndex],
+        taskId: task?.id ?? null,
+        idempotencyKey: inputs[winnerIndex].idempotencyKey,
+      });
+      expect(await chat.get(source.id)).toMatchObject({
+        version: 2,
+        suggestedReplies: [],
+      });
+      const history = await chat.history({ taskId: task?.id });
+      expect(
+        history.messages.filter((message) => message.role === 'user'),
+      ).toHaveLength(1);
+      if (taskScoped) expect((await chat.history({})).messages).toEqual([]);
+      await until(() =>
+        stream.events.some(
+          (event) =>
+            event.event === 'message.added' && event.message.id === sent.id,
+        ),
+      );
+      expect(stream.events).toContainEqual(
+        expect.objectContaining({
+          event: 'message.updated',
+          message: expect.objectContaining({
+            id: source.id,
+            version: 2,
+            suggestedReplies: [],
+          }),
+        }),
+      );
+    } finally {
+      await stream.close();
+    }
+  },
+);
 
 it('retrieves older completed tasks with alternatives and inspects bounded public history', async () => {
   const tasks = fixture.app.get(TasksService);

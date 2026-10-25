@@ -196,14 +196,15 @@ RESPONSE
   "messageId": "<backend persisted id>"
 }
 
-/** Select message action **/
-POST /chat/actions
+/** Send a suggested reply through the same endpoint **/
+POST /chat/messages
 
 REQUEST
 {
   "idempotencyKey": "<client-generated-id>",
-  "messageId": "<message-with-actions-id>",
-  "actionId": "<action-id>"
+  "destinationId": "web",
+  "taskId": "<task-id>", // optional; source must be visible in this chat
+  "suggestedReply": { "messageId": "<assistant-message-id>", "index": 0 }
 }
 ```
 
@@ -221,7 +222,11 @@ Provider adapters may use native reply threading only when they have a mapping f
 
 HTTP success follows native input acceptance and precedes the assistant response. A failed handoff returns sanitized HTTP 503 and retains the committed user message. Repeating the same key retries only a known pre-acceptance failure remembered in the current process. That retry eligibility is deliberately lost at restart. Uncertain, accepted, and other duplicate handoffs return the existing message ID without running agent work again. Main generation errors remain operational failures; Task generation errors are logged locally and reported to Main. Several inputs can produce one response; a run can publish several messages.
 
-Actions update public action state. Agent continuation from actions is deferred.
+Main and Task may publish up to three distinct, single-line `suggestedReplies`, each at most 80 characters. Main selects them in `sendToUser`; Task selects them in structured public output. Shared texting guidance describes when suggestions help. Grouped public output puts suggestions on its final message.
+
+A suggested-reply submission carries the source message ID and zero-based index, with empty/omitted text and no attachments or quote. In the existing message-idempotency transaction, the service locks the visible assistant source, resolves its saved text, clears its suggestions, increments its version, and creates the user message. One concurrent selection succeeds; later selections conflict. An identical idempotent retry returns the original user message and retains the normal handoff retry policy. Commit emits `message.updated` for the source and `message.added` for the user message to all clients. History retains consumption.
+
+The PWA renders 44px reply pills beneath the latest message while it is an assistant message with available suggestions. Tapping uses the existing optimistic user-message animation, scrolling, receipts, and retry path, and preserves composer text, pending uploads, and the selected quote. Consumed options immediately become inert and fade/collapse using the shared 120ms/180ms motion timings on every connected client; Reduce Motion removes the transition. A losing client removes its optimistic attempt and refreshes canonical state. Cached or disconnected history cannot submit suggestions.
 
 ### Message destinations and external delivery
 
@@ -427,20 +432,9 @@ interface UserVisibleMessage extends MutableEntity {
   metadata: { timezone?: string },
   text: string, // may be empty for attachment-only user or assistant messages
   attachments: Attachment[], // ordered; empty when absent
-  actions: MessageActions | null,
+  suggestedReplies: string[], // available options; empty after selection
   taskId: string | null, // null for main-chat-only messages
   phase: "commentary" | "final_answer" | null, // null for user messages and unknown assistant phase
-}
-
-interface MessageActions {
-  actions: MessageAction[],
-  state: "available" | "selected" | "disabled",
-  selectedActionId: string | null,
-}
-
-interface MessageAction {
-  id: string,
-  label: string,
 }
 
 interface Task extends MutableEntity {

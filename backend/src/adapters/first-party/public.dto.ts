@@ -19,19 +19,6 @@ export class MessageReplySummaryResponseDto {
   @ApiProperty() mainVisible!: boolean;
 }
 
-export class MessageActionResponseDto {
-  @ApiProperty() id!: string;
-  @ApiProperty() label!: string;
-}
-
-export class MessageActionsResponseDto {
-  @ApiProperty({ type: [MessageActionResponseDto] })
-  actions!: MessageActionResponseDto[];
-  @ApiProperty({ enum: ['available', 'selected', 'disabled'] })
-  state!: 'available' | 'selected' | 'disabled';
-  @ApiProperty({ nullable: true }) selectedActionId!: string | null;
-}
-
 export class MessageMetadataResponseDto {
   @ApiPropertyOptional() secureEntryRequestId?: string;
   @ApiPropertyOptional() timezone?: string;
@@ -52,7 +39,8 @@ export class MessageResponseDto {
   @ApiProperty() notify!: boolean;
   @ApiProperty({ nullable: true }) idempotencyKey!: string | null;
   @ApiProperty({ format: 'uuid', nullable: true }) replyToMessageId!:
-    string | null;
+    | string
+    | null;
   @ApiProperty({ type: MessageReplySummaryResponseDto, nullable: true })
   replyTo!: MessageReplySummaryResponseDto | null;
   @ApiProperty({ enum: ['user', 'assistant'] }) role!: 'user' | 'assistant';
@@ -61,8 +49,8 @@ export class MessageResponseDto {
   metadata!: MessageMetadataResponseDto;
   @ApiProperty({ type: [AttachmentResponseDto] })
   attachments!: AttachmentResponseDto[];
-  @ApiProperty({ type: MessageActionsResponseDto, nullable: true })
-  actions!: MessageActionsResponseDto | null;
+  @ApiProperty({ type: [String], maxItems: 3 })
+  suggestedReplies!: string[];
   @ApiProperty({ format: 'uuid', nullable: true }) taskId!: string | null;
   @ApiProperty({ enum: ['commentary', 'final_answer'], nullable: true })
   phase!: 'commentary' | 'final_answer' | null;

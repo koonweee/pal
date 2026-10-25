@@ -5,6 +5,8 @@ import {
   getTask,
   getTasks,
   sendMessage,
+  RequestError,
+  type SuggestedReplySelection,
   type Message,
   type Task,
   type TaskDetails,
@@ -27,7 +29,10 @@ import {
 import { useConversationPacing } from './use-conversation-pacing';
 import { readMainHistoryCache, writeMainHistoryCache } from './history-cache';
 
+type OutgoingMessage = Message & { suggestedReply?: SuggestedReplySelection };
+
 export interface MessageView {
+  suggestedReplies?: string[];
   failed: boolean;
   message: Message;
   persisted: boolean;
@@ -43,7 +48,7 @@ interface ChatState {
   before: number | null;
   connected: boolean;
   draft: string;
-  failedSends: Map<string, Message>;
+  failedSends: Map<string, OutgoingMessage>;
   hiddenMessageKeys: Set<string>;
   loaded: boolean;
   navigationTarget?: { id: string; key: number };
@@ -52,7 +57,7 @@ interface ChatState {
   opened: boolean;
   latestNavigationKey?: number;
   online: boolean;
-  outgoing: Map<string, Message>;
+  outgoing: Map<string, OutgoingMessage>;
   retryingSendKey?: string;
   selectedDetails?: TaskDetails;
   selectedReply?: Message;
@@ -453,14 +458,15 @@ export function useChat() {
   );
 
   const deliverMessage = useCallback(
-    async (message: Message, assistantSequence: number) => {
+    async (message: OutgoingMessage, assistantSequence: number) => {
       const idempotencyKey = message.idempotencyKey;
       if (!idempotencyKey) return;
       const destination = message.taskId ?? undefined;
       messageSubmitted(idempotencyKey, assistantSequence);
       try {
         await sendMessage({
-          text: message.text,
+          text: message.suggestedReply ? '' : message.text,
+          suggestedReply: message.suggestedReply,
           idempotencyKey,
           taskId: destination,
           replyToMessageId: message.replyToMessageId ?? undefined,
@@ -475,7 +481,21 @@ export function useChat() {
         const failedSends = new Map(current.current.failedSends);
         failedSends.delete(idempotencyKey);
         commit({ failedSends });
-      } catch {
+      } catch (error) {
+        if (
+          message.suggestedReply &&
+          error instanceof RequestError &&
+          error.status === 409
+        ) {
+          const outgoing = new Map(current.current.outgoing);
+          const failedSends = new Map(current.current.failedSends);
+          outgoing.delete(idempotencyKey);
+          failedSends.delete(idempotencyKey);
+          commit({ outgoing, failedSends });
+          messageFailed(idempotencyKey);
+          void controller.current.synchronize();
+          return;
+        }
         messageFailed(idempotencyKey);
         const failedSends = new Map(current.current.failedSends);
         failedSends.set(idempotencyKey, message);
@@ -494,73 +514,100 @@ export function useChat() {
     ],
   );
 
-  const submit = useCallback(async () => {
-    const value = current.current;
-    if (
-      !value.connected ||
-      !value.loaded ||
-      value.syncing ||
-      value.submitting ||
-      pendingFiles.blocked ||
-      (!value.draft.trim() && !pendingFiles.count)
-    )
-      return;
-    const text = value.draft;
-    const attachments = pendingFiles.attachments;
-    const destination = value.selectedTaskId;
-    const assistantSequence = latestAssistantSequence(
-      value.stored,
-      destination,
-    );
-    const idempotencyKey = crypto.randomUUID();
-    const reply = value.selectedReply;
-    const createdAt = new Date().toISOString();
-    const outgoing = new Map(value.outgoing);
-    const message: Message = {
-      source: 'web',
-      originDestinationId: 'web',
-      mainVisible: false,
-      reaction: null,
-      deliveryDestinationIds: [],
-      notificationDestinationIds: [],
-      notify: false,
-      id: `local-${idempotencyKey}`,
-      idempotencyKey,
-      replyToMessageId: reply?.id ?? null,
-      replyTo: reply
-        ? {
-            id: reply.id,
-            sequence: reply.sequence,
-            role: reply.role,
-            textPreview: reply.text.slice(0, 160),
-            taskId: reply.taskId,
-            phase: reply.phase,
-            mainVisible: reply.mainVisible,
-          }
-        : null,
-      version: 0,
-      sequence: Number.MAX_SAFE_INTEGER,
-      createdAt,
-      updatedAt: createdAt,
-      role: 'user',
-      text,
-      metadata: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
-      taskId: destination ?? null,
-      phase: null,
-      attachments,
-      actions: null,
-    };
-    outgoing.set(idempotencyKey, message);
-    commit({
-      draft: '',
-      localSendKey: idempotencyKey,
-      outgoing,
-      selectedReply: undefined,
-      submitting: true,
-    });
-    pendingFiles.clear(destination ?? 'main');
-    await deliverMessage(message, assistantSequence);
-  }, [commit, deliverMessage, pendingFiles]);
+  const submit = useCallback(
+    async (suggestedReply?: SuggestedReplySelection) => {
+      const value = current.current;
+      if (
+        !value.connected ||
+        !value.loaded ||
+        value.syncing ||
+        value.submitting ||
+        (!suggestedReply &&
+          (pendingFiles.blocked ||
+            (!value.draft.trim() && !pendingFiles.count)))
+      )
+        return;
+      const source = suggestedReply
+        ? value.stored.get(suggestedReply.messageId)
+        : undefined;
+      if (
+        suggestedReply &&
+        (!source ||
+          source.role !== 'assistant' ||
+          !visibleInChat(source, value.selectedTaskId) ||
+          !source.suggestedReplies[suggestedReply.index])
+      )
+        return;
+      const text =
+        source && suggestedReply
+          ? source.suggestedReplies[suggestedReply.index]!
+          : value.draft;
+      const attachments = suggestedReply ? [] : pendingFiles.attachments;
+      const destination = value.selectedTaskId;
+      const assistantSequence = latestAssistantSequence(
+        value.stored,
+        destination,
+      );
+      const idempotencyKey = crypto.randomUUID();
+      const reply = suggestedReply ? undefined : value.selectedReply;
+      const createdAt = new Date().toISOString();
+      const outgoing = new Map(value.outgoing);
+      const message: OutgoingMessage = {
+        ...(suggestedReply ? { suggestedReply } : {}),
+        source: 'web',
+        originDestinationId: 'web',
+        mainVisible: false,
+        reaction: null,
+        deliveryDestinationIds: [],
+        notificationDestinationIds: [],
+        notify: false,
+        id: `local-${idempotencyKey}`,
+        idempotencyKey,
+        replyToMessageId: reply?.id ?? null,
+        replyTo: reply
+          ? {
+              id: reply.id,
+              sequence: reply.sequence,
+              role: reply.role,
+              textPreview: reply.text.slice(0, 160),
+              taskId: reply.taskId,
+              phase: reply.phase,
+              mainVisible: reply.mainVisible,
+            }
+          : null,
+        version: 0,
+        sequence: Number.MAX_SAFE_INTEGER,
+        createdAt,
+        updatedAt: createdAt,
+        role: 'user',
+        text,
+        metadata: {
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
+        taskId: destination ?? null,
+        phase: null,
+        attachments,
+        suggestedReplies: [],
+      };
+      outgoing.set(idempotencyKey, message);
+      commit({
+        ...(!suggestedReply ? { draft: '', selectedReply: undefined } : {}),
+        localSendKey: idempotencyKey,
+        outgoing,
+        submitting: true,
+      });
+      if (!suggestedReply) pendingFiles.clear(destination ?? 'main');
+      await deliverMessage(message, assistantSequence);
+    },
+    [commit, deliverMessage, pendingFiles],
+  );
+
+  const selectSuggestedReply = useCallback(
+    (messageId: string, index: number) => {
+      void submit({ messageId, index });
+    },
+    [submit],
+  );
 
   const loadMoreTasks = useCallback(async () => {
     const value = current.current;
@@ -771,11 +818,15 @@ export function useChat() {
         !state.hiddenMessageKeys.has(message.idempotencyKey),
     );
     const latestUser = visible.findLast((message) => message.role === 'user');
+    const latest = visible.at(-1);
+
     return visible.map<MessageView>((message) => {
       const persisted = state.loaded && state.stored.has(message.id);
       const messageKey = message.idempotencyKey ?? message.id;
       const receiptSlot = message.id === latestUser?.id;
       return {
+        suggestedReplies:
+          message === latest ? message.suggestedReplies : undefined,
         failed: state.failedSends.has(messageKey),
         message,
         persisted,
@@ -823,6 +874,7 @@ export function useChat() {
     pendingFiles,
     selectedTask,
     selectChat,
+    selectSuggestedReply,
     synchronize,
     openMainLatest() {
       if (current.current.submitting) return false;

@@ -22,7 +22,7 @@ private enum ChatPreviewData {
             updatedAt: "2026-10-10T00:00:00.000Z", version: 1,
             sequence: index + 1, idempotencyKey: nil, replyToMessageId: nil,
             replyTo: nil, role: sample.0, source: sample.0 == "user" ? "ios" : nil,
-            text: sample.1, attachments: [], actionsEnvelope: nil, taskId: nil,
+            text: sample.1, attachments: [], taskId: nil,
             phase: sample.0 == "assistant" ? "final_answer" : nil)))
     }
     return store

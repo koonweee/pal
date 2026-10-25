@@ -117,7 +117,7 @@ actor FixtureChatService: ChatService {
       updatedAt: "2026-10-10T00:00:00.000Z", version: 1, sequence: sequence,
       idempotencyKey: idempotencyKey, replyToMessageId: nil, replyTo: nil, role: role,
       source: role == "user" ? "ios" : nil, text: text, attachments: attachments,
-      actionsEnvelope: nil, taskId: taskId, phase: role == "assistant" ? "final_answer" : nil)
+      taskId: taskId, phase: role == "assistant" ? "final_answer" : nil)
   }
 
   private static func historyText(

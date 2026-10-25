@@ -1,6 +1,6 @@
 export const firstPartyClients = [
-  { name: 'web', destinationId: 'web', contractVersion: 5 },
-  { name: 'ios', destinationId: 'ios', contractVersion: 5 },
+  { name: 'web', destinationId: 'web', contractVersion: 6 },
+  { name: 'ios', destinationId: 'ios', contractVersion: 6 },
 ] as const;
 
 /**

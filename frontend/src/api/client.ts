@@ -14,6 +14,8 @@ export type SaveInstanceSettings =
   components['schemas']['UpdateInstanceSettingsDto'];
 export type Attachment = components['schemas']['AttachmentResponseDto'];
 export type Message = components['schemas']['MessageResponseDto'];
+export type SuggestedReplySelection =
+  components['schemas']['SuggestedReplySelectionDto'];
 export type ReplySummary =
   components['schemas']['MessageReplySummaryResponseDto'];
 export type HistoryPage = components['schemas']['HistoryPageResponseDto'];
@@ -127,6 +129,7 @@ export function getHistory(
 
 export function sendMessage(input: {
   text: string;
+  suggestedReply?: SuggestedReplySelection;
   idempotencyKey: string;
   taskId?: string;
   replyToMessageId?: string;

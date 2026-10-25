@@ -18,7 +18,7 @@ function message(
   overrides: Partial<Message> = {},
 ): Message {
   return {
-    actions: null,
+    suggestedReplies: [],
     attachments: [],
     createdAt: now,
     deliveryDestinationIds: ['web'],

@@ -66,3 +66,44 @@ it('accepts text-only commentary while validating explicit reply references', ()
       parsePublicResponse(JSON.stringify({ text: 'update', replyTo })),
     ).toThrow();
 });
+
+it('validates suggestions and attaches them only to the final message', () => {
+  const suggestedReplies = ['Just me', 'Two people'];
+  expect(
+    parsePublicResponse(
+      JSON.stringify({
+        text: ['Dinner sounds good.', 'How many people?'],
+        suggestedReplies,
+      }),
+    ),
+  ).toEqual([
+    {
+      text: 'Dinner sounds good.',
+      replyTo: null,
+      attachmentIds: [],
+      files: [],
+    },
+    {
+      text: 'How many people?',
+      replyTo: null,
+      attachmentIds: [],
+      files: [],
+      suggestedReplies,
+    },
+  ]);
+  for (const invalid of [
+    null,
+    'Yes',
+    ['', 'No'],
+    [' Yes ', 'Yes'],
+    ['a', 'b', 'c', 'd'],
+    ['x'.repeat(81)],
+    ['two\nlines'],
+    [7],
+  ])
+    expect(() =>
+      parsePublicResponse(
+        JSON.stringify({ text: 'Choose', suggestedReplies: invalid }),
+      ),
+    ).toThrow();
+});

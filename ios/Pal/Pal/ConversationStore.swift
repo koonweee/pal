@@ -348,7 +348,6 @@ import UIKit
   func attachment(_ id: String) async throws -> Data {
     try await service.attachment(id, download: true)
   }
-  func select(_ action: ChatMessage.Action, message: ChatMessage) async {}
 
   @discardableResult private func mergeMessages(
     _ incoming: [ChatMessage], liveAfter sequence: Int? = nil, presentAllNew: Bool = false

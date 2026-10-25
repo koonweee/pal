@@ -39,6 +39,7 @@ const text = (
   value: string | string[],
   phase?: string,
   replyTo: number | null = null,
+  suggestedReplies: string[] = [],
 ) => [
   {
     type: 'text-start' as const,
@@ -48,7 +49,7 @@ const text = (
   {
     type: 'text-delta' as const,
     id: 'text',
-    delta: JSON.stringify({ text: value, replyTo }),
+    delta: JSON.stringify({ text: value, replyTo, suggestedReplies }),
   },
   {
     type: 'text-end' as const,
@@ -81,7 +82,13 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
       notify: true,
       content: {
         kind: 'message',
-        message: { text: value, replyTo: null, attachmentIds: [], files: [] },
+        message: {
+          text: value,
+          replyTo: null,
+          attachmentIds: [],
+          files: [],
+          suggestedReplies: Array.isArray(value) ? ['Continue', 'Stop'] : [],
+        },
       },
     });
   let mainInputRef = 0;
@@ -194,6 +201,7 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
                             ['Alpha final ALPHA-43', 'Alpha next steps'],
                             'final_answer',
                             mainInputRef,
+                            ['Continue', 'Stop'],
                           ),
                           finish(),
                         ]
@@ -522,6 +530,20 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
     );
     const mainHistory = (await chat.history({})).messages;
     const alphaHistory = (await chat.history({ taskId: alpha.id })).messages;
+    expect(
+      mainHistory.find((m) => m.text === 'Main acknowledgement')
+        ?.suggestedReplies,
+    ).toEqual(['Continue', 'Stop']);
+    expect(
+      mainHistory.find((m) => m.text === 'Starting Alpha')?.suggestedReplies,
+    ).toEqual([]);
+    expect(
+      alphaHistory.find((m) => m.text === 'Alpha next steps')?.suggestedReplies,
+    ).toEqual(['Continue', 'Stop']);
+    expect(
+      alphaHistory.find((m) => m.text === 'Alpha final ALPHA-43')
+        ?.suggestedReplies,
+    ).toEqual([]);
     expect(
       alphaHistory.some(
         (m) => m.text === 'Alpha commentary' && m.phase === 'commentary',

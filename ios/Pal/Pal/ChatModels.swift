@@ -3,10 +3,6 @@ import Foundation
 enum ConversationHistory { static let pageSize = 25 }
 
 struct ChatMessage: Codable, Identifiable, Equatable, Sendable {
-  struct Action: Codable, Identifiable, Equatable, Sendable {
-    let id: String
-    let label: String
-  }
   struct Link: Codable, Equatable, Sendable {
     let label: String
     let url: String
@@ -29,11 +25,6 @@ struct ChatMessage: Codable, Identifiable, Equatable, Sendable {
     let phase: String?
     var mainVisible: Bool? = nil
   }
-  struct ActionsEnvelope: Codable, Equatable, Sendable {
-    let actions: [Action]
-    let state: String
-    let selectedActionId: String?
-  }
 
   let id: String
   let createdAt: String
@@ -47,7 +38,6 @@ struct ChatMessage: Codable, Identifiable, Equatable, Sendable {
   let source: String?
   let text: String
   let attachments: [Attachment]
-  let actionsEnvelope: ActionsEnvelope?
   let taskId: String?
   let phase: String?
   var mainVisible: Bool? = nil
@@ -55,10 +45,8 @@ struct ChatMessage: Codable, Identifiable, Equatable, Sendable {
 
   var format: String { role == "assistant" ? "markdown" : "plain" }
   var attachmentIds: [String] { attachments.map(\.id) }
-  var actions: [Action] { [] }
   var links: [Link] { [] }
   var questionId: String? { nil }
-  var actionState: String? { nil }
   var displayRole: String { role == "user" ? "owner" : role }
 
   static func optimistic(_ submission: MessageSubmission) -> ChatMessage {
@@ -72,7 +60,7 @@ struct ChatMessage: Codable, Identifiable, Equatable, Sendable {
           id: $0, filename: "Photo.jpg", contentType: "image/jpeg", sizeBytes: 0,
           createdAt: "")
       },
-      actionsEnvelope: nil, taskId: submission.taskId, phase: nil)
+      taskId: submission.taskId, phase: nil)
   }
 }
 

@@ -14,6 +14,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Suggested replies](suggested-replies.md) | Done | Agent-selected reply pills, atomic selection, synchronized removal, and ordinary optimistic sends. |
 | [PWA profile icons](pwa-profile-icons.md) | Done | Direct profile PNGs for PWA installation and Apple touch icons; development rollout. |
 | [Agent profile favicon](agent-profile-favicon.md) | Done | Browser favicon follows the saved agent image and accent-colored donut fallback. |
 | [Markdown list guidance](markdown-list-guidance.md) | Done | Shared Main/Task Markdown list syntax, validated and deployed to dev/production. |

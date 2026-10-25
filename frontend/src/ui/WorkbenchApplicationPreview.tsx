@@ -33,7 +33,12 @@ export const workbenchDevices = {
 
 export type WorkbenchDevice = keyof typeof workbenchDevices;
 export type ConversationScene =
-  'messages' | 'empty' | 'loading' | 'working' | 'offline' | 'error';
+  | 'messages'
+  | 'empty'
+  | 'loading'
+  | 'working'
+  | 'offline'
+  | 'error';
 export type ComposerScene = 'ready' | 'reply' | 'files' | 'error';
 export type TaskScene = 'populated' | 'empty' | 'error' | 'loading';
 
@@ -188,6 +193,7 @@ function useWorkbenchChat(
     selectChat(id) {
       setSelectedTaskId(id);
     },
+    selectSuggestedReply() {},
     selectReply(message) {
       setSelectedReply(message);
     },

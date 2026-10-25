@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  Inject,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, Get, Inject, Post, Query } from '@nestjs/common';
 import {
   ApiCreatedResponse,
   ApiDefaultResponse,
@@ -17,7 +9,7 @@ import {
 import { ChatService } from '../../chat/chat.service.js';
 import { ChatCoordinatorService } from '../../application/chat-coordinator.service.js';
 import { DestinationService } from '../../delivery/destination.service.js';
-import { HistoryQuery, SelectActionDto, SendMessageDto } from './chat.dto.js';
+import { HistoryQuery, SendMessageDto } from './chat.dto.js';
 import {
   ApplicationErrorResponseDto,
   HistoryPageResponseDto,
@@ -59,13 +51,5 @@ export class FirstPartyChatController {
       source: destination.id,
       originDestinationId: destination.id,
     });
-  }
-
-  @Post('actions')
-  @HttpCode(200)
-  @ApiOperation({ operationId: 'selectMessageAction' })
-  @ApiOkResponse({ type: MessageAcceptedResponseDto })
-  select(@Body() input: SelectActionDto) {
-    return this.chat.selectAction(input);
   }
 }

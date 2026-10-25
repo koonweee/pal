@@ -659,49 +659,6 @@
         ],
         "type": "object"
       },
-      "MessageActionResponseDto": {
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "label"
-        ],
-        "type": "object"
-      },
-      "MessageActionsResponseDto": {
-        "properties": {
-          "actions": {
-            "items": {
-              "$ref": "#/components/schemas/MessageActionResponseDto"
-            },
-            "type": "array"
-          },
-          "selectedActionId": {
-            "nullable": true,
-            "type": "string"
-          },
-          "state": {
-            "enum": [
-              "available",
-              "selected",
-              "disabled"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "actions",
-          "state",
-          "selectedActionId"
-        ],
-        "type": "object"
-      },
       "MessageEventResponseDto": {
         "properties": {
           "event": {
@@ -790,15 +747,6 @@
       },
       "MessageResponseDto": {
         "properties": {
-          "actions": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/MessageActionsResponseDto"
-              }
-            ],
-            "nullable": true,
-            "type": "object"
-          },
           "attachments": {
             "items": {
               "$ref": "#/components/schemas/AttachmentResponseDto"
@@ -883,6 +831,13 @@
             "nullable": true,
             "type": "string"
           },
+          "suggestedReplies": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 3,
+            "type": "array"
+          },
           "taskId": {
             "format": "uuid",
             "nullable": true,
@@ -920,7 +875,7 @@
           "text",
           "metadata",
           "attachments",
-          "actions",
+          "suggestedReplies",
           "taskId",
           "phase"
         ],
@@ -1268,30 +1223,6 @@
         },
         "type": "object"
       },
-      "SelectActionDto": {
-        "properties": {
-          "actionId": {
-            "maxLength": 200,
-            "minLength": 1,
-            "type": "string"
-          },
-          "idempotencyKey": {
-            "maxLength": 200,
-            "minLength": 1,
-            "type": "string"
-          },
-          "messageId": {
-            "format": "uuid",
-            "type": "string"
-          }
-        },
-        "required": [
-          "idempotencyKey",
-          "messageId",
-          "actionId"
-        ],
-        "type": "object"
-      },
       "SelectLoginAccountDto": {
         "properties": {
           "accountId": {
@@ -1334,11 +1265,15 @@
             "format": "uuid",
             "type": "string"
           },
+          "suggestedReply": {
+            "$ref": "#/components/schemas/SuggestedReplySelectionDto"
+          },
           "taskId": {
             "format": "uuid",
             "type": "string"
           },
           "text": {
+            "default": "",
             "maxLength": 100000,
             "type": "string"
           }
@@ -1361,6 +1296,23 @@
         },
         "required": [
           "code"
+        ],
+        "type": "object"
+      },
+      "SuggestedReplySelectionDto": {
+        "properties": {
+          "index": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "messageId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "messageId",
+          "index"
         ],
         "type": "object"
       },
@@ -1681,52 +1633,10 @@
     "contact": {},
     "description": "Private single-owner HTTP and SSE contract for canonical Pal clients.",
     "title": "Pal First-party API",
-    "version": "5"
+    "version": "6"
   },
   "openapi": "3.0.0",
   "paths": {
-    "/chat/actions": {
-      "post": {
-        "operationId": "selectMessageAction",
-        "parameters": [],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SelectActionDto"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MessageAcceptedResponseDto"
-                }
-              }
-            },
-            "description": ""
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
-                }
-              }
-            },
-            "description": ""
-          }
-        },
-        "summary": "",
-        "tags": [
-          "chat"
-        ]
-      }
-    },
     "/chat/history": {
       "get": {
         "operationId": "getChatHistory",

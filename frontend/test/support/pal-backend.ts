@@ -45,6 +45,7 @@ let releaseAcceptance: (() => void) | undefined;
 let releaseHistory: (() => void) | undefined;
 let submissions: {
   text: string;
+  suggestedReply?: { messageId: string; index: number };
   idempotencyKey: string;
   attachmentIds: string[];
   taskId?: string;
@@ -78,7 +79,7 @@ function message(text: string, role: Message['role'] = 'assistant'): Message {
     taskId: null,
     phase: role === 'assistant' ? 'final_answer' : null,
     attachments: [],
-    actions: null,
+    suggestedReplies: [],
   };
 }
 function emit(event: string, data: object) {
@@ -256,10 +257,21 @@ const server = createServer(async (request, response) => {
     const existing = rows.find(
       (candidate) => candidate.idempotencyKey === input.idempotencyKey,
     );
+    const suggestionSource = input.suggestedReply
+      ? rows.find((row) => row.id === input.suggestedReply!.messageId)
+      : undefined;
+    const suggestionText =
+      suggestionSource?.suggestedReplies[input.suggestedReply?.index ?? -1];
+    if (!existing && input.suggestedReply && !suggestionText) {
+      json(response, 409, {
+        message: 'Suggested reply is no longer available.',
+      });
+      return;
+    }
     const row =
       existing ??
       ({
-        ...message(input.text, 'user'),
+        ...message(suggestionText ?? input.text, 'user'),
         createdAt,
         updatedAt: createdAt,
         idempotencyKey: input.idempotencyKey,
@@ -298,16 +310,26 @@ const server = createServer(async (request, response) => {
       taskRows.push(task);
       emit('task.added', { event: 'task.added', task });
     }
+    const persist = () => {
+      if (existing) return;
+      if (suggestionSource)
+        publish({
+          ...suggestionSource,
+          suggestedReplies: [],
+          version: suggestionSource.version + 1,
+        });
+      publish(row);
+    };
     if (holdNextSend) {
       holdNextSend = false;
       await new Promise<void>((resolve) => {
         releasePersistence = resolve;
       });
-      if (!existing) publish(row);
+      persist();
       await new Promise<void>((resolve) => {
         releaseAcceptance = resolve;
       });
-    } else if (!existing) publish(row);
+    } else persist();
     if (failNextSend) {
       failNextSend = false;
       json(response, 503, {
