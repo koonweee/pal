@@ -157,6 +157,7 @@ function useWorkbenchChat(
     localSendKey: undefined,
     messages,
     opened: true,
+    async synchronize() {},
     openMainLatest() {
       setSelectedTaskId(undefined);
       return true;

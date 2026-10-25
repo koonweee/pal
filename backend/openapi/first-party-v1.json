@@ -1586,6 +1586,34 @@
         ],
         "type": "object"
       },
+      "WebPushBadgeDto": {
+        "properties": {
+          "count": {
+            "type": "number"
+          },
+          "generation": {
+            "type": "number"
+          },
+          "installationId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "revision": {
+            "type": "number"
+          },
+          "through": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "installationId",
+          "generation",
+          "count",
+          "through",
+          "revision"
+        ],
+        "type": "object"
+      },
       "WebPushConfigDto": {
         "properties": {
           "available": {
@@ -1626,6 +1654,24 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "WebPushSeenDto": {
+        "properties": {
+          "generation": {
+            "minimum": 1,
+            "type": "number"
+          },
+          "through": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "generation",
+          "through"
         ],
         "type": "object"
       }
@@ -2687,6 +2733,96 @@
         ],
         "responses": {
           "204": {
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/notifications/web/installations/{id}/badge": {
+      "get": {
+        "operationId": "getWebPushBadge",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebPushBadgeDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "notifications"
+        ]
+      },
+      "put": {
+        "operationId": "acknowledgeWebPushBadge",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebPushSeenDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebPushBadgeDto"
+                }
+              }
+            },
             "description": ""
           },
           "default": {

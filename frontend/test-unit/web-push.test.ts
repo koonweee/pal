@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import {
+  getWebPushBadge,
   disableWebPush,
   getWebPushConfig,
   registerWebPush,
@@ -8,6 +9,7 @@ import {
 import { reconcileWebPush, useWebPush } from '../src/pwa/web-push';
 
 vi.mock('../src/api/client', () => ({
+  getWebPushBadge: vi.fn(),
   getWebPushConfig: vi.fn(),
   registerWebPush: vi.fn(),
   disableWebPush: vi.fn(),
@@ -50,6 +52,13 @@ it('opts in explicitly, reconciles on launch, and disables without a client reco
   });
   vi.mocked(registerWebPush).mockResolvedValue({ id: 'installation' });
   vi.mocked(disableWebPush).mockResolvedValue(undefined);
+  vi.mocked(getWebPushBadge).mockResolvedValue({
+    installationId: 'installation',
+    generation: 1,
+    count: 0,
+    through: 0,
+    revision: 0,
+  });
   const { result, unmount } = renderHook(useWebPush);
   try {
     await act(() => reconcileWebPush(registration));

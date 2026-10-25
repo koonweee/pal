@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 
+import { isBadgeSnapshot, updateBadge } from './badges';
 import { clientsClaim } from 'workbox-core';
 import {
   cleanupOutdatedCaches,
@@ -25,6 +26,16 @@ registerRoute(
 );
 
 self.addEventListener('message', (event) => {
+  if (event.data?.type === 'BADGE_STATE' && isBadgeSnapshot(event.data.badge))
+    event.waitUntil(
+      updateBadge(self.navigator, event.data.badge, 'page').catch(
+        () => undefined,
+      ),
+    );
+  if (event.data?.type === 'BADGE_DISABLED')
+    event.waitUntil(
+      updateBadge(self.navigator, undefined, 'disable').catch(() => undefined),
+    );
   if (
     event.data === 'SKIP_WAITING' ||
     (typeof event.data === 'object' && event.data?.type === 'SKIP_WAITING')
@@ -36,21 +47,33 @@ clientsClaim();
 
 self.addEventListener('push', (event) => {
   const show = async () => {
-    let payload: { title?: unknown; body?: unknown; tag?: unknown } = {};
+    let payload: {
+      title?: unknown;
+      body?: unknown;
+      tag?: unknown;
+      badge?: unknown;
+    } = {};
     try {
       const data: unknown = event.data?.json();
       if (data && typeof data === 'object') payload = data;
     } catch {
       /* visible fallback */
     }
-    await self.registration.showNotification(
-      typeof payload.title === 'string' ? payload.title : 'Pal',
-      {
-        body: typeof payload.body === 'string' ? payload.body : 'New message',
-        tag: typeof payload.tag === 'string' ? payload.tag : undefined,
-        icon: '/icons/pal-production-192.png',
-      },
-    );
+    await Promise.all([
+      isBadgeSnapshot(payload.badge)
+        ? updateBadge(self.navigator, payload.badge, 'push').catch(
+            () => undefined,
+          )
+        : Promise.resolve(),
+      self.registration.showNotification(
+        typeof payload.title === 'string' ? payload.title : 'Pal',
+        {
+          body: typeof payload.body === 'string' ? payload.body : 'New message',
+          tag: typeof payload.tag === 'string' ? payload.tag : undefined,
+          icon: '/icons/pal-production-192.png',
+        },
+      ),
+    ]);
   };
   event.waitUntil(show());
 });

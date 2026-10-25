@@ -13,6 +13,8 @@ import { useInstanceSettings } from '../instance-settings/InstanceSettingsProvid
 import { openPalEventStream } from '../api/events';
 import { useAgentActivity } from '../activity/use-agent-activity';
 import { usePendingFiles } from '../attachments/use-pending-files';
+import { captureWebPushBadge, hasWebPushInstallation } from '../pwa/web-push';
+import type { WebPushBadge } from '../api/client';
 import { useReloadSafety } from '../pwa/ReloadSafetyProvider';
 import {
   inMainChat,
@@ -36,6 +38,7 @@ export interface MessageView {
 }
 
 interface ChatState {
+  badge?: WebPushBadge;
   loginRevision?: number;
   before: number | null;
   connected: boolean;
@@ -297,6 +300,7 @@ export function useChat() {
           )
         : undefined;
     try {
+      const badge = await captureWebPushBadge(abort.signal);
       const fresh = new Map<string, Message>();
       let page = await getHistory(
         undefined,
@@ -335,6 +339,7 @@ export function useChat() {
           if (message.sequence < oldest) fresh.delete(id);
       historyRetry.current.cancel(true);
       commit({
+        badge: selectedTaskId ? undefined : badge,
         before: crossedBoundary && oldest !== undefined ? oldest : page.before,
         historyError: undefined,
         loaded: true,
@@ -660,6 +665,13 @@ export function useChat() {
           event.event === 'message.updated'
         ) {
           if (
+            hasWebPushInstallation() &&
+            event.message.notificationDestinationIds.includes('web')
+          ) {
+            if (current.current.selectedTaskId) void captureWebPushBadge();
+            else void controller.current.synchronize();
+          }
+          if (
             event.message.role === 'assistant' &&
             visibleInChat(event.message, current.current.selectedTaskId)
           )
@@ -811,6 +823,7 @@ export function useChat() {
     pendingFiles,
     selectedTask,
     selectChat,
+    synchronize,
     openMainLatest() {
       if (current.current.submitting) return false;
       const switching = current.current.selectedTaskId !== undefined;

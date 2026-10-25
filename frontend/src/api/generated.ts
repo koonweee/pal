@@ -383,6 +383,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/notifications/web/installations/{id}/badge': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getWebPushBadge'];
+    put: operations['acknowledgeWebPushBadge'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/preferences': {
     parameters: {
       query?: never;
@@ -919,6 +935,14 @@ export interface components {
       status?: 'active' | 'retired';
       topic?: string;
     };
+    WebPushBadgeDto: {
+      count: number;
+      generation: number;
+      /** Format: uuid */
+      installationId: string;
+      revision: number;
+      through: number;
+    };
     WebPushConfigDto: {
       available: boolean;
       publicKey: string | null;
@@ -930,6 +954,10 @@ export interface components {
     WebPushRegistrationDto: {
       /** Format: uuid */
       id: string;
+    };
+    WebPushSeenDto: {
+      generation: number;
+      through: number;
     };
   };
   responses: never;
@@ -1692,6 +1720,68 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApplicationErrorResponseDto'];
+        };
+      };
+    };
+  };
+  getWebPushBadge: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WebPushBadgeDto'];
+        };
+      };
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApplicationErrorResponseDto'];
+        };
+      };
+    };
+  };
+  acknowledgeWebPushBadge: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WebPushSeenDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WebPushBadgeDto'];
+        };
       };
       default: {
         headers: {

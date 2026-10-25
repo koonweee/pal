@@ -11,6 +11,13 @@ import {
   type NotificationIntentState,
 } from '../database/schema.js';
 
+/** Shared ordering boundary for publication, registration, and read receipts. */
+export function lockNotificationPublications(tx: Transaction) {
+  return tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended('notification-publication', 0))`,
+  );
+}
+
 export type NotificationIntent = typeof notificationIntents.$inferSelect;
 
 @Injectable()
@@ -26,7 +33,7 @@ export class NotificationRepository {
     );
   }
 
-  enqueue(
+  async enqueue(
     messageId: string,
     destinationIds: string[],
     tx: Transaction,
@@ -36,6 +43,9 @@ export class NotificationRepository {
       this.configured.has(id),
     );
     if (!eligible.length) return Promise.resolve([]);
+    // Serialize publication positions with installation baselines and read receipts.
+    // The transaction lock makes sequence order match commit visibility.
+    await lockNotificationPublications(tx);
     return tx
       .insert(notificationIntents)
       .values(

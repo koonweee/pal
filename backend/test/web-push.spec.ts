@@ -207,8 +207,15 @@ describe('Web Push', () => {
         );
       await dispatcher.drain();
       expect(send).toHaveBeenCalledTimes(2);
-      expect(JSON.parse(send.mock.calls[0][1])).toMatchObject({
+      expect(
+        JSON.parse(
+          send.mock.calls.find(
+            ([installation]) => installation.id === first.id,
+          )![1],
+        ),
+      ).toMatchObject({
         body: 'Ready',
+        badge: { installationId: first.id, generation: 1, count: 1 },
       });
       const rows = (
         await fixture.database.pool.query(
@@ -396,6 +403,101 @@ describe('Web Push', () => {
           )
         ).rows,
       ).toEqual([{ enabled: false }]);
+    } finally {
+      await fixture.close();
+    }
+  });
+
+  it('counts unseen publications independently of transport and acknowledges only the captured installation boundary', async () => {
+    const fixture = await startTestApp({ config });
+    try {
+      const server = fixture.app.getHttpServer();
+      const repository = fixture.app.get(WebPushRepository);
+      const chat = fixture.app.get(ChatService);
+      await chat.publish({
+        role: 'assistant',
+        text: 'Before opt-in',
+        notify: true,
+      });
+      const phone = await repository.register(subscription('phone'));
+      const laptop = await repository.register(subscription('laptop'));
+      const badgePath =
+        '/notifications/web/installations/' + phone.id + '/badge';
+      expect(
+        (await request(server).get(badgePath).expect(200)).body.count,
+      ).toBe(0);
+      const message = await chat.publish({
+        role: 'assistant',
+        text: 'Ready',
+        notify: true,
+      });
+      await chat.publish({ role: 'assistant', text: 'Quiet', notify: false });
+      await chat.react(
+        {
+          messageRef: message.sequence,
+          emoji: '✅',
+          destinationIds: [],
+          notify: true,
+        },
+        'badge-reaction',
+      );
+      const before = (await request(server).get(badgePath).expect(200)).body;
+      expect(before.count).toBe(2);
+      expect(await repository.badge(phone.id)).toEqual(before);
+      // An offline/expired push remains an unseen publication.
+      await fixture.database.pool.query(
+        "update notification_intents set state = 'cancelled', expires_at = now() - interval '1 second' where destination_id = 'web'",
+      );
+      expect((await repository.badge(phone.id)).count).toBe(2);
+      await chat.publish({
+        role: 'assistant',
+        text: 'Arrived while opening',
+        notify: true,
+      });
+      const receipt = { generation: phone.generation, through: before.through };
+      const after = (
+        await request(server).put(badgePath).send(receipt).expect(200)
+      ).body;
+      expect(after.count).toBe(1);
+      expect(after.revision).toBeGreaterThan(before.revision);
+      expect(
+        (await request(server).put(badgePath).send(receipt).expect(200)).body,
+      ).toEqual(after);
+      expect((await repository.badge(laptop.id)).count).toBe(3);
+      await request(server)
+        .put(badgePath)
+        .send({ ...receipt, through: after.through + 1 })
+        .expect(409);
+      await request(server)
+        .put(badgePath)
+        .send({ ...receipt, through: -1 })
+        .expect(400);
+      await request(server)
+        .put(badgePath)
+        .send(receipt)
+        .set('origin', 'https://evil.test')
+        .expect(403);
+      await repository.disable(phone.id);
+      await request(server).get(badgePath).expect(404);
+      const replacement = await repository.register(subscription('phone'));
+      expect(replacement.generation).toBe(2);
+      expect((await repository.badge(phone.id)).count).toBe(0);
+      await request(server).put(badgePath).send(receipt).expect(409);
+      // Concurrent publications commit in the same order as their badge positions.
+      await Promise.all(
+        ['One', 'Two'].map((text) =>
+          chat.publish({ role: 'assistant', text, notify: true }),
+        ),
+      );
+      const final = await repository.badge(phone.id);
+      expect(final.count).toBe(2);
+      const cleared = await repository.badge(phone.id, {
+        generation: 2,
+        through: final.through,
+      });
+      expect(cleared.count).toBe(0);
+      expect(cleared.revision).toBeGreaterThan(final.revision);
+      expect((await repository.badge(laptop.id)).count).toBe(5);
     } finally {
       await fixture.close();
     }

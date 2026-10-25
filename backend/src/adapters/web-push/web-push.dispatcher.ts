@@ -91,6 +91,7 @@ export class WebPushDispatcher
             message.text,
             intent.id,
             intent.reaction ?? undefined,
+            await this.repository.badge(installation.id),
           ),
         );
         if (outcome.kind === 'invalid-registration')

@@ -37,6 +37,10 @@ export class WebPushService {
     return { id: row.id };
   }
 
+  badge(id: string, seen?: { generation: number; through: number }) {
+    return this.repository.badge(id, seen);
+  }
+
   async disable(id: string) {
     await this.repository.disable(id);
   }

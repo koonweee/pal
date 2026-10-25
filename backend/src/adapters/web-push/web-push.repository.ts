@@ -1,17 +1,29 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, lte, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, lte, sql } from 'drizzle-orm';
 import {
   DatabaseService,
   type Transaction,
 } from '../../database/database.service.js';
+import { ApplicationError } from '../../application/contracts/errors.js';
 import { notificationIntents } from '../../database/schema.js';
 import {
   webPushDeliveries,
   webPushInstallations,
 } from '../../database/notification.schema.js';
-import type { NotificationIntent } from '../../notifications/notification.repository.js';
+import {
+  lockNotificationPublications,
+  type NotificationIntent,
+} from '../../notifications/notification.repository.js';
 
 export type WebPushInstallation = typeof webPushInstallations.$inferSelect;
+export interface WebPushBadge {
+  installationId: string;
+  generation: number;
+  count: number;
+  through: number;
+  revision: number;
+}
+
 export type WebPushDelivery = typeof webPushDeliveries.$inferSelect;
 
 @Injectable()
@@ -38,7 +50,10 @@ export class WebPushRepository {
         existing.auth === input.keys.auth
       )
         return existing;
+      await lockNotificationPublications(tx);
+      const through = await this.latestSequence(tx);
       const values = {
+        seenSequence: through,
         endpoint: input.endpoint,
         p256dh: input.keys.p256dh,
         auth: input.keys.auth,
@@ -56,6 +71,73 @@ export class WebPushRepository {
         })
         .returning();
       return row;
+    });
+  }
+
+  private async latestSequence(tx: Transaction) {
+    const [row] = await tx
+      .select({
+        through: sql<number>`coalesce(max(${notificationIntents.sequence}), 0)::float8`,
+      })
+      .from(notificationIntents)
+      .where(eq(notificationIntents.destinationId, 'web'));
+    return row.through;
+  }
+
+  badge(
+    id: string,
+    seen?: { generation: number; through: number },
+  ): Promise<WebPushBadge> {
+    return this.database.transaction(async (tx) => {
+      await lockNotificationPublications(tx);
+      const [installation] = await tx
+        .select()
+        .from(webPushInstallations)
+        .where(eq(webPushInstallations.id, id))
+        .for('update');
+      if (!installation?.enabled)
+        throw new ApplicationError(
+          'not_found',
+          'Notification installation is unavailable',
+        );
+      const through = Math.max(
+        await this.latestSequence(tx),
+        installation.seenSequence,
+      );
+      if (
+        seen &&
+        (seen.generation !== installation.generation || seen.through > through)
+      )
+        throw new ApplicationError(
+          'conflict',
+          'Notification view is out of date',
+        );
+      const seenSequence = Math.max(
+        installation.seenSequence,
+        seen?.through ?? 0,
+      );
+      if (seenSequence !== installation.seenSequence)
+        await tx
+          .update(webPushInstallations)
+          .set({ seenSequence, updatedAt: new Date() })
+          .where(eq(webPushInstallations.id, id));
+      const [row] = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(notificationIntents)
+        .where(
+          and(
+            eq(notificationIntents.destinationId, 'web'),
+            gt(notificationIntents.sequence, seenSequence),
+          ),
+        );
+      return {
+        installationId: id,
+        generation: installation.generation,
+        count: row.count,
+        through,
+        // Both positions only advance within an installation generation.
+        revision: through + seenSequence,
+      };
     });
   }
 

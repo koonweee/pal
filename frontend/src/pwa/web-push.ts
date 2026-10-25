@@ -1,5 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import {
+  acknowledgeWebPushBadge,
+  getWebPushBadge,
+  type WebPushBadge,
   disableWebPush,
   getWebPushConfig,
   registerWebPush,
@@ -15,6 +18,7 @@ interface NotificationState {
   enabled: boolean;
   busy: boolean;
   denied: boolean;
+  installationId?: string;
   error?: string;
 }
 let state: NotificationState = {
@@ -25,7 +29,7 @@ let state: NotificationState = {
   denied: false,
 };
 let registration: ServiceWorkerRegistration | undefined;
-let installationId: string | undefined;
+let registrationEpoch = 0;
 let publicKey: string | undefined;
 const listeners = new Set<() => void>();
 function update(patch: Partial<NotificationState>) {
@@ -52,7 +56,59 @@ async function save(subscription: PushSubscription) {
     endpoint: subscription.endpoint,
     keys: { p256dh: keys.p256dh, auth: keys.auth },
   });
-  installationId = result.id;
+  update({ installationId: result.id });
+  await captureWebPushBadge();
+}
+
+function sendBadgeMessage(message: object) {
+  const worker = registration?.active;
+  worker?.postMessage(message);
+}
+
+export function hasWebPushInstallation() {
+  return state.enabled && state.installationId !== undefined;
+}
+
+/** Capture before reading history so its boundary cannot include unseen arrivals. */
+export async function captureWebPushBadge(signal?: AbortSignal) {
+  const id = state.installationId;
+  const epoch = registrationEpoch;
+  if (!id || !state.enabled) return undefined;
+  try {
+    const timeout = AbortSignal.timeout(2000);
+    const badge = await getWebPushBadge(
+      id,
+      signal ? AbortSignal.any([signal, timeout]) : timeout,
+    );
+    if (
+      registrationEpoch !== epoch ||
+      state.installationId !== id ||
+      !state.enabled
+    )
+      return undefined;
+    sendBadgeMessage({ type: 'BADGE_STATE', badge });
+    return badge;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function markWebPushBadgeSeen(badge: WebPushBadge) {
+  if (state.installationId !== badge.installationId || !state.enabled)
+    return true;
+  const epoch = registrationEpoch;
+  try {
+    const next = await acknowledgeWebPushBadge(badge);
+    if (
+      registrationEpoch === epoch &&
+      state.installationId === badge.installationId &&
+      state.enabled
+    )
+      sendBadgeMessage({ type: 'BADGE_STATE', badge: next });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Reads the registration owned by usePwaLifecycle; never registers a worker. */
@@ -71,6 +127,11 @@ export async function reconcileWebPush(value: ServiceWorkerRegistration) {
       denied: Notification.permission === 'denied',
     });
     if (subscription && config.available) await save(subscription);
+    else {
+      registrationEpoch++;
+      update({ installationId: undefined });
+      sendBadgeMessage({ type: 'BADGE_DISABLED' });
+    }
   } catch (error) {
     report(error);
   } finally {
@@ -117,9 +178,10 @@ async function disable() {
       (await registration.pushManager.getSubscription())
     )
       throw new Error('Could not disable notifications. Please try again.');
-    update({ enabled: false });
-    const id = installationId;
-    installationId = undefined;
+    const id = state.installationId;
+    registrationEpoch++;
+    update({ enabled: false, installationId: undefined });
+    sendBadgeMessage({ type: 'BADGE_DISABLED' });
     // Successful browser revocation is sufficient to stop alerts. A rejected
     // endpoint is also removed by backend delivery if cleanup cannot reach Pal.
     if (id) await disableWebPush(id).catch(() => undefined);

@@ -1,3 +1,4 @@
+import { useNotificationBadge } from '../pwa/use-notification-badge';
 import { SecureEntryUpdates } from '../login/SecureEntryCard';
 import { Alert, Button } from '@mantine/core';
 import { useReducedMotion } from '@mantine/hooks';
@@ -110,7 +111,13 @@ function TypingIndicator() {
   );
 }
 
-export function Conversation({ chat }: { chat: ChatController }) {
+export function Conversation({
+  chat,
+  active = true,
+}: {
+  chat: ChatController;
+  active?: boolean;
+}) {
   const secureEntryUpdates = useMemo(
     () => ({ revision: chat.loginRevision ?? 0, connected: chat.connected }),
     [chat.loginRevision, chat.connected],
@@ -122,6 +129,18 @@ export function Conversation({ chat }: { chat: ChatController }) {
   const [showLatest, setShowLatest] = useState(false);
   const [historyPositioned, setHistoryPositioned] = useState(false);
   const [scrollMargin, setScrollMargin] = useState(0);
+  useNotificationBadge(
+    chat.badge,
+    active &&
+      !chat.selectedTaskId &&
+      chat.loaded &&
+      !chat.syncing &&
+      !chat.historyError &&
+      historyPositioned &&
+      !showLatest &&
+      !chat.navigationTarget,
+    history,
+  );
   const [highlightedMessage, setHighlightedMessage] = useState<string>();
   const previousLoaded = useRef(false);
   const handledLocalSendKey = useRef(chat.localSendKey);

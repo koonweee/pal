@@ -322,6 +322,7 @@ export const notificationIntents = pgTable(
   'notification_intents',
   {
     ...identity(),
+    sequence: bigserial('sequence', { mode: 'number' }).notNull().unique(),
     messageId: uuid('message_id')
       .notNull()
       .references(() => messages.id, { onDelete: 'cascade' }),
@@ -355,6 +356,10 @@ export const notificationIntents = pgTable(
       t.messageId,
       t.destinationId,
       t.messageVersion,
+    ),
+    index('notification_intent_publication_idx').on(
+      t.destinationId,
+      t.sequence,
     ),
     index('notification_intent_dispatch_idx').on(
       t.destinationId,

@@ -1,3 +1,4 @@
+import { useWebPush } from './pwa/web-push';
 import { useNotificationNavigation } from './pwa/use-notification-navigation';
 import { Drawer } from '@mantine/core';
 import { useEffect, useRef, useState } from 'react';
@@ -29,6 +30,11 @@ export function PlaygroundShellView({
   const [desktopOpen, setDesktopOpen] = useState(false);
   const [fileDragging, setFileDragging] = useState(false);
   const [notificationPending, setNotificationPending] = useState(false);
+  const { installationId } = useWebPush();
+  const synchronize = chat.synchronize;
+  useEffect(() => {
+    if (installationId && synchronize) void synchronize();
+  }, [installationId, synchronize]);
   useNotificationNavigation(() => setNotificationPending(true));
   useEffect(() => {
     if (!notificationPending || chat.submitting) return;
@@ -87,7 +93,10 @@ export function PlaygroundShellView({
               }
             }}
           >
-            <Conversation chat={chat} />
+            <Conversation
+              chat={chat}
+              active={!threadOpen && !desktopOpen && !preferencesOpen}
+            />
             <Composer chat={chat} />
           </div>
         </div>

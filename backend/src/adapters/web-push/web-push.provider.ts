@@ -2,7 +2,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import webPush from 'web-push';
 import { notificationPreview } from '../../notifications/notification-preview.js';
-import type { WebPushInstallation } from './web-push.repository.js';
+import type {
+  WebPushBadge,
+  WebPushInstallation,
+} from './web-push.repository.js';
 import { validateSubscription } from './web-push.policy.js';
 
 export type WebPushOutcome =
@@ -15,6 +18,7 @@ export function webPushPayload(
   text: string,
   intentId: string,
   reaction?: string,
+  badge?: WebPushBadge,
 ) {
   const plain = notificationPreview(text, reaction);
   const full = Array.from(plain || 'New message');
@@ -23,6 +27,7 @@ export function webPushPayload(
     title,
     body: chars.join('') + (full.length > chars.length ? '…' : ''),
     tag: intentId,
+    badge,
   };
   // Leaves room in a 4096-byte push for aes128gcm framing.
   while (

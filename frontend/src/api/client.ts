@@ -394,6 +394,24 @@ export function registerWebPush(
     }),
   );
 }
+export type WebPushBadge = components['schemas']['WebPushBadgeDto'];
+export function getWebPushBadge(id: string, signal?: AbortSignal) {
+  return unwrap(
+    client.GET('/notifications/web/installations/{id}/badge', {
+      params: { path: { id } },
+      signal: requestSignal(signal),
+    }),
+  );
+}
+export function acknowledgeWebPushBadge(badge: WebPushBadge) {
+  return unwrap(
+    client.PUT('/notifications/web/installations/{id}/badge', {
+      params: { path: { id: badge.installationId } },
+      body: { generation: badge.generation, through: badge.through },
+      signal: requestSignal(),
+    }),
+  );
+}
 export function disableWebPush(id: string) {
   return unwrap(
     client.DELETE('/notifications/web/installations/{id}', {

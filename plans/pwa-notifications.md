@@ -22,7 +22,9 @@ Deliver Main-requested alerts to multiple active PWA/browser installations throu
 
 Implementation defaults: explicit opt-in, no historical replay to newly enabled subscriptions, at most four send attempts, and a five-minute publication-to-send deadline. These are host policies, not user/model settings.
 
-Deferred: device management lists, remote revocation, physical-device pairing, foreground suppression/presence tracking, badges, notification action buttons, per-device content preferences, background `pushsubscriptionchange` handling, and additional browser acceptance requirements.
+Deferred: device management lists, remote revocation, physical-device pairing, foreground suppression/presence tracking, notification action buttons, per-device content preferences, background `pushsubscriptionchange` handling, and additional browser acceptance requirements.
+
+Per-installation notification counts and badge acknowledgment are specified in [PWA Notification Badges](pwa-badges.md).
 
 Subscription reconciliation runs when the app opens. A subscription that expires or changes while the app remains closed may stop receiving alerts until the next launch. If the browser has no subscription, enabling again requires an explicit user action.
 

@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
   check,
   integer,
@@ -51,6 +52,9 @@ export const webPushInstallations = pgTable(
     p256dh: text('p256dh').notNull(),
     auth: text('auth').notNull(),
     generation: integer('generation').notNull().default(1),
+    seenSequence: bigint('seen_sequence', { mode: 'number' })
+      .notNull()
+      .default(0),
     enabled: boolean('enabled').notNull().default(true),
     activatedAt: timestamp('activated_at', { withTimezone: true, precision: 3 })
       .notNull()

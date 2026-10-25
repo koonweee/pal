@@ -176,6 +176,13 @@
       "when": 1792774015944,
       "tag": "0024_exceptional_login_picker",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792907151756,
+      "tag": "0025_pwa_badges",
+      "breakpoints": true
     }
   ]
 }
