@@ -48,3 +48,7 @@ Frontend TypeScript, UI architecture, and unused-code checks pass. The shared-ap
 ## Overall Exit Criteria
 
 The focused browser scenario and frontend checks pass. Architecture documentation describes favicon ownership and behavior. Changes are committed locally.
+
+## Deployment
+
+Development's staged PWA and production `pal.sf.kw0.dev` run the favicon behavior from source `27133b5`. Live browser checks confirm each uses its saved profile; production backend/PWA release identity is `27133b5` with API contract 5. All 10 production PWA checks pass. The production rollout preserves the execution desktop and dependent services.
