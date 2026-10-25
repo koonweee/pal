@@ -3,6 +3,7 @@ import { ArrowUp, Paperclip, X } from 'lucide-react';
 import { useLayoutEffect, useRef } from 'react';
 import { PendingFiles } from '../attachments/PendingFiles';
 import type { ChatController } from '../chat/use-chat';
+import { QuotePreview } from '../chat/QuotePreview';
 import { useInstanceSettings } from '../instance-settings/InstanceSettingsProvider';
 import { IconAction } from '../ui/IconAction';
 
@@ -43,9 +44,11 @@ export function Composer({ chat }: { chat: ChatController }) {
             <strong id="composer-reply-role">
               {chat.selectedReply.role === 'user' ? 'You' : settings.agentName}
             </strong>
-            <span id="composer-reply-text">
-              {chat.selectedReply.text.slice(0, 160) || 'Message'}
-            </span>
+            <QuotePreview
+              id="composer-reply-text"
+              text={chat.selectedReply.text.slice(0, 160)}
+              role={chat.selectedReply.role}
+            />
           </div>
           <IconAction
             id="cancel-reply"

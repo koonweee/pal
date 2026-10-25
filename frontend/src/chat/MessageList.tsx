@@ -12,6 +12,7 @@ import { IconAction } from '../ui/IconAction';
 import { useInstanceSettings } from '../instance-settings/InstanceSettingsProvider';
 import { SuggestedReplies } from './SuggestedReplies';
 import { AssistantMarkdown } from './AssistantMarkdown';
+import { QuotePreview } from './QuotePreview';
 import {
   conversationDateKey,
   conversationDateLabel,
@@ -112,7 +113,10 @@ const MessageRow = memo(
                       ? 'You'
                       : settings.agentName}
                   </strong>
-                  <span>{message.replyTo.textPreview || 'Message'}</span>
+                  <QuotePreview
+                    text={message.replyTo.textPreview}
+                    role={message.replyTo.role}
+                  />
                 </UnstyledButton>
               )}
               {persisted &&

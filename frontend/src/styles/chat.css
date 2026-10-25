@@ -190,16 +190,16 @@ textarea::-webkit-scrollbar-thumb,
   text-align: left;
   opacity: 0.72;
 }
-.message-quote strong,
-.message-quote span {
+.message-quote > strong,
+.message-quote > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.message-quote strong {
+.message-quote > strong {
   font-size: 11px;
 }
-.message-quote span {
+.message-quote > span {
   font-size: 12px;
 }
 .message.quote-highlight .message-bubble {

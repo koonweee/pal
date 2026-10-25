@@ -3,7 +3,7 @@ import { backend, usePalBackend } from './support/pal-backend';
 
 usePalBackend(test);
 
-test('truncates long quotes within user and assistant bubbles', async ({
+test('renders Markdown quotes with truncation in bubbles and the composer', async ({
   page,
 }) => {
   const target = backend.message(
@@ -32,7 +32,10 @@ test('truncates long quotes within user and assistant bubbles', async ({
       const message = page.locator(`[data-message-id="${reply.id}"]`);
       await expect(
         message.getByRole('button', { name: 'View quoted message' }),
-      ).toContainText(target.text);
+      ).toContainText(target.text.replaceAll('**', ''));
+      await expect(message.locator('.message-quote > span strong')).toHaveText(
+        'unavailable again',
+      );
       await expect
         .poll(() =>
           message.evaluate((article) => {
@@ -62,4 +65,11 @@ test('truncates long quotes within user and assistant bubbles', async ({
         });
     }
   }
+  await page
+    .locator(`[data-message-id="${target.id}"]`)
+    .getByRole('button', { name: 'Reply to pal’s message' })
+    .click();
+  await expect(page.locator('#composer-reply-text strong')).toHaveText(
+    'unavailable again',
+  );
 });
