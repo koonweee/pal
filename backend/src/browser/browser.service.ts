@@ -452,7 +452,7 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
     await this.cli(sessionId, ['close']);
   }
 
-  async closeGroup(taskId: string) {
+  async closeGroup(taskId: string, idleBefore?: number) {
     if (!this.enabled || this.closing) return;
     if (!this.browser?.isConnected()) {
       try {
@@ -466,7 +466,8 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
       action: 'get',
       taskId,
     });
-    if (!group) return;
+    if (!group || (idleBefore !== undefined && group.lastActivity > idleBefore))
+      return;
     await this.groupRequest({ action: 'close', taskId });
     await Promise.all(
       (group.sessions ?? [taskId]).map((sessionId) =>
@@ -488,16 +489,17 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
       await this.connect();
     }
     const active = new Set(this.activeTasks());
+    const idleBefore = now - 15 * 60_000;
     for (const group of await this.groups()) {
+      // A stalled run or operation cannot retain an idle renderer indefinitely.
+      if (group.lastActivity <= idleBefore) {
+        await this.closeGroup(group.taskId, idleBefore);
+        continue;
+      }
       if (active.has(group.taskId) || this.operations.has(group.taskId))
         continue;
       const task = await this.tasks.details(group.taskId);
-      if (
-        task.status === 'completed' ||
-        task.archived ||
-        now - group.lastActivity >= 30 * 60_000 ||
-        !group.tabs?.length
-      ) {
+      if (task.status === 'completed' || task.archived || !group.tabs?.length) {
         if (
           !this.activeTasks().includes(group.taskId) &&
           !this.operations.has(group.taskId)

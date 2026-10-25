@@ -20,7 +20,7 @@ Give task agents concurrent browser control inside Pal's VM, with shared logins,
 - Use agent-browser for page interaction, a thin Mastra tool adapter for task routing, and a bundled extension for tab groups. Pin a verified CLI version supporting strict tab binding (introduced in v0.34.0).
 - Lazily create one pinned CLI session and one named, colored Chromium group per task. Sessions select command targets; groups represent task membership and cleanup boundaries.
 - Install the extension with Pal and load it automatically through a common browser launcher used by the runtime and desktop shortcut.
-- Automatically close Pal-managed task groups after completion/archive once active operations settle, or after 30 minutes without browser activity while that task has no active agent run. A final response alone does not mean the task is complete.
+- Automatically close Pal-managed task groups after completion/archive once active operations settle, or after 15 minutes without browser activity, including active agent runs and stalled browser operations. Recheck group activity before idle closure. A final response alone does not mean the task is complete.
 - Cleanup queries current group membership. Ungrouped tabs and human-created groups are excluded. Moving a tab out of a Pal group therefore releases it from cleanup, without a separate retained-tab flag.
 - Agents handle conversational requests to leave tabs alone. Opening or using VNC does not automatically pause agents. Human activity does not reset the idle timer; move tabs out of task groups to retain them.
 - Browser restarts preserve logins and start fresh task groups. Do not restore task-to-tab associations across browser sessions.
@@ -85,14 +85,14 @@ Exit criteria:
 
 Implementation tasks:
 
-- [x] Connect completion/archive events and task-run lifecycle to eligible group teardown, plus the 30-minute idle sweep.
+- [x] Connect completion/archive events and task-run lifecycle to eligible group teardown, plus the 15-minute idle sweep.
 - [x] Use current group membership for cleanup; disconnect only the corresponding CLI session and clean up abandoned session processes.
 - [x] Handle missing tabs/groups, browser restart, API reconnect, cancellation, and application shutdown without closing unrelated tabs.
 - [x] Add the agreed escalation and browser etiquette guidance to task instructions.
 
 Exit criteria:
 
-- [x] Completion/archive and idle cleanup affect only eligible Pal groups; active tasks are skipped.
+- [x] Completion/archive cleanup waits for active work; idle cleanup expires Pal groups after 15 minutes even during active runs or stalled operations.
 - [x] Moving a tab out excludes it from cleanup without a retained-tab feature or movement history.
 - [x] Recurring tasks can recreate browser workspaces on later checks; logins survive browser restarts.
 - [x] Agent guidance expresses a flexible tools/API/browser/computer preference and allows both documented and internal APIs.
@@ -114,7 +114,7 @@ Exit criteria:
 ## Tests
 
 - One browser integration fixture covers two task sessions plus human tabs: shared login, independent navigation/actions, pin loss, explicit new tabs/popups, target mapping, grouping, moving a tab out, and closing one group without affecting the others.
-- A small service-level set covers idle threshold, active-run exclusion, completion/archive cleanup, and repeated cleanup of already-closed groups using controlled time.
+- A small service-level set covers idle threshold during active runs/stalled operations, activity refresh before closure, completion/archive cleanup, and repeated cleanup of already-closed groups using controlled time.
 - Extend existing task/discovery coverage only for task identity routing, scheduled-run cleanup, and direct screenshot content where the browser fixture cannot cover these.
 - Reuse the browser fixture for extension suspension, daemon/API reconnect, and fresh groups with persisted login after browser restart.
 - A bounded real-model smoke confirms tool use, screenshot interpretation, and cleanup. Review escalation wording directly; avoid brittle assertions that a model always chooses one route.
@@ -129,6 +129,7 @@ npm run build
 npm run lint
 npx vitest run test/browser.spec.ts test/task-agents.spec.ts test/task-tool-discovery.spec.ts
 npm run browser:smoke
+npm run browser:smoke -- --idle-cleanup
 npm run browser:smoke -- --agent
 ```
 
@@ -170,3 +171,22 @@ The final review keeps custom logic to launch/attach, task routing, groups, and 
 - [Chrome tab groups](https://developer.chrome.com/docs/extensions/reference/api/tabGroups)
 - [Chrome debugger target mapping](https://developer.chrome.com/docs/extensions/reference/api/debugger#method-getTargets)
 - [Chromium extension loading](https://playwright.dev/docs/chrome-extensions)
+
+## Browser idle cleanup regression
+
+- Scope: expire Pal-managed browser groups after 15 minutes without browser activity, including active task runs and stalled operations. Preserve current group membership and human-preserved tabs; add no watchdog, CPU policy, runtime setting, or automatic action replay.
+- Sequence: reproduce the active-run exemption in the existing isolated browser fixture, update the sweep and its final activity check, then rerun the fixture and focused backend checks.
+- Validation: `--idle-cleanup` runs the lifecycle fixture independently of native screenshot capture. A real infinite-loop renderer consumes CPU, remains before the idle threshold, and disappears at the threshold while its browser command settles with a recoverable error. Human tabs survive. Check that activity refreshed before closure prevents stale cleanup.
+- Rollback: revert this backend change and its policy documentation. No schema or persistent-state changes are required. SF rollout is outside this implementation task.
+- [x] Reproduce the failure before the fix and verify the 15-minute cleanup afterward.
+- [x] Run backend build/lint and focused browser tests; record outcomes.
+
+
+Validation on 2026-10-25:
+
+- Before the fix, the real-browser regression failed with an expired looping renderer still in its active task group. Its renderer consumed more than 0.5 CPU-seconds and a simple evaluation could not respond.
+- After the fix, the focused lifecycle fixture passed against a disposable Linux desktop (`pal-execution-local:latest`) with an isolated synthetic profile. The test advances the existing sweep clock: the active task/in-flight loop survives at 14:59.999 and closes at 15:00. The renderer process disappears, the command reports failure, operation tracking clears, and the CLI daemon exits. Refreshed activity and human-preserved tabs survive. Completion/archive cleanup, worker isolation, browser restart/login persistence, and extension suspension checks also pass.
+- Actual runner: `PAL_EXECUTION_ID=pal-split-stack-idle-repro PAL_BROWSER_ENDPOINT=http://127.0.0.1:32769 DOTENV_CONFIG_PATH=/dev/null node scripts/browser-smoke.mjs --idle-cleanup` from `backend/`, against a credential-free disposable execution container. The desktop exposes its existing CDP proxy only on workstation loopback. No development or SF services are replaced.
+- `npm run build`, `npm run lint` (existing test-file warnings only), `vitest run test/browser.spec.ts`, changed-code Prettier checks, and `git diff --check` pass. No model calls are needed for this mechanical lifecycle change; the regression uses the real browser and native command path directly.
+- The unfiltered browser smoke timed out twice in its pre-existing screenshot operation before reaching the new regression. Image capture remains unverified in this environment; the normal smoke retains its screenshot assertion. `--idle-cleanup` runs the lifecycle checks without that image-capture step.
+- Production rollout is not included.

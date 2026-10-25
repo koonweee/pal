@@ -248,17 +248,20 @@ try {
     'PASS shared login, concurrent task tabs, automatic groups/popups, moved-tab preservation, independent group close',
   );
 
-  const shot = await service.screenshot(b, false);
-  assert.equal(
-    Buffer.from(shot.data, 'base64').subarray(1, 4).toString(),
-    'PNG',
-  );
-  const tools = browserTools(service);
-  assert.equal(
-    tools.browser_screenshot.toModelOutput(shot).value[1].type,
-    'media',
-  );
-  console.log('PASS screenshot file converted to native image content');
+  // Run the lifecycle regression independently of native image capture.
+  if (!process.argv.includes('--idle-cleanup')) {
+    const shot = await service.screenshot(b, false);
+    assert.equal(
+      Buffer.from(shot.data, 'base64').subarray(1, 4).toString(),
+      'PNG',
+    );
+    const tools = browserTools(service);
+    assert.equal(
+      tools.browser_screenshot.toModelOutput(shot).value[1].type,
+      'media',
+    );
+    console.log('PASS screenshot file converted to native image content');
+  }
   const controller = new AbortController();
   const cancelled = service.command(b, ['wait', '5000'], controller.signal);
   await delay(250);
@@ -279,21 +282,96 @@ try {
   services.push(service);
   assert.ok((await service.groups()).some((g) => g.taskId === b));
   await command(b, ['get', 'url']);
-  const saved = (await service.groups()).find((g) => g.taskId === b);
   service.bindActiveTasks(() => [b]);
-  await service.sweep(saved.lastActivity + 31 * 60_000);
+  const beforeRefresh = (await service.groups()).find((g) => g.taskId === b);
+  await command(b, ['get', 'url']);
+  await service.closeGroup(b, beforeRefresh.lastActivity);
+  assert.equal(
+    (await service.groups()).length,
+    1,
+    'Stale cleanup closed a group with more recent browser activity',
+  );
+  const taskPage = ctx
+    .pages()
+    .find((page) => page.url() === origin + '/hotels');
+  assert.ok(taskPage, 'Task browser fixture page is missing');
+  const pageSession = await ctx.newCDPSession(taskPage);
+  const browserSession = await observer.newBrowserCDPSession();
+  const cpuBefore = (await browserSession.send('SystemInfo.getProcessInfo'))
+    .processInfo;
+  const stuckCommand = service
+    .command(b, ['eval', '(() => { while (true) {} })()'])
+    .then(
+      (result) => ({ result }),
+      (error) => ({ error }),
+    );
+  let busyRenderer;
+  await until(async () => {
+    const current = (await browserSession.send('SystemInfo.getProcessInfo'))
+      .processInfo;
+    busyRenderer = current.find(
+      (process) =>
+        process.type === 'renderer' &&
+        process.cpuTime -
+          (cpuBefore.find((before) => before.id === process.id)?.cpuTime ??
+            process.cpuTime) >
+          0.5,
+    );
+    return !!busyRenderer;
+  });
+  console.log(
+    'REPRO looping renderer consumed over 0.5 CPU-seconds',
+    busyRenderer.id,
+  );
+  assert.ok(
+    service.operations.get(b),
+    'Looping browser command is not in flight',
+  );
+  const unresponsive = pageSession
+    .send('Runtime.evaluate', { expression: '1' })
+    .then(
+      () => 'responded',
+      () => 'closed',
+    );
+  assert.equal(
+    await Promise.race([unresponsive, delay(250, 'timeout')]),
+    'timeout',
+  );
+  const saved = (await service.groups()).find((g) => g.taskId === b);
+  await service.sweep(saved.lastActivity + 15 * 60_000 - 1);
   assert.equal((await service.groups()).length, 1);
+  await service.sweep(saved.lastActivity + 15 * 60_000);
+  assert.equal(
+    (await service.groups()).length,
+    0,
+    'Active task/stuck browser command kept an expired looping renderer alive',
+  );
+  assert.equal(taskPage.isClosed(), true);
+  await until(
+    async () =>
+      !(
+        await browserSession.send('SystemInfo.getProcessInfo')
+      ).processInfo.some((process) => process.id === busyRenderer.id),
+  );
+  const settled = await Promise.race([stuckCommand, delay(10000, null)]);
+  assert.ok(settled, 'Browser command did not settle after its target closed');
+  assert.ok(
+    settled.error || settled.result.success === false,
+    'Closed looping command must return a recoverable failure',
+  );
+  assert.equal(service.operations.has(b), false);
+  await pageSession.detach().catch(() => {});
+  await browserSession.detach();
   service.bindActiveTasks(() => []);
-  await service.sweep(saved.lastActivity + 29 * 60_000);
-  assert.equal((await service.groups()).length, 1);
-  await service.sweep(saved.lastActivity + 31 * 60_000);
-  assert.equal((await service.groups()).length, 0);
+  console.log(
+    'PASS active task and in-flight infinite-loop command expire at 15 minutes; renderer exits and command fails cleanly',
+  );
   await service.closeGroup(b);
   await delay(200);
   assert.equal(ctx.pages().length, 4, 'Cleanup leaked a task tab');
   await resources('after task cleanup; human tabs remain');
   console.log(
-    'PASS API reconnect, active-run exclusion, idle threshold, idempotent cleanup',
+    'PASS API reconnect, 15-minute idle threshold, idempotent cleanup',
   );
 
   await command(a, ['open', origin + '/again']);
@@ -477,7 +555,7 @@ try {
       }),
     );
     assert.equal(main.taskAgent.listActiveThreadRuns().length, 2);
-    await service.sweep(Date.now() + 31 * 60_000);
+    await service.sweep();
     assert.equal((await service.groups()).length, 2);
     for (const output of await Promise.all(
       runs.map((run) => run.getFullOutput()),
@@ -508,7 +586,7 @@ try {
     main = undefined;
     service.bindActiveTasks(() => []);
     console.log(
-      'PASS two real task threads interpreted independent screenshots, submitted their forms, and excluded active native runs from cleanup',
+      'PASS two real task threads interpreted independent screenshots, submitted their forms, and preserved recently used active tabs',
     );
   }
   if (process.argv.includes('--workers') && process.argv.includes('--agent')) {
