@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Done
 
 ## Goal
 
@@ -25,7 +25,7 @@ Exit criteria: both public roles receive the rule and valid Markdown lists rende
 ### 2. Deployment
 
 - [x] Rebuild development and verify deployed guidance and health.
-- [ ] Deploy production through its existing Komodo workflow and verify deployed guidance and health.
+- [x] Deploy production through its existing Komodo workflow and verify deployed guidance and health.
 
 Exit criteria: both environments load the new instruction with persistent execution state retained.
 
@@ -47,8 +47,8 @@ cd ..
 ## Overall Exit Criteria
 
 - [x] Main and Task share one list-formatting rule.
-- [ ] Focused validation passes and the change is committed.
-- [ ] Development and production are healthy with matching deployed guidance.
+- [x] Focused validation passes and the change is committed.
+- [x] Development and production are healthy with matching deployed guidance.
 
 ## Validation
 
@@ -56,6 +56,4 @@ Backend build and both existing Markdown renderer tests pass. Built Main/Task in
 
 Development rebuild succeeds; Vite/API and staged PWA/API are healthy, the deployed guidance matches source, and execution identity/start time are unchanged.
 
-## Remaining Work
-
-Production uses Git-backed Komodo Builds and requires source/deployment pushes to `main`. Scoped commits, pushes and production deployment are approved. Production is healthy and idle, its container identities are recorded privately, and the existing builder is ready with no linked deployments. Commit/push the reviewed source, publish immutable backend/web images, update deployment pins and release identity, then deploy only agent-service/web with the existing service filter and verify retained container identities. Preserve the prior `236cc84` backend/web pins for rollback.
+Production runs source `ec3b3d3` through infrastructure revision `efe8203`. Immutable Linux AMD64 backend/web manifests are verified; backend image guidance matches source byte for byte. HTTPS/API, matching PWA release identity, SSE and desktop WebSocket checks pass. Only backend/web containers changed; all other container identities are retained. Original Stack deployment arguments are restored, both ResourceSyncs are clean, and exact private plans are removed. All 163 existing deployment operational checks pass.
