@@ -1,7 +1,9 @@
 import request from 'supertest';
+import { ConfigService } from '@nestjs/config';
 import { sql } from 'drizzle-orm';
 import { startTestApp, openStream, until } from './helpers.js';
 import { FilesService } from '../dist/files/files.service.js';
+import { InstanceSettingsService } from '../dist/instance-settings/instance-settings.service.js';
 
 const png = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0YkAAAAASUVORK5CYII=',
@@ -143,4 +145,80 @@ it('retains the saved avatar and expires it after replacement or reset', async (
     .expect(200);
   await files.cleanup();
   await request(fixture.url).get(`/files/${replacement}/content`).expect(404);
+});
+
+it('uses the original profile PNG for installation icons and preserves app identity and fallbacks', async () => {
+  const manifest = () =>
+    request(fixture.url).get('/manifest.webmanifest').expect(200);
+  let response = await manifest();
+  expect(response.headers['content-type']).toContain(
+    'application/manifest+json',
+  );
+  expect(response.headers['cache-control']).toBe('no-store');
+  expect(response.body).toMatchObject({ name: 'Pal', id: '/', start_url: '/' });
+  expect(response.body.icons.map((icon: { src: string }) => icon.src)).toEqual([
+    '/icons/pal-production-192.png',
+    '/icons/pal-production-512.png',
+  ]);
+  const id = await upload();
+  await request(fixture.url)
+    .patch('/instance-settings')
+    .send({ agentAvatarAttachmentId: id })
+    .expect(200);
+  response = await manifest();
+  expect(response.body.icons).toEqual([
+    {
+      src: `/api/files/${id}/content`,
+      sizes: '1x1',
+      type: 'image/png',
+      purpose: 'any',
+    },
+  ]);
+  for (const path of [
+    '/apple-touch-icon.png',
+    '/apple-touch-icon-precomposed.png',
+  ]) {
+    const redirect = await request(fixture.url).get(path).expect(302);
+    expect(redirect.headers.location).toBe(`/api/files/${id}/content`);
+    expect(redirect.headers['cache-control']).toBe('no-store');
+  }
+  const content = await request(fixture.url)
+    .get(`/files/${id}/content`)
+    .expect(200);
+  expect(content.body).toEqual(png);
+  const config = fixture.app.get(ConfigService);
+  config.set('PAL_APP_VARIANT', 'dev');
+  try {
+    expect((await manifest()).body).toMatchObject({
+      name: 'Pal Dev',
+      id: '/pal-dev',
+    });
+    await request(fixture.url)
+      .patch('/instance-settings')
+      .send({ agentAvatarAttachmentId: null })
+      .expect(200);
+    expect((await manifest()).body.icons[0].src).toBe('/icons/pal-192.png');
+    const fallback = await request(fixture.url)
+      .get('/apple-touch-icon.png')
+      .expect(302);
+    expect(fallback.headers.location).toBe('/icons/apple-touch-icon.png');
+    await request(fixture.url)
+      .patch('/instance-settings')
+      .send({ agentAvatarAttachmentId: id })
+      .expect(200);
+    const settings = fixture.app.get(InstanceSettingsService);
+    const spy = vi
+      .spyOn(settings, 'get')
+      .mockResolvedValue({
+        ...(await settings.get()),
+        agentAvatarAttachmentId: '00000000-0000-4000-8000-000000000000',
+      });
+    try {
+      expect((await manifest()).body.icons[0].src).toBe('/icons/pal-192.png');
+    } finally {
+      spy.mockRestore();
+    }
+  } finally {
+    config.set('PAL_APP_VARIANT', 'production');
+  }
 });

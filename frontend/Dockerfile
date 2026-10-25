@@ -2,9 +2,7 @@
 FROM node:24.15.0-trixie-slim@sha256:291be77873bc04731968cacf82f0fcef17cee8cf200c6b6951e2bcab41560eb7 AS build
 WORKDIR /opt/pal-web
 ARG PAL_RELEASE_ID=development
-ARG PAL_APP_VARIANT=production
 ENV PAL_RELEASE_ID=$PAL_RELEASE_ID
-ENV PAL_APP_VARIANT=$PAL_APP_VARIANT
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY index.html tsconfig.json tsconfig.test.json vite.config.ts ./

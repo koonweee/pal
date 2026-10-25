@@ -55,11 +55,11 @@ The typed custom worker owns static-shell precaching and explicit waiting-worker
 
 Update behavior is a browser-local preference: ask before updating, or update automatically when safe. The default is ask. Safe automatic updates show a visible three-second countdown before reloading. Reload is refused while a draft, upload, submission, dirty settings form, or desktop session is active; unsafe tabs preserve their in-memory work and retain the update prompt.
 
-`PAL_APP_VARIANT=dev` gives a production-style staging build the `Pal Dev` name and a distinct manifest ID. Ordinary Vite development does not register the service worker.
+The backend’s `PAL_APP_VARIANT=dev` selects the `Pal Dev` installation name and distinct manifest ID. Ordinary Vite development does not register the service worker.
 
 With the isolated local stack running, `../scripts/dev-local serve` builds the production-style image on Mac loopback and exposes it through the single private HTTPS origin. Vite remains loopback-only for hot reload. Rerun `serve` after frontend changes, or use `pwa-up` to rebuild only the loopback image while an existing Serve route remains active. Successful staging rebuilds publish a live update marker so open clients immediately check for the waiting bundle.
 
-The committed icons are the iOS artwork at validated 180×180, 192×192, and 512×512 dimensions. They are declared with `purpose: any`; the artwork extends outside the maskable safe zone and is intentionally not advertised as maskable.
+The backend serves the current installation manifest and resolves Apple touch icons from saved appearance. A configured profile PNG is referenced directly with its actual dimensions, preserving its bytes and transparency. The bundled 180×180, 192×192, and 512×512 icons provide the fallback when the image is absent or unavailable. Icons use `purpose: any`. Installation metadata and uploaded images remain network-only.
 
 Installed production acceptance requires a stable HTTPS origin. The optional local Tailnet Serve hostname is a development origin and is not a production install identity unless a future deployment decision explicitly promotes and retains it.
 

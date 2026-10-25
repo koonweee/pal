@@ -1,6 +1,9 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
+import { usePalBackend } from '../test/support/pal-backend';
+
+usePalBackend(test);
 
 test('installs the shell and keeps private routes network-only', async ({
   context,
@@ -35,6 +38,9 @@ test('installs the shell and keeps private routes network-only', async ({
   );
   await expect(page.locator('.agent-avatar')).toHaveCSS('opacity', '0.5');
   const dynamicRoutes = [
+    '/manifest.webmanifest',
+    '/apple-touch-icon.png',
+    '/apple-touch-icon-precomposed.png',
     '/api/chat/history',
     '/stream',
     '/desktop/v1/vnc.html',

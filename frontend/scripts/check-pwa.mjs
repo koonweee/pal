@@ -1,64 +1,26 @@
 import { readFile } from 'node:fs/promises';
 
-const manifest = JSON.parse(
-  await readFile('dist/manifest.webmanifest', 'utf8'),
-);
 const index = await readFile('dist/index.html', 'utf8');
 const nginx = await readFile('nginx.conf', 'utf8');
-if (manifest.name !== 'Pal' || manifest.short_name !== 'Pal')
-  throw new Error('Manifest must use the native app name.');
-if (
-  manifest.display !== 'standalone' ||
-  manifest.start_url !== '/' ||
-  manifest.id !== '/'
-)
-  throw new Error('Manifest must launch the root app in standalone mode.');
 for (const marker of [
   'viewport-fit=cover',
   'apple-mobile-web-app-capable',
   'apple-mobile-web-app-title',
   'rel="apple-touch-icon"',
-  'sizes="180x180"',
-  'href="data:image/png;base64,',
+  'href="/apple-touch-icon.png"',
+  'rel="manifest"',
+  'href="/manifest.webmanifest"',
 ]) {
   if (!index.includes(marker))
     throw new Error(`Built document is missing ${marker}.`);
 }
 
-for (const marker of [
-  'location = /apple-touch-icon.png',
-  'location = /apple-touch-icon-precomposed.png',
-  'try_files $uri =404',
-  'default_type application/manifest+json',
-]) {
-  if (!nginx.includes(marker))
-    throw new Error(`Production server is missing ${marker}.`);
-}
-
-const appleTouchIcon = await readFile('dist/apple-touch-icon.png');
-const expectedAppleTouchIcon = await readFile(
-  'dist/icons/pal-production-180.png',
-);
-const precomposedAppleTouchIcon = await readFile(
-  'dist/apple-touch-icon-precomposed.png',
-);
 if (
-  !appleTouchIcon.equals(expectedAppleTouchIcon) ||
-  !precomposedAppleTouchIcon.equals(expectedAppleTouchIcon)
+  !nginx.includes(
+    'manifest\\.webmanifest|apple-touch-icon(-precomposed)?\\.png',
+  )
 )
-  throw new Error('Production Apple icon fallbacks use the wrong identity.');
-const embeddedIconMatch = index.match(/href="data:image\/png;base64,([^"]+)"/);
-if (
-  !embeddedIconMatch ||
-  !Buffer.from(embeddedIconMatch[1], 'base64').equals(appleTouchIcon)
-)
-  throw new Error('Built document does not embed the Apple touch icon.');
-const appleTouchIconWidth = appleTouchIcon.readUInt32BE(16);
-const appleTouchIconHeight = appleTouchIcon.readUInt32BE(20);
-if (appleTouchIconWidth !== 180 || appleTouchIconHeight !== 180)
-  throw new Error(
-    `apple-touch-icon.png is ${appleTouchIconWidth}x${appleTouchIconHeight}.`,
-  );
+  throw new Error('Installation metadata must proxy to the backend.');
 
 for (const size of [192, 512]) {
   const icon = await readFile(`dist/icons/pal-production-${size}.png`);
@@ -71,6 +33,8 @@ for (const size of [192, 512]) {
 const serviceWorker = await readFile('dist/sw.js', 'utf8');
 const serviceWorkerSource = await readFile('src/pwa/sw.ts', 'utf8');
 for (const route of [
+  'manifest',
+  'apple-touch-icon',
   'api',
   'stream',
   'desktop',

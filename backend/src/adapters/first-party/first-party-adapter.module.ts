@@ -1,3 +1,4 @@
+import { FirstPartyPwaController } from './pwa.controller.js';
 import { LoginModule } from '../../login/login.module.js';
 import { FirstPartyLoginController } from './login.controller.js';
 import { Module } from '@nestjs/common';
@@ -50,6 +51,7 @@ export { FIRST_PARTY_CONTRACT_VERSION } from './first-party-contract.js';
   ],
   controllers: [
     HealthController,
+    FirstPartyPwaController,
     FirstPartyLoginController,
     FirstPartyInstanceSettingsController,
     FirstPartyChatController,

@@ -24,6 +24,7 @@ services:
       PAL_DESKTOP_ENABLED: "true"
       PAL_BROWSER_ENDPOINT: http://web:8081
       PAL_RELEASE_ID: ${PAL_RELEASE_ID:-development}
+      PAL_APP_VARIANT: ${PAL_APP_VARIANT:-production}
     volumes:
       - service_data:/data/private
       - agent_home:/home/pal

@@ -56,7 +56,7 @@ The first upgrade from the proxy layout replaces the execution network and execu
 
 A production network migration needs reviewed immutable web, execution and egress images, updated deployment Compose and health checks, and a coordinated replacement of the execution network. Validate the production architecture/kernel and independent router recovery. A shared Docker-daemon or VM reboot requires its own maintenance window. Keep the existing paired application state and previous image/network definitions available for rollback.
 
-Database migrations remain explicit deployment steps, run from agent-service before the application starts. Production supplies a shared opaque `PAL_RELEASE_ID` to backend and frontend builds. The development web build uses the `Pal Dev` installation identity.
+Database migrations remain explicit deployment steps, run from agent-service before the application starts. Production supplies a shared opaque `PAL_RELEASE_ID` to backend and frontend builds. Development sets backend `PAL_APP_VARIANT=dev` for the `Pal Dev` installation identity. The backend owns the live manifest and Apple touch icon resolution.
 
 The gateway forwards API/SSE to agent-service and versioned desktop HTTP/WebSocket paths to execution. Nginx refreshes upstream Docker DNS when containers are replaced. Its 25 MiB request-body limit admits Pal's 25,000,000-byte uploads. The PWA service worker caches the static shell; API, files, OAuth, notifications, and noVNC remain network-only.
 

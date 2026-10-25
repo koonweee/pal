@@ -1,13 +1,13 @@
 services:
   agent-service:
     environment:
+      PAL_APP_VARIANT: dev
       PAL_PUBLIC_URL: ${PAL_DEV_PUBLIC_URL:-http://localhost:5173}
       PAL_DESKTOP_VIEWER_URL: ${PAL_DEV_PUBLIC_URL:-http://localhost:5173}/desktop/v2/vnc.html
   web:
     build:
       args:
         PAL_RELEASE_ID: development
-        PAL_APP_VARIANT: dev
     ports: !reset []
   pwa:
     image: nginx:1.29.2-alpine@sha256:61e01287e546aac28a3f56839c136b31f590273f3b41187a36f46f6a03bbfe22

@@ -111,6 +111,46 @@ function json(response: ServerResponse, status: number, body: object) {
 }
 const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+  if (url.pathname === '/manifest.webmanifest') {
+    json(response, 200, {
+      name: 'Pal',
+      short_name: 'Pal',
+      display: 'standalone',
+      id: '/',
+      start_url: '/',
+      scope: '/',
+      icons: instanceSettings.agentAvatarAttachmentId
+        ? [
+            {
+              src: `/api/files/${instanceSettings.agentAvatarAttachmentId}/content`,
+              type: 'image/png',
+              purpose: 'any',
+            },
+          ]
+        : [
+            {
+              src: '/icons/pal-production-512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any',
+            },
+          ],
+    });
+    return;
+  }
+  if (
+    url.pathname === '/apple-touch-icon.png' ||
+    url.pathname === '/apple-touch-icon-precomposed.png'
+  ) {
+    response.writeHead(302, {
+      Location: instanceSettings.agentAvatarAttachmentId
+        ? `/api/files/${instanceSettings.agentAvatarAttachmentId}/content`
+        : '/icons/pal-production-180.png',
+      'Cache-Control': 'no-store',
+    });
+    response.end();
+    return;
+  }
   if (url.pathname === '/instance-settings') {
     if (request.method === 'PATCH') {
       let body = '';

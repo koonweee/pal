@@ -190,6 +190,18 @@ test('shares agent appearance across clients and keeps color scheme local', asyn
         'href',
         new RegExp(`/api/files/${id}/content$`),
       );
+    const manifest = await (
+      await page.request.get('/manifest.webmanifest')
+    ).json();
+    expect(manifest.icons[0].src).toBe(`/api/files/${id}/content`);
+    const appleIcon = await page.request.get('/apple-touch-icon.png', {
+      maxRedirects: 0,
+    });
+    expect(appleIcon.headers().location).toBe(`/api/files/${id}/content`);
+    await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute(
+      'href',
+      '/apple-touch-icon.png',
+    );
     await page.reload();
     await expect(page.locator('link[rel="icon"]')).toHaveAttribute(
       'href',

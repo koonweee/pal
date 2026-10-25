@@ -23,6 +23,9 @@ export function validateEnvironment(env: Record<string, unknown>) {
   const desktopEnabled = env.PAL_DESKTOP_ENABLED ?? 'false';
   if (desktopEnabled !== 'true' && desktopEnabled !== 'false')
     throw new Error('PAL_DESKTOP_ENABLED must be true or false');
+  const appVariant = env.PAL_APP_VARIANT ?? 'production';
+  if (appVariant !== 'production' && appVariant !== 'dev')
+    throw new Error('PAL_APP_VARIANT must be production or dev');
   const releaseId = env.PAL_RELEASE_ID ?? 'development';
   if (typeof releaseId !== 'string' || !releaseId.trim())
     throw new Error('PAL_RELEASE_ID must be a nonempty string');
@@ -178,6 +181,7 @@ export function validateEnvironment(env: Record<string, unknown>) {
     ...env,
     PAL_DESKTOP_ENABLED: desktopEnabled === 'true',
     PAL_RELEASE_ID: releaseId.trim(),
+    PAL_APP_VARIANT: appVariant,
     PAL_BROWSER_ENDPOINT: browserEndpoint.origin,
     PAL_DESKTOP_VIEWER_URL:
       viewerUrl || new URL('/desktop/v2/vnc.html', publicUrl).href,
