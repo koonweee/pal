@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Done
 
 ## Goal
 
@@ -10,9 +10,9 @@ Allow accepted PWA updates to activate while chat stays connected, and deploy th
 
 ## Current Behavior
 
-- The active worker forwards SSE through Workbox NetworkOnly, keeping a fetch event open and delaying replacement-worker activation.
-- The three-second reload fallback can reconnect through the old worker and show the same waiting update again.
-- Local reproduction fails with normal controller events; closing SSE or bypassing worker fetch handling allows activation.
+- `/api/stream` and `/stream` use direct browser networking and remain outside navigation fallback.
+- Other dynamic requests retain the NetworkOnly strategy; only the versioned shell is cached.
+- Accepted updates activate with SSE open; the existing three-second fallback handles a missing controllerchange event.
 
 ## Milestones
 
@@ -32,14 +32,14 @@ Exit criteria:
 
 Implementation tasks:
 
-- [ ] Commit/push reviewed code and rebuild development staging.
-- [ ] Publish immutable AMD64 production backend/web images with matching release identity through the existing Komodo workflow.
-- [ ] Deploy only backend/web, retaining the execution desktop, database, egress, MCP, and stored state.
-- [ ] Verify live service-worker routing, API/SSE, update activation, desktop connectivity, and cleanup.
+- [x] Commit/push reviewed code and rebuild development staging.
+- [x] Publish immutable AMD64 production backend/web images with matching release identity through the existing Komodo workflow.
+- [x] Deploy only backend/web, retaining the execution desktop, database, egress, MCP, and stored state.
+- [x] Verify live service-worker routing, API/SSE, update activation, desktop connectivity, and cleanup.
 
 Exit criteria:
 
-- [ ] Both environments serve the repair; production is healthy and normal deployment settings are restored.
+- [x] Both environments serve the repair; production is healthy and normal deployment settings are restored.
 
 ## Tests
 
@@ -62,6 +62,8 @@ cd ..
 
 - [x] Open SSE connections cannot hold the new worker's activation path.
 - [x] Cache boundaries, reload safety, multi-tab behavior, notifications, and offline shell behavior pass.
-- [ ] Development and production deployment verification pass.
+- [x] Development and production deployment verification pass.
 
 Validation: production build, all 12 PWA browser tests, strict TypeScript, UI ownership, and unused-code checks pass.
+
+Deployment validation: development staging and production release `5e02b04` serve direct browser SSE on both paths. Live worker readiness, API/SSE contract 6, desktop HTTP/RFB connectivity, and page-error checks pass. Production retains execution, PostgreSQL, egress, and Google MCP container identities. Infrastructure deployment revision is `0f14e24`; normal Stack settings and clean resource syncs are verified.
