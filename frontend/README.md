@@ -49,7 +49,7 @@ Playwright scenarios are split by chat, tasks, attachments, preferences and conn
 
 ## PWA boundary
 
-The service worker precaches versioned application-shell files. API, SSE, files, OAuth, desktop HTTP/WebSocket, notification, and native first-party routes use `NetworkOnly` and are excluded from navigation fallback. App-owned local storage retains a validated appearance snapshot and up to the latest 30 canonical Main messages within a serialized size bound. Cached messages are display-only until the first server history snapshot replaces them; sending, replies, tasks, files, pagination, and background synchronization remain unavailable offline.
+The service worker precaches versioned application-shell files. SSE bypasses service-worker fetch handling so an open connection cannot block update activation. Other API, file, OAuth, desktop, notification, and native first-party requests use `NetworkOnly`. All dynamic routes are excluded from navigation fallback. App-owned local storage retains a validated appearance snapshot and up to the latest 30 canonical Main messages within a serialized size bound. Cached messages are display-only until the first server history snapshot replaces them; sending, replies, tasks, files, pagination, and background synchronization remain unavailable offline.
 
 The typed custom worker owns static-shell precaching and explicit waiting-worker activation. API, SSE, files, OAuth, notification, upload, and desktop routes remain network-only. Update checks are coalesced across deployment SSE, reconnection, focus, online, and page-show signals.
 

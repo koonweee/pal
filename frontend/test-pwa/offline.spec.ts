@@ -23,6 +23,12 @@ test('installs the shell and keeps private routes network-only', async ({
     start_url: '/',
   });
 
+  const stream = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === '/api/stream',
+  );
+  await page.reload();
+  expect((await stream).fromServiceWorker()).toBe(false);
+
   await context.setOffline(true);
   await page.reload({ waitUntil: 'domcontentloaded' });
   expect(
@@ -205,10 +211,22 @@ test('reloads when an activating update does not emit controllerchange', async (
 
     const update = page.locator('#pwa-update');
     await expect(update).toBeVisible();
-    await Promise.all([
-      page.waitForEvent('load'),
-      update.getByRole('button', { name: 'Update', exact: true }).click(),
-    ]);
+    await page.clock.install();
+    await page.clock.pauseAt(new Date(Date.now() + 1000));
+    await update.getByRole('button', { name: 'Update', exact: true }).click();
+    // Activation must finish while SSE is open, before the reload fallback.
+    await expect
+      .poll(() =>
+        page.evaluate(async () => {
+          const registration = await navigator.serviceWorker.ready;
+          return (
+            !registration.waiting && registration.active?.state === 'activated'
+          );
+        }),
+      )
+      .toBe(true);
+    await Promise.all([page.waitForEvent('load'), page.clock.runFor(3000)]);
+    await expect(page.locator('[data-react-shell="ready"]')).toBeVisible();
     await expect(update).toBeHidden();
   } finally {
     await writeFile(workerPath, original);

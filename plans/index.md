@@ -14,6 +14,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [PWA activation with open SSE](pwa-sse-activation.md) | In Progress | Direct browser SSE networking, activation recovery, and dev/production rollout. |
 | [Suggested replies](suggested-replies.md) | Done | Agent-selected reply pills, atomic selection, synchronized removal, and ordinary optimistic sends. |
 | [PWA profile icons](pwa-profile-icons.md) | Done | Direct profile PNGs for PWA installation and Apple touch icons; development rollout. |
 | [Agent profile favicon](agent-profile-favicon.md) | Done | Browser favicon follows the saved agent image and accent-colored donut fallback. |

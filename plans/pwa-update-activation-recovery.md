@@ -10,9 +10,9 @@ Make an accepted PWA update activate once on iPhone Home Screen installations in
 
 ## Current Behavior
 
-- The page posts `SKIP_WAITING` to the waiting service worker and relies on `controllerchange` to reload.
-- The worker starts `skipWaiting()` without extending the message event lifetime.
-- A suspended worker or missing `controllerchange` leaves the update flow without a completion path.
+- The worker extends the activation message event until `skipWaiting()` completes.
+- The page requests activation and uses a bounded reload fallback when `controllerchange` is absent.
+- Open SSE connections use browser networking; [SSE activation validation and deployment](pwa-sse-activation.md) tracks the network boundary.
 
 ## Milestones
 

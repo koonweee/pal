@@ -18,7 +18,13 @@ declare const self: ServiceWorkerGlobalScope & {
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
-registerRoute(({ url }) => isDynamicPath(url.pathname), new NetworkOnly());
+// Long-lived event streams must not keep a retiring worker's fetch event open.
+registerRoute(
+  ({ url }) =>
+    isDynamicPath(url.pathname) &&
+    !['/api/stream', '/stream'].includes(url.pathname),
+  new NetworkOnly(),
+);
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL('/index.html'), {
     denylist: [dynamicRoutePattern],
