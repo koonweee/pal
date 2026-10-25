@@ -6,7 +6,7 @@ Done
 
 ## Goal
 
-Use the saved profile PNG directly for PWA installation icons, preserving its bytes and transparency, and deploy to development for iPhone acceptance.
+Use the saved profile PNG directly for PWA installation icons, preserving its bytes and transparency, and deploy to development and production after iPhone acceptance.
 
 ## Current Behavior
 
@@ -26,9 +26,9 @@ Exit criteria: manifest and Apple icon use the original uploaded PNG without res
 
 - [x] Run focused backend/frontend checks and production PWA coverage.
 - [x] Commit the implementation and rebuild development backend and PWA, preserving the execution desktop.
-- [x] Verify live dev metadata and original image bytes. iPhone Home Screen light/dark acceptance remains with the user.
+- [x] Verify live dev metadata and original image bytes; the user confirmed the iPhone appearance.
 
-Exit criteria: development serves the implementation and retains Pal Dev identity; production deployment remains outside this rollout.
+Exit criteria: development serves the implementation and retains Pal Dev identity.
 
 ## Tests
 
@@ -58,4 +58,8 @@ Backend build, type-aware lint and adapter boundaries pass. All four focused set
 
 ## Development acceptance
 
-Implementation commit `3c0d7af` is deployed to the local staged PWA and `https://jtkwmini.tail445f8.ts.net:8444`. Both origins serve healthy APIs, Pal Dev manifest identity `/pal-dev`, and the original 1240×1268 profile PNG through the manifest and both Apple touch icon URLs. Byte comparisons pass, all four corner alpha values remain zero, and service-worker caches contain neither installation metadata nor uploaded image content. The execution container ID and start time remain unchanged. Temporary test PostgreSQL and exact local validation logs are removed. Production remains on its prior deployment. iPhone Home Screen light/dark appearance is ready for user testing.
+Implementation commit `3c0d7af` is deployed to the local staged PWA and `https://jtkwmini.tail445f8.ts.net:8444`. Both origins serve healthy APIs, Pal Dev manifest identity `/pal-dev`, and the original 1240×1268 profile PNG through the manifest and both Apple touch icon URLs. Byte comparisons pass, all four corner alpha values remain zero, and service-worker caches contain neither installation metadata nor uploaded image content. The execution container ID and start time remain unchanged. Temporary test PostgreSQL and exact local validation logs are removed. The user confirmed the iPhone appearance.
+
+## Production acceptance
+
+Production `https://pal.sf.kw0.dev` runs source/release `3c0d7af` through infrastructure revision `f2b2bd0`. The live manifest retains the Pal name and ID `/`, references the selected profile PNG with its actual dimensions, and remains network-only. Both Apple icon routes return the original PNG bytes; the selected image checksum and transparency are preserved. Backend/PWA identity, API contract 5, favicon, SSE, cache boundaries and desktop connectivity pass. Only backend/web containers changed; the desktop and dependent services remain running.
