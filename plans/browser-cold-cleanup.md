@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress — implementation and native acceptance complete; dev/production rollout pending.
+Done
 
 ## Goal
 
@@ -10,9 +10,9 @@ Expire idle task tabs after backend reconnection even when a renderer is already
 
 ## Current Behavior
 
-- BrowserService reaches extension group state through Playwright, whose cold attachment waits for every page to initialize.
-- A looping renderer prevents that attachment, so cleanup cannot read or close its group after a backend restart.
-- The bundled extension already owns session/group/activity records and closes current group members independently of renderer JavaScript.
+- BrowserService reaches extension group state through bounded direct browser CDP requests, independently of Playwright page initialization.
+- A suspended worker is woken with browser-handled service-worker commands on an existing page; page JavaScript need not respond. Each request disconnects its own sessions and creates no page.
+- The bundled extension owns session/group/activity records and closes current managed group members. The 15-minute activity recheck, human-moved tabs and native daemon teardown are preserved.
 
 ## Milestones
 
@@ -68,3 +68,6 @@ npm run browser:smoke -- --idle-cleanup
 - Baseline `69efe6a`: the corrected fixture reaches a disconnected backend, suspended extension and a looping renderer; its cold sweep fails after repeated Playwright connection timeouts.
 - Fixed isolated `npm run browser:smoke -- --idle-cleanup`: passes cold reconnect and exact 15-minute threshold, renderer exit, recoverable in-flight command failure, human/moved-tab preservation, concurrent workers and daemon teardown, login persistence, extension suspension, desktop survival across backend restart, and API availability during execution outage.
 - Build, type-aware lint/boundary checks and existing browser tool identity/media unit test pass. Lint retains seven preexisting test-type warnings. The broad harness initially hits an unrelated PWA navigation timeout; focused cleanup mode now omits that PWA check and optional screenshot assertion while retaining native cross-container browser/desktop checks.
+
+- Source `a08a529` is published and deployed to development and production. Production replaces only agent-service and retains its existing frontend/UI release, execution desktop and other service identities; no schema migration or manual target closure is needed. Final monitoring/cleanup evidence is owned by Stack v2’s `plans/pal-browser-cold-cleanup-release-plan.md`.
+- Final five-minute acceptance passes all 11 health/CPU samples: SF internal CPU 2.94–5.9%, Chromium at most 0.2%. Only the production backend container changes; existing state and dependent containers persist. Temporary operator and isolated-test artifacts are removed.
