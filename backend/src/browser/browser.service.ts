@@ -8,7 +8,8 @@ import {
   type OnModuleDestroy,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { chromium, type Browser, type Worker } from 'playwright-core';
+import { chromium, type Browser } from 'playwright-core';
+import { extensionRequest } from './browser-extension.js';
 import type { Subscription } from 'rxjs';
 import { EventsService } from '../events/events.service.js';
 import { TasksService } from '../tasks/tasks.service.js';
@@ -123,36 +124,10 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
       const deadline = Date.now() + 15_000;
       while (true) {
         try {
-          let browser = await chromium.connectOverCDP(
+          const browser = await chromium.connectOverCDP(
             await this.cdpEndpoint(),
-            {
-              timeout: 1000,
-              noDefaults: true,
-            },
+            { timeout: 1000, noDefaults: true },
           );
-          try {
-            const scriptURL = await this.wakeWorker(browser);
-            if (
-              !browser
-                .contexts()[0]
-                .serviceWorkers()
-                .some((worker) => worker.url() === scriptURL)
-            ) {
-              // A stopped MV3 target can be absent from a new CDP client's
-              // auto-attach inventory. Reattach once after waking it.
-              await browser.close();
-              browser = await chromium.connectOverCDP(
-                await this.cdpEndpoint(),
-                {
-                  timeout: 1000,
-                  noDefaults: true,
-                },
-              );
-            }
-          } catch (error) {
-            await browser.close();
-            throw error;
-          }
           this.browser = browser;
           return browser;
         } catch (error) {
@@ -170,65 +145,27 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
     return this.connecting;
   }
 
-  private async wakeWorker(browser: Browser): Promise<string> {
-    const context = browser.contexts()[0];
-    const page = context.pages()[0];
-    if (!page) throw new Error('Chromium has no open window');
-    const session = await context.newCDPSession(page);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      // MV3 workers can be stopped when this API attaches. Chrome keeps the
-      // registered script URL, so wake our worker through the supported CDP API.
-      const registered = new Promise<string>((resolve, reject) => {
-        timer = setTimeout(
-          () => reject(new Error('Pal browser extension is unavailable')),
-          5000,
-        );
-        session.on('ServiceWorker.workerVersionUpdated', ({ versions }) => {
-          const version = versions.find(
-            (entry) =>
-              entry.scriptURL.startsWith('chrome-extension://') &&
-              entry.scriptURL.endsWith('/pal-task-groups.js'),
-          );
-          if (version) resolve(version.scriptURL);
-        });
-      });
-      await session.send('ServiceWorker.enable');
-      const scriptURL = await registered;
-      await session.send('ServiceWorker.startWorker', {
-        scopeURL: new URL('.', scriptURL).href,
-      });
-      return scriptURL;
-    } finally {
-      if (timer) clearTimeout(timer);
-      await session.detach();
-    }
-  }
-
-  private async worker(): Promise<Worker> {
-    const browser = await this.connect();
-    const scriptURL = await this.wakeWorker(browser);
-    const context = browser.contexts()[0];
-    const worker = context
-      .serviceWorkers()
-      .find((entry) => entry.url() === scriptURL);
-    if (worker) return worker;
-    return context.waitForEvent('serviceworker', {
-      timeout: 5000,
-      predicate: (entry) => entry.url() === scriptURL,
-    });
-  }
-
   private async groupRequest<T>(request: GroupRequest): Promise<T> {
-    const worker = await this.worker();
-    return worker.evaluate((input) => {
-      const api = (
-        globalThis as unknown as {
-          palBrowser: (input: GroupRequest) => Promise<T>;
-        }
-      ).palBrowser;
-      return api(input);
-    }, request);
+    if (!this.enabled || this.closing)
+      throw new Error('Browser control is unavailable');
+    let endpoint: string;
+    try {
+      endpoint = await this.cdpEndpoint();
+    } catch {
+      await this.connect();
+      endpoint = await this.cdpEndpoint();
+    }
+    return extensionRequest<T>(endpoint, request);
+  }
+
+  private async existingBrowser() {
+    if (!this.enabled || this.closing) return false;
+    try {
+      await this.version(500);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async groups() {
@@ -441,7 +378,7 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
   }
 
   async closeSession(taskId: string, workerId: string) {
-    if (!this.enabled || this.closing || !this.browser?.isConnected()) return;
+    if (!(await this.existingBrowser())) return;
     const sessionId = this.identity(taskId, workerId);
     const group = await this.groupRequest<BrowserGroup | null>({
       action: 'get',
@@ -453,15 +390,7 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
   }
 
   async closeGroup(taskId: string, idleBefore?: number) {
-    if (!this.enabled || this.closing) return;
-    if (!this.browser?.isConnected()) {
-      try {
-        await this.version(500);
-      } catch {
-        return;
-      }
-      await this.connect();
-    }
+    if (!(await this.existingBrowser())) return;
     const group = await this.groupRequest<BrowserGroup | null>({
       action: 'get',
       taskId,
@@ -479,15 +408,7 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
   async sweep(now = Date.now()) {
     // Cleanup never starts the browser. Session storage also recovers groups
     // after API reconnect without introducing a database or ownership history.
-    if (!this.enabled || this.closing) return;
-    if (!this.browser?.isConnected()) {
-      try {
-        await this.version(500);
-      } catch {
-        return;
-      }
-      await this.connect();
-    }
+    if (!(await this.existingBrowser())) return;
     const active = new Set(this.activeTasks());
     const idleBefore = now - 15 * 60_000;
     for (const group of await this.groups()) {
@@ -516,11 +437,11 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
 
   async shutdown() {
     this.onModuleDestroy();
-    if (this.browser?.isConnected()) {
+    if (await this.existingBrowser()) {
       for (const group of await this.groups())
         await this.closeGroup(group.taskId);
       // For a CDP connection, close disconnects this client; Chromium stays open.
-      await this.browser.close();
+      await this.browser?.close();
     }
     this.closing = true;
   }

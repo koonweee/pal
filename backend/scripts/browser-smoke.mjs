@@ -165,7 +165,7 @@ try {
   await human.goto(origin + '/human');
   const humanGroupPage = await ctx.newPage();
   await humanGroupPage.goto(origin + '/human-group');
-  const worker = ctx.serviceWorkers()[0];
+  let worker = ctx.serviceWorkers()[0];
   await worker.evaluate(async () => {
     const tabs = await chrome.tabs.query({});
     const tab = tabs.find((t) => t.url.endsWith('/human-group'));
@@ -337,34 +337,101 @@ try {
     await Promise.race([unresponsive, delay(250, 'timeout')]),
     'timeout',
   );
-  const saved = (await service.groups()).find((g) => g.taskId === b);
-  await service.sweep(saved.lastActivity + 15 * 60_000 - 1);
-  assert.equal((await service.groups()).length, 1);
-  await service.sweep(saved.lastActivity + 15 * 60_000);
+  // Use the already-attached observer for preparation: the old service path
+  // itself can wait on page initialization before reaching the cold regression.
+  const saved = await worker.evaluate(
+    (taskId) => globalThis.palBrowser({ action: 'get', taskId }),
+    b,
+  );
+  const interruptedService = service;
+  for (const previous of services) await previous.browser?.close();
+  console.log('REPRO disconnected existing backend browser clients');
+  // The extension can suspend while the backend is disconnected. Detach the
+  // observer too, otherwise its debugger keeps the MV3 worker alive.
+  // Closing the observer disconnects its sessions directly. CDPSession.detach()
+  // first sends Runtime.runIfWaitingForDebugger, which also waits on the loop.
+  await observer.close();
+  observer = undefined;
+  const raw = new WebSocket(await interruptedService.cdpEndpoint());
+  await new Promise((resolve, reject) => {
+    raw.addEventListener('open', resolve, { once: true });
+    raw.addEventListener('error', reject, { once: true });
+  });
+  let messageId = 0;
+  const send = (method, params = {}, sessionId) =>
+    new Promise((resolve, reject) => {
+      const id = ++messageId;
+      const receive = ({ data }) => {
+        const response = JSON.parse(String(data));
+        if (response.id !== id) return;
+        raw.removeEventListener('message', receive);
+        if (response.error) reject(new Error(response.error.message));
+        else resolve(response.result);
+      };
+      raw.addEventListener('message', receive);
+      raw.send(JSON.stringify({ id, method, params, sessionId }));
+    });
+  try {
+    const targets = (await send('Target.getTargets')).targetInfos;
+    const hung = targets.find(
+      (entry) => entry.type === 'page' && entry.url === origin + '/hotels',
+    );
+    assert.ok(hung, 'Looping task target disappeared before cold cleanup');
+    const { sessionId } = await send('Target.attachToTarget', {
+      targetId: hung.targetId,
+      flatten: true,
+    });
+    await send('ServiceWorker.enable', {}, sessionId);
+    console.log('REPRO browser-level worker control responds on the hung page');
+    await send('ServiceWorker.stopAllWorkers', {}, sessionId);
+    await until(
+      async () =>
+        !(await send('Target.getTargets')).targetInfos.some(
+          (entry) => entry.type === 'service_worker',
+        ),
+    );
+    console.log(
+      'REPRO backend disconnected and extension suspended with looping renderer still alive',
+    );
+    service = new BrowserService(config, tasks, events, execution);
+    services.push(service);
+    service.bindActiveTasks(() => [b]);
+    await service.sweep(saved.lastActivity + 15 * 60_000 - 1);
+    assert.equal((await service.groups()).length, 1);
+    await service.sweep(saved.lastActivity + 15 * 60_000);
+    await until(
+      async () =>
+        !(await send('SystemInfo.getProcessInfo')).processInfo.some(
+          (process) => process.id === busyRenderer.id,
+        ),
+    );
+  } finally {
+    raw.close();
+  }
+  observer = await chromium.connectOverCDP(await service.cdpEndpoint(), {
+    noDefaults: true,
+  });
+  ctx = observer.contexts()[0];
+  worker = ctx
+    .serviceWorkers()
+    .find((entry) => entry.url().endsWith('/pal-task-groups.js'));
+  assert.ok(worker);
   assert.equal(
     (await service.groups()).length,
     0,
     'Active task/stuck browser command kept an expired looping renderer alive',
   );
-  assert.equal(taskPage.isClosed(), true);
-  await until(
-    async () =>
-      !(
-        await browserSession.send('SystemInfo.getProcessInfo')
-      ).processInfo.some((process) => process.id === busyRenderer.id),
-  );
+  assert.ok(!ctx.pages().some((page) => page.url() === origin + '/hotels'));
   const settled = await Promise.race([stuckCommand, delay(10000, null)]);
   assert.ok(settled, 'Browser command did not settle after its target closed');
   assert.ok(
     settled.error || settled.result.success === false,
     'Closed looping command must return a recoverable failure',
   );
-  assert.equal(service.operations.has(b), false);
-  await pageSession.detach().catch(() => {});
-  await browserSession.detach();
+  assert.equal(interruptedService.operations.has(b), false);
   service.bindActiveTasks(() => []);
   console.log(
-    'PASS active task and in-flight infinite-loop command expire at 15 minutes; renderer exits and command fails cleanly',
+    'PASS cold reconnect wakes suspended extension and expires looping renderer at 15 minutes; command fails cleanly',
   );
   await service.closeGroup(b);
   await delay(200);

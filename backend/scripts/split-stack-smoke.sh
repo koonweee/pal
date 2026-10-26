@@ -1,4 +1,6 @@
 #!/bin/sh
+# Isolated Docker Compose integration checks; builds images and removes this test project’s volumes.
+# Requires Docker/Compose. Invoke npm run browser:smoke -- --idle-cleanup for focused lifecycle checks.
 set -eu
 cd "$(dirname "$0")/.."
 export PAL_EXECUTION_NETWORK_PREFIX=172.30.234
@@ -33,7 +35,10 @@ compose exec -T execution sh -eu -c '
 '
 compose exec -T agent-service node --input-type=module < scripts/split-stack/check.mjs
 compose exec -T agent-service node --input-type=module < scripts/split-stack/files.mjs
-node scripts/split-stack/pwa.mjs
+# Focused browser lifecycle checks do not require PWA activation or image capture.
+if [ "$mode" != browser ] || [ "${1:-}" != --idle-cleanup ]; then
+  node scripts/split-stack/pwa.mjs
+fi
 smoke() {
   script="$1"
   shift
