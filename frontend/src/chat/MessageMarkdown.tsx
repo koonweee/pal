@@ -42,7 +42,7 @@ const allowedAttributes = [
   'type',
 ];
 
-export function AssistantMarkdown({ text }: { text: string }) {
+export function MessageMarkdown({ text }: { text: string }) {
   const html = useMemo(
     () =>
       DOMPurify.sanitize(marked.parse(text, { async: false }), {

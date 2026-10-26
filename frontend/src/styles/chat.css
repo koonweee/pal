@@ -256,6 +256,14 @@ textarea::-webkit-scrollbar-thumb,
   background: var(--pal-action);
   border: 1px solid var(--pal-action);
 }
+.message.user .message-body a,
+.message.user .message-body blockquote {
+  color: inherit;
+}
+.message.user .message-body code,
+.message.user .message-body pre {
+  color: var(--pal-text);
+}
 .message.assistant {
   margin-right: auto;
 }
@@ -326,9 +334,6 @@ textarea::-webkit-scrollbar-thumb,
 }
 .message-receipt-label[data-visible='true'] {
   opacity: 1;
-}
-.plain-text {
-  white-space: pre-wrap;
 }
 .message-body > :first-child {
   margin-top: 0;

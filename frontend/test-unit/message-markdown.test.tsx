@@ -1,11 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, test } from 'vitest';
-import { AssistantMarkdown } from '../src/chat/AssistantMarkdown';
+import { MessageMarkdown } from '../src/chat/MessageMarkdown';
 
-describe('AssistantMarkdown', () => {
+describe('MessageMarkdown', () => {
   test('renders supported markdown and safe external links', () => {
     const { container } = render(
-      <AssistantMarkdown
+      <MessageMarkdown
         text={
           '## Result\n\n[Open](https://example.com)\n\n```ts\nconst ok = true;\n```'
         }
@@ -26,7 +26,7 @@ describe('AssistantMarkdown', () => {
 
   test('allows only the message markup policy', () => {
     const { container } = render(
-      <AssistantMarkdown
+      <MessageMarkdown
         text={
           '<script>alert(1)</script><img src="bad" alt="bad"><a href="javascript:alert(1)" onclick="alert(1)" style="color: red">Unsafe</a>'
         }

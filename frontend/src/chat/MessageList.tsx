@@ -11,7 +11,7 @@ import {
 import { IconAction } from '../ui/IconAction';
 import { useInstanceSettings } from '../instance-settings/InstanceSettingsProvider';
 import { SuggestedReplies } from './SuggestedReplies';
-import { AssistantMarkdown } from './AssistantMarkdown';
+import { MessageMarkdown } from './MessageMarkdown';
 import { QuotePreview } from './QuotePreview';
 import {
   conversationDateKey,
@@ -126,10 +126,8 @@ const MessageRow = memo(
                   key={message.metadata.secureEntryRequestId}
                   requestId={message.metadata.secureEntryRequestId}
                 />
-              ) : message.role === 'assistant' ? (
-                <AssistantMarkdown text={message.text} />
               ) : (
-                <div className="message-body plain-text">{message.text}</div>
+                <MessageMarkdown text={message.text} />
               )}
               {!!message.attachments.length && (
                 <MessageAttachments
