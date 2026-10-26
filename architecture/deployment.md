@@ -60,6 +60,8 @@ Database migrations remain explicit deployment steps, run from agent-service bef
 
 The gateway forwards API/SSE to agent-service and versioned desktop HTTP/WebSocket paths to execution. Nginx refreshes upstream Docker DNS when containers are replaced. Its 25 MiB request-body limit admits Pal's 25,000,000-byte uploads. The PWA service worker caches the static shell; API, files, OAuth, notifications, and noVNC remain network-only.
 
+One active web service owns the PWA origin. Remove retired Compose service containers after migration acceptance while preserving their persistent data; project-wide Stack starts can revive stopped service containers and duplicate ingress.
+
 One frontend lifecycle owner reconciles waiting workers and controller identity on worker events and page resume. Accepted updates reload once the selected worker is activated and controls the page, with a fresh reload-safety check. Worker-state observation and bounded polling handle missed controller events. Activation that remains incomplete after ten seconds reports a retryable error and preserves the running page. Automatic updates retain their visible three-second countdown before requesting activation.
 
 ## Persistence and Desktop

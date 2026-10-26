@@ -42,7 +42,21 @@ Implementation tasks:
 Exit criteria:
 
 - Type, unit, PWA, ownership and unused-code checks pass.
-- Changes are committed locally. Deployment and physical iPhone verification remain separate follow-up work.
+- Changes are committed and deployed to production. Physical iPhone verification remains follow-up work.
+
+### 3. Production rollout
+
+Implementation tasks:
+
+- [x] Build and deploy the verified AMD64 web image from `251863e`, retaining backend release identity `69efe6a`.
+- [x] Remove the retired `pal-sf-pal-web-1` and `pal-sf-pal-1` containers while preserving persistent data.
+- [x] Verify consistent ingress, served lifecycle code, API/SSE, desktop connectivity, worker activation and repeated reloads.
+- [x] Restore normal Stack arguments and remove temporary operator plans and probes.
+
+Exit criteria:
+
+- Production serves one PWA release, all six current runtime services are healthy, and every non-web container retains its identity.
+- Update publication, activation and three stable reloads pass; physical iPhone behavior remains unverified locally.
 
 ## Tests
 
@@ -68,4 +82,10 @@ npm run trim
 
 ## Validation
 
-Strict TypeScript, all 31 unit tests, all 15 production-PWA browser tests, cache-boundary assertions, UI ownership and unused-code checks pass. Regression tests reproduced the unchanged-controller notice and stalled-activation reload loop against the original build. Slow activation coverage holds the worker in activating state and verifies the running app preserves a newly entered draft. Deployment and physical iPhone Home Screen verification remain follow-up work; the reported iOS black screen has not been reproduced on a device.
+Strict TypeScript, all 31 unit tests, all 15 production-PWA browser tests, cache-boundary assertions, UI ownership and unused-code checks pass. Regression tests reproduced the unchanged-controller notice and stalled-activation reload loop against the original build. Slow activation coverage holds the worker in activating state and verifies the running app preserves a newly entered draft. Production deployment is verified; the reported iOS black screen has not been reproduced on a physical device.
+
+## Production acceptance
+
+Production serves frontend `251863e` through infrastructure revision `f892b90`, with retained backend release `69efe6a` and contract 6. Two retired containers shared the current web ingress labels and split health requests evenly between releases `69efe6a` and `a56efe2`; their start times matched the scheduled backup restart. Removing those containers leaves repeated requests consistently on the current release and prevents project-wide restarts from reviving duplicate ingress. Their bind data remain intact.
+
+All six current runtime services are healthy, every non-web container identity is retained, both Pal ResourceSyncs have no pending changes, and normal Stack arguments are restored. Live update publication/SSE, desktop HTTP/RFB, served worker activation and three stable reloads pass. The isolated browser probe intercepts API writes and disables push because macOS headless Chromium advertises a BadgeService that terminates its renderer when called; it creates no server chat records. Physical iPhone Home Screen acceptance remains outstanding. Nonsecret evidence is retained in `.local/pwa-update-release/`.
