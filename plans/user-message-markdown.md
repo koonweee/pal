@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Done
 
 ## Goal
 
@@ -33,8 +33,8 @@ Exit criteria:
 
 Implementation tasks:
 
-- [ ] Refresh the staged development PWA and production frontend.
-- [ ] Verify deployed assets, application health, and update announcements.
+- [x] Refresh the staged development PWA and production frontend.
+- [x] Verify deployed assets, application health, and update announcements.
 
 Exit criteria:
 
@@ -61,3 +61,10 @@ npm run build
 
 - Shared Markdown rendering works for web user and agent bubbles, including new sends.
 - Relevant checks pass and dev/production serve the updated frontend.
+
+## Validation
+
+- Strict TypeScript, production build, UI ownership, unused-code checks, two renderer tests, and three focused browser tests pass.
+- Dev and production served-bundle checks pass for both roles and both themes, with raw composer source preserved and zero browser errors. Browser fixtures create no chat records.
+- Production runs frontend source `654d6ed` with retained backend release `69efe6a` and contract 6. Only web is replaced; all six runtime services are healthy, and every non-web container identity is retained.
+- Production update publication and live SSE delivery, normal service-worker readiness, desktop HTTP, and RFB greeting pass. Normal Stack arguments are restored. Exact temporary rollout plans and probes are removed; nonsecret evidence remains in `.local/user-message-markdown/`.
