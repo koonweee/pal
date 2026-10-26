@@ -211,10 +211,11 @@ test('reloads when an activating update does not emit controllerchange', async (
 
     const update = page.locator('#pwa-update');
     await expect(update).toBeVisible();
-    await page.clock.install();
-    await page.clock.pauseAt(new Date(Date.now() + 1000));
-    await update.getByRole('button', { name: 'Update', exact: true }).click();
-    // Activation must finish while SSE is open, before the reload fallback.
+    await Promise.all([
+      page.waitForEvent('load'),
+      update.getByRole('button', { name: 'Update', exact: true }).click(),
+    ]);
+    // Worker state observation must recover even without controllerchange.
     await expect
       .poll(() =>
         page.evaluate(async () => {
@@ -225,8 +226,125 @@ test('reloads when an activating update does not emit controllerchange', async (
         }),
       )
       .toBe(true);
-    await Promise.all([page.waitForEvent('load'), page.clock.runFor(3000)]);
     await expect(page.locator('[data-react-shell="ready"]')).toBeVisible();
+    await expect(update).toBeHidden();
+  } finally {
+    await writeFile(workerPath, original);
+  }
+});
+
+test('ignores controller notifications when the controlling worker is unchanged', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.evaluate(async () => navigator.serviceWorker.ready);
+  await page.reload();
+  await expect(page.locator('[data-react-shell="ready"]')).toBeVisible();
+  await page.evaluate(() => {
+    navigator.serviceWorker.dispatchEvent(new Event('controllerchange'));
+    window.dispatchEvent(new Event('pageshow'));
+  });
+  await expect(page.locator('#pwa-update')).toBeHidden();
+});
+
+test('keeps the app open when activation stalls and lets the user retry', async ({
+  page,
+}) => {
+  const workerPath = resolve('dist/sw.js');
+  const original = await readFile(workerPath, 'utf8');
+  await page.addInitScript(() => {
+    const postMessage = ServiceWorker.prototype.postMessage;
+    ServiceWorker.prototype.postMessage = function (message, ...args) {
+      if (
+        message?.type === 'SKIP_WAITING' &&
+        !sessionStorage.getItem('allow-update')
+      )
+        return;
+      return postMessage.call(this, message, ...args);
+    };
+  });
+  try {
+    await page.goto('/');
+    await page.evaluate(async () => navigator.serviceWorker.ready);
+    await page.reload();
+    await writeFile(workerPath, `${original}\n// stalled-activation-test\n`);
+    await page.evaluate(async () => {
+      await (await navigator.serviceWorker.ready).update();
+    });
+    const update = page.locator('#pwa-update');
+    await expect(update).toBeVisible();
+    await page.clock.install();
+    await page.clock.pauseAt(new Date(Date.now() + 1000));
+    await page.evaluate(() => {
+      document.documentElement.dataset.activationTest = 'original-page';
+    });
+    await update.getByRole('button', { name: 'Update', exact: true }).click();
+    await page.clock.runFor(15_000);
+    await expect(update).toContainText('Update failed');
+    expect(
+      await page.evaluate(
+        () => document.documentElement.dataset.activationTest,
+      ),
+    ).toBe('original-page');
+    await expect(page.locator('#draft')).toBeVisible();
+    await page.evaluate(() => sessionStorage.setItem('allow-update', 'yes'));
+    await Promise.all([
+      page.waitForEvent('load'),
+      update.getByRole('button', { name: 'Update', exact: true }).click(),
+    ]);
+    await expect(page.locator('[data-react-shell="ready"]')).toBeVisible();
+    await expect(update).toBeHidden();
+  } finally {
+    await writeFile(workerPath, original);
+  }
+});
+
+test('waits for activation to finish and preserves work started during activation', async ({
+  page,
+}) => {
+  const workerPath = resolve('dist/sw.js');
+  const original = await readFile(workerPath, 'utf8');
+  try {
+    await page.goto('/');
+    await page.evaluate(async () => navigator.serviceWorker.ready);
+    await page.reload();
+    await writeFile(
+      workerPath,
+      `${original}
+self.addEventListener('activate', event => {
+  event.waitUntil(new Promise(resolve => setTimeout(resolve, 2000)));
+});
+`,
+    );
+    await page.evaluate(async () => {
+      await (await navigator.serviceWorker.ready).update();
+    });
+    const update = page.locator('#pwa-update');
+    await expect(update).toBeVisible();
+    await update.getByRole('button', { name: 'Update', exact: true }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(async () => {
+          const registration = await navigator.serviceWorker.getRegistration();
+          return (
+            registration?.active?.state === 'activating' &&
+            navigator.serviceWorker.controller === registration.active
+          );
+        }),
+      )
+      .toBe(true);
+    await page.locator('#draft').fill('Work started during activation');
+    await expect(
+      update.getByRole('button', { name: 'Update', exact: true }),
+    ).toBeEnabled();
+    await expect(page.locator('#draft')).toHaveValue(
+      'Work started during activation',
+    );
+    await page.locator('#draft').fill('');
+    await Promise.all([
+      page.waitForEvent('load'),
+      update.getByRole('button', { name: 'Update', exact: true }).click(),
+    ]);
     await expect(update).toBeHidden();
   } finally {
     await writeFile(workerPath, original);

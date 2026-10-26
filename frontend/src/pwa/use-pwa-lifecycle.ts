@@ -8,7 +8,10 @@ import { useUpdateMode } from './update-preference';
 export function usePwaLifecycle(safety: ReloadSafetyState) {
   const registration = useRef<ServiceWorkerRegistration | undefined>(undefined);
   const checking = useRef<Promise<void> | undefined>(undefined);
-  const reloadOnControl = useRef(false);
+  const stopActivation = useRef<(() => void) | undefined>(undefined);
+  const reloading = useRef(false);
+  const safetyNow = useRef(safety);
+  safetyNow.current = safety;
   const externallyControlled = useRef(false);
   const [busy, setBusy] = useState(false);
   const [countdown, setCountdown] = useState<number>();
@@ -24,45 +27,52 @@ export function usePwaLifecycle(safety: ReloadSafetyState) {
   useEffect(() => {
     if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
     let active = true;
-    let hadController = navigator.serviceWorker.controller !== null;
+    let controller = navigator.serviceWorker.controller;
+    const cleanup: Array<() => void> = [];
     const tracked = new WeakSet<ServiceWorker>();
+    const reconcile = () => {
+      if (!active) return;
+      const next = navigator.serviceWorker.controller;
+      if (next && next !== controller) {
+        if (controller) externallyControlled.current = true;
+        controller = next;
+      }
+      setNeedRefresh(
+        externallyControlled.current || !!registration.current?.waiting,
+      );
+    };
     const track = (worker: ServiceWorker | null) => {
       if (!worker || tracked.has(worker)) return;
       tracked.add(worker);
-      worker.addEventListener('statechange', () => {
-        if (active && worker.state === 'installed' && hadController)
-          setNeedRefresh(true);
-      });
+      worker.addEventListener('statechange', reconcile);
+      cleanup.push(() => worker.removeEventListener('statechange', reconcile));
     };
-    const onControllerChange = () => {
-      if (!active) return;
-      if (reloadOnControl.current) {
-        location.reload();
-        return;
-      }
-      if (hadController) {
-        externallyControlled.current = true;
-        setNeedRefresh(true);
-      }
-      hadController = true;
+    navigator.serviceWorker.addEventListener('controllerchange', reconcile);
+    window.addEventListener('pageshow', reconcile);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') reconcile();
     };
-    navigator.serviceWorker.addEventListener(
-      'controllerchange',
-      onControllerChange,
-    );
+    document.addEventListener('visibilitychange', onVisible);
     void navigator.serviceWorker
-      .register('/sw.js', { scope: '/' })
+      .register('/sw.js', { scope: '/', updateViaCache: 'none' })
       .then((value) => {
-        if (!value) throw new Error('Could not register application updates.');
         if (!active) return;
         setError(undefined);
         registration.current = value;
         void navigator.serviceWorker.ready.then((ready) =>
           reconcileWebPush(ready),
         );
-        if (value.waiting && hadController) setNeedRefresh(true);
+        reconcile();
+        track(value.waiting);
         track(value.installing);
-        value.addEventListener('updatefound', () => track(value.installing));
+        const onUpdateFound = () => {
+          track(value.installing);
+          reconcile();
+        };
+        value.addEventListener('updatefound', onUpdateFound);
+        cleanup.push(() =>
+          value.removeEventListener('updatefound', onUpdateFound),
+        );
       })
       .catch((reason: unknown) => {
         if (active)
@@ -74,10 +84,14 @@ export function usePwaLifecycle(safety: ReloadSafetyState) {
       });
     return () => {
       active = false;
+      stopActivation.current?.();
       navigator.serviceWorker.removeEventListener(
         'controllerchange',
-        onControllerChange,
+        reconcile,
       );
+      window.removeEventListener('pageshow', reconcile);
+      document.removeEventListener('visibilitychange', onVisible);
+      for (const dispose of cleanup) dispose();
     };
   }, [registrationAttempt]);
 
@@ -124,21 +138,75 @@ export function usePwaLifecycle(safety: ReloadSafetyState) {
   }, [check]);
 
   const activate = useCallback(() => {
-    if (!canActivateUpdate(safety)) {
+    if (stopActivation.current || reloading.current) return;
+    if (!canActivateUpdate(safetyNow.current)) {
       setDeferred(true);
       return;
     }
     setDeferred(false);
-    setBusy(true);
-    const waiting = registration.current?.waiting;
-    if (!waiting || externallyControlled.current) {
-      location.reload();
+    setError(undefined);
+    const value = registration.current;
+    const target = value?.waiting ?? value?.active;
+    if (!target) {
+      setError('No application update is ready. Try again when connected.');
       return;
     }
-    reloadOnControl.current = true;
-    waiting.postMessage({ type: 'SKIP_WAITING' });
-    window.setTimeout(() => location.reload(), 3000);
-  }, [safety]);
+    setBusy(true);
+    const stop = () => {
+      window.clearInterval(poll);
+      window.clearTimeout(timeout);
+      target.removeEventListener('statechange', inspect);
+      navigator.serviceWorker.removeEventListener('controllerchange', inspect);
+      stopActivation.current = undefined;
+    };
+    const fail = (message: string) => {
+      stop();
+      setBusy(false);
+      setError(message);
+    };
+    const inspect = () => {
+      if (target.state === 'redundant') {
+        fail('The update was replaced. Check for an update again.');
+        return;
+      }
+      // A controller event can arrive before activation finishes. Polling also
+      // handles a resumed iOS client that missed the event entirely.
+      if (
+        target.state !== 'activated' ||
+        navigator.serviceWorker.controller !== target
+      )
+        return;
+      stop();
+      if (!canActivateUpdate(safetyNow.current)) {
+        externallyControlled.current = true;
+        setNeedRefresh(true);
+        setDeferred(true);
+        setBusy(false);
+        return;
+      }
+      reloading.current = true;
+      location.reload();
+    };
+    const poll = window.setInterval(inspect, 100);
+    const timeout = window.setTimeout(
+      () => fail('The update did not finish activating. Try again.'),
+      10_000,
+    );
+    stopActivation.current = stop;
+    target.addEventListener('statechange', inspect);
+    navigator.serviceWorker.addEventListener('controllerchange', inspect);
+    try {
+      if (target === value?.waiting)
+        target.postMessage({ type: 'SKIP_WAITING' });
+      inspect();
+    } catch (reason) {
+      fail(
+        reason instanceof Error
+          ? reason.message
+          : 'Could not activate the application update.',
+      );
+    }
+  }, []);
 
   const canCountDown =
     needRefresh &&
@@ -181,7 +249,8 @@ export function usePwaLifecycle(safety: ReloadSafetyState) {
     needRefresh,
     retry() {
       setError(undefined);
-      if (registration.current) check();
+      if (registration.current && needRefresh) activate();
+      else if (registration.current) check();
       else setRegistrationAttempt((attempt) => attempt + 1);
     },
   };

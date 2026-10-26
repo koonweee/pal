@@ -42,7 +42,7 @@ export function PwaUpdateNotice({
           ? 'Update required'
           : 'Update available';
   const details = error
-    ? `Could not check for a Pal update. ${error}`
+    ? error
     : required
       ? 'Pal updated and must refresh before making more changes.'
       : deferred
