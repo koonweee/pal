@@ -87,6 +87,7 @@ Use `npm` and run frontend commands from `frontend/`:
 
 - Document configuration in `.env.example` as it is introduced.
 - Keep credentials, local environment files, uploaded files, and database data out of version control.
+- After rollout acceptance and required checks pass, delete temporary migration data, rehearsal artifacts, cutover snapshots, and migration rollback backups unless the user explicitly requests retention. Include this cleanup in rollout completion.
 
 ## Local Skills
 

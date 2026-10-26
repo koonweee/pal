@@ -96,7 +96,7 @@ Exit criteria:
 
 Development acceptance:
 
-- Current native authentication/login improvements and routed egress are deployed together. Shared home, service data and all checked row counts are preserved: 11 tasks, 510 public messages, 786 Mastra messages and 39 remembered login sites. Private rollback images and readable stopped-state backups are retained under `.local/dev-routed-cutover-20261023-144935/`.
+- Current native authentication/login improvements and routed egress are deployed together. Shared home, service data and all checked row counts are preserved: 11 tasks, 510 public messages, 786 Mastra messages and 39 remembered login sites. Local cutover backups and temporary state are removed after acceptance.
 - Public Node fetch succeeds for IANA, Apple and Wikipedia. Execution-to-API requests receive 403; Tailnet/metadata requests fail; execution root lacks NET_ADMIN/NET_RAW. The native browser/desktop smoke passes using IANA because example.com rate-limited the initial request. Shell and native filesystem operations pass.
 - An independent router restart restores public access while execution identity/start time and Chromium PID remain unchanged. Native authentication skill discovery and vault initialization pass.
 - Vite, staged PWA and the existing Tailnet PWA URL pass real-browser API, manifest, SSE contract and noVNC HTTP/WebSocket checks. Normal `./scripts/dev-local up` and `pwa-up` pass without replacing the desktop; the PWA update notice is published. Startup/rebuild check the real published PWA health URL.

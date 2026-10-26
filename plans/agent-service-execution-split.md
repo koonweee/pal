@@ -133,7 +133,7 @@ Exit criteria:
 Validation for milestone 4:
 
 - npm run runtime:migration:smoke passes a complete offline copy and rollback with synthetic conversations, native memory and schedules, historical attachments, Chromium account state, keyring files, home/workspace data, jq, and an executable installed outside home.
-- The execution image and environment exclude backend application/authentication state. Target-only writes remain isolated from the original rollback state. Protected rehearsal archives remain under .local/migration-rehearsal-*.
+- The execution image and environment exclude backend application/authentication state. Target-only writes remain isolated from the original rollback state.
 - Four file HTTP regressions pass, including deferred inspection-copy expiry, retry after execution returns, and preservation of user files. Native runtime checks reject concurrent publication reads and private-path symlink escapes.
 - Migration waits for PostgreSQL's final TCP listener. The rehearsal waits for Chromium profile shutdown and X11 readiness before restarting the browser.
 
@@ -183,17 +183,17 @@ Validation: backend build/lint, two execution regressions, four file HTTP checks
 
 ## Deployment and Cleanup
 
-Dev and production run the final normal images and canonical paths. Both migrations and compatibility cleanup are accepted. Original state and protected paired backups remain retained; temporary operator delivery files are removed.
+Dev and production run the final normal images and canonical paths. Both migrations and compatibility cleanup are accepted. Local migration rehearsal, cutover, and cleanup artifacts are removed.
 
 - [x] Back up and prepare copied dev state. All 56 database table counts and 794 copied regular files match the stopped source before application startup. The preserved-image build creates apt log directories and retains existing package configuration during upgrades. Migration accepts bind-mounted source data and preserves the PostgreSQL role password.
 - [x] Accept dev: API/PWA and Tailnet routes, seven byte-identical historical downloads, browser/desktop operations, live Main-to-Task shell execution, private service isolation, and browser/process persistence across backend restart pass. Browser credential databases were copied byte-for-byte; no credential values were inspected.
-- [x] Migrate production through Komodo. All 62 database table counts and 59,775 copied files match; original paired state and deployment definitions remain protected. The credential scan checks Mastra access/refresh/API-key fields without treating account labels or email metadata as secrets.
+- [x] Migrate production through Komodo. All 62 database table counts and 59,775 copied files match; original paired state and deployment definitions are protected through rollout acceptance. The credential scan checks Mastra access/refresh/API-key fields without treating account labels or email metadata as secrets.
 - [x] Accept production: private API/PWA/SSE/noVNC, history/tasks/MCP connections, historical downloads, live Main-to-Task browser/file delivery, native desktop capture, and private filesystem/network boundaries pass. Chromium and an unrelated process keep their exact identities across an agent-service-only restart. The backup Action uses the split state directories.
 - [x] Complete the post-migration cleanup checklist and verify both deployments using the final image/configuration.
 
 ## Post-Migration Cleanup
 
-Start cleanup after dev and production migrations are accepted. Retain rollback backups and the original checkout/configuration independently of code cleanup. Fresh installations use the normal image and paths. The cleanup removes the one-time tooling, execution path translation, Docker aliases, and preserved-image settings. Targeted state rewrites precede the final production image deployment.
+Start cleanup after dev and production migrations are accepted. Keep migration rollback backups and the original checkout/configuration through rollout acceptance, then delete temporary migration data unless the user explicitly requests retention. Fresh installations use the normal image and paths. The cleanup removes the one-time tooling, execution path translation, Docker aliases, and preserved-image settings. Targeted state rewrites precede the final production image deployment.
 
 Removal checklist:
 
@@ -206,7 +206,7 @@ Removal checklist:
 | Preserved execution base | Capture required packages, utilities, and configuration in the normal execution image before removing PAL_EXECUTION_BASE and its build wiring. |
 | Preserved identity | Verify browser sessions with the final hostname before removing PAL_EXECUTION_HOSTNAME. Remove cutover-only PAL_EXECUTION_IMAGE overrides and related configuration when no installation needs them. |
 
-- [x] Record acceptance for dev and production. Recovery stops all writers and restores the retained paired database/home/private files with their matching image and configuration. Preserve and reconcile later target writes before restoring an older snapshot. Code cleanup retains protected backups.
+- [x] Record acceptance for dev and production. While rollback backups exist, recovery stops all writers and restores paired database/home/private files with their matching image and configuration. Preserve and reconcile later target writes before restoring an older snapshot. Local rollout cleanup is complete.
 - [x] Complete targeted state rewrites in both installations. Dev has four configuration files and four conversation/memory records rewritten, with three browser credential databases unchanged. Production rewrites cover 6,220 agent messages and targeted memory, thread state, schedules, application records, and operational home references. All 62 production table counts and three browser credential database hashes match the pre-cleanup backup. Frozen retry-request bodies, historical logs, crash dumps, saved desktop rollback files, and unrelated host/URL paths remain untouched.
 - [x] Remove obsolete compatibility code, fixtures, commands, and configuration in one focused cleanup commit. Ordinary SQL migrations and the permanent execution/filesystem adapters remain.
 - [x] Verify the final image/configuration in dev and production. The fresh isolated stack passes browser/worker grouping, desktop, file/PWA/MCP transport, network isolation, restart persistence, and execution outage checks. Migrated dev runs normal images without cutover overrides; six historical downloads remain byte-identical and a live model/browser task delivers a file through the canonical paths. Production runs the verified immutable cleanup images with all five services healthy; PWA/native API, SSE, noVNC WebSocket, two historical downloads, live file delivery, removed aliases, and private filesystem/network denial pass. Refreshing the retained Pal extension worker and restarting Chromium restores session metadata; repeated same-tab title/URL queries pass.
