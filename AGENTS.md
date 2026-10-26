@@ -83,11 +83,21 @@ Use `npm` and run frontend commands from `frontend/`:
 - Use concise Conventional Commit-style subjects, such as `feat(chat): add message history`.
 - Describe the resulting behavior, relevant API or migration changes, and validation performed.
 
+## Resource Cleanup
+
+- Complete routine cleanup of task-created resources as part of every task without asking for confirmation, including after failed or abandoned attempts. Prefer the existing development stack over duplicate stacks.
+- Track containers, images, volumes, and temporary files you create. Give one-off Docker resources a recognizable task name or label. After testing, remove task-created containers, disposable volumes, and temporary files.
+- Remove unneeded one-off test, migration, smoke-test, and intermediate images once no container references them. Keep at most one relevant rollback image per service and remove it after the replacement is validated.
+- Protect the entire `pal-dev-split` stack, its images, and its volumes: `pal-dev-split_agent_home`, `pal-dev-split_service_data`, `pal-dev-split_postgres_data`, and `pal-dev-split_frontend_node_modules`. Preserve the current image tags used to recreate the stack, even when running containers use older image IDs.
+- Before deleting an image, check its exact ID against running and stopped containers. Before deleting a volume, check its mounts across all containers. Treat existing database and agent-home volumes as persistent data; delete them only with explicit authorization.
+- Remove resources by specific name or ID. Do not use global Docker pruning or `docker compose down -v` as routine cleanup, or stop, recreate, or delete shared development containers solely to reclaim space.
+- After build-heavy work, inspect `docker system df` and remove disposable task artifacts. Report what was removed and anything intentionally retained, with its purpose and approximate size.
+- After rollout acceptance and required checks pass, delete temporary migration data, rehearsal artifacts, cutover snapshots, and migration rollback backups unless the user requests retention. Include this cleanup in rollout completion.
+
 ## Configuration
 
 - Document configuration in `.env.example` as it is introduced.
 - Keep credentials, local environment files, uploaded files, and database data out of version control.
-- After rollout acceptance and required checks pass, delete temporary migration data, rehearsal artifacts, cutover snapshots, and migration rollback backups unless the user explicitly requests retention. Include this cleanup in rollout completion.
 
 ## Local Skills
 
