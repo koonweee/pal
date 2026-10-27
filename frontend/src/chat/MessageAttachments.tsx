@@ -1,10 +1,11 @@
-import { Alert, Modal, UnstyledButton } from '@mantine/core';
+import { Alert, Loader, Modal, UnstyledButton } from '@mantine/core';
 import { ChevronLeft, ChevronRight, Download, X } from 'lucide-react';
 import {
   type CSSProperties,
   type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
+  useEffect,
   useRef,
   useState,
 } from 'react';
@@ -27,6 +28,80 @@ function fileDownloadUrl(file: Attachment) {
   return `/api/files/${encodeURIComponent(file.id)}/download`;
 }
 
+function supportsFileSharing() {
+  return (
+    typeof navigator.share === 'function' &&
+    typeof navigator.canShare === 'function'
+  );
+}
+
+function expectedShareDismissal(error: unknown) {
+  return (
+    error instanceof DOMException &&
+    (error.name === 'AbortError' || error.name === 'NotAllowedError')
+  );
+}
+
+function useFileHandoff(file: Attachment) {
+  const [state, setState] = useState<'idle' | 'preparing' | 'failed'>('idle');
+  const prepared = useRef<File | undefined>(undefined);
+  const request = useRef<AbortController | undefined>(undefined);
+  const available = supportsFileSharing();
+
+  useEffect(
+    () => () => {
+      request.current?.abort();
+    },
+    [],
+  );
+
+  async function share(preparedFile: File) {
+    try {
+      await navigator.share({ files: [preparedFile], title: file.filename });
+      setState('idle');
+    } catch (error) {
+      if (!expectedShareDismissal(error)) setState('failed');
+    }
+  }
+
+  async function open() {
+    if (!available) return;
+    if (prepared.current) {
+      await share(prepared.current);
+      return;
+    }
+
+    const controller = new AbortController();
+    request.current = controller;
+    setState('preparing');
+    try {
+      const response = await fetch(fileContentUrl(file.id), {
+        signal: controller.signal,
+      });
+      if (!response.ok)
+        throw new Error(`File request failed: ${response.status}`);
+      const blob = await response.blob();
+      const preparedFile = new File([blob], file.filename, {
+        type: file.contentType || blob.type || 'application/octet-stream',
+      });
+      if (!navigator.canShare({ files: [preparedFile] })) {
+        window.location.assign(fileDownloadUrl(file));
+        return;
+      }
+      prepared.current = preparedFile;
+      setState('idle');
+      await share(preparedFile);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError'))
+        setState('failed');
+    } finally {
+      request.current = undefined;
+    }
+  }
+
+  return { available, open, state };
+}
+
 function fileLabel(file: Attachment) {
   const extension = file.filename.match(/\.([a-z0-9]{1,10})$/i)?.[1];
   return (
@@ -41,26 +116,26 @@ function fileLabel(file: Attachment) {
 }
 
 function FilePill({ file }: { file: Attachment }) {
+  const handoff = useFileHandoff(file);
   const extension = file.filename.match(/\.[^.]+$/)?.[0] ?? '';
-  return (
-    <a
-      className="file-pill"
-      href={fileDownloadUrl(file)}
-      title={file.filename}
-      aria-label={`Download ${file.filename}, ${fileSize(file.sizeBytes)}`}
-    >
+  const contents = (
+    <>
       <span className="file-graphic">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.7"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.41 17.4a2 2 0 0 1-2.83-2.83l8.48-8.48" />
-        </svg>
+        {handoff.state === 'preparing' ? (
+          <Loader size={24} color="currentColor" aria-hidden="true" />
+        ) : (
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.41 17.4a2 2 0 0 1-2.83-2.83l8.48-8.48" />
+          </svg>
+        )}
         <span>{fileLabel(file)}</span>
       </span>
       <span className="file-details">
@@ -72,8 +147,69 @@ function FilePill({ file }: { file: Attachment }) {
           </span>
           <span className="file-extension">{extension}</span>
         </span>
-        <span className="file-size">{fileSize(file.sizeBytes)}</span>
+        <span
+          className="file-size"
+          role={handoff.state === 'failed' ? 'status' : undefined}
+        >
+          {handoff.state === 'failed'
+            ? 'Couldn’t open'
+            : fileSize(file.sizeBytes)}
+        </span>
       </span>
+    </>
+  );
+
+  return handoff.available ? (
+    <UnstyledButton
+      type="button"
+      className="file-pill"
+      title={file.filename}
+      aria-busy={handoff.state === 'preparing' || undefined}
+      aria-label={`${handoff.state === 'failed' ? 'Retry opening' : 'Open or share'} ${file.filename}, ${fileSize(file.sizeBytes)}`}
+      disabled={handoff.state === 'preparing'}
+      onClick={() => void handoff.open()}
+    >
+      {contents}
+    </UnstyledButton>
+  ) : (
+    <a
+      className="file-pill"
+      href={fileDownloadUrl(file)}
+      title={file.filename}
+      aria-label={`Download ${file.filename}, ${fileSize(file.sizeBytes)}`}
+    >
+      {contents}
+    </a>
+  );
+}
+
+function ImageFileAction({ file }: { file: Attachment }) {
+  const handoff = useFileHandoff(file);
+  const contents =
+    handoff.state === 'preparing' ? (
+      <Loader size={20} color="currentColor" aria-hidden="true" />
+    ) : (
+      <Download aria-hidden="true" size={20} strokeWidth={1.75} />
+    );
+
+  return handoff.available ? (
+    <UnstyledButton
+      type="button"
+      className="image-lightbox-download"
+      aria-busy={handoff.state === 'preparing' || undefined}
+      aria-label={`${handoff.state === 'failed' ? 'Retry opening' : 'Open or share'} ${file.filename}`}
+      disabled={handoff.state === 'preparing'}
+      onClick={() => void handoff.open()}
+    >
+      {contents}
+    </UnstyledButton>
+  ) : (
+    <a
+      className="image-lightbox-download"
+      href={fileDownloadUrl(file)}
+      aria-label={`Download ${file.filename}`}
+    >
+      {contents}
     </a>
   );
 }
@@ -210,13 +346,7 @@ function ImageLightbox({
         >
           <X aria-hidden="true" size={24} strokeWidth={1.5} />
         </IconAction>
-        <a
-          className="image-lightbox-download"
-          href={fileDownloadUrl(image)}
-          aria-label={`Download ${image.filename}`}
-        >
-          <Download aria-hidden="true" size={20} strokeWidth={1.75} />
-        </a>
+        <ImageFileAction key={image.id} file={image} />
         {images.length > 1 && (
           <>
             <span className="image-lightbox-counter" aria-hidden="true">

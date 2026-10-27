@@ -94,7 +94,13 @@
   border-radius: 14px;
   background: color-mix(in srgb, currentColor 6%, transparent);
   color: inherit;
+  font: inherit;
+  text-align: left;
   text-decoration: none;
+  cursor: pointer;
+}
+.file-pill:disabled {
+  cursor: wait;
 }
 @media (hover: hover) {
   .file-pill:hover {
@@ -273,6 +279,10 @@
   top: max(16px, env(safe-area-inset-top, 0px));
   right: max(16px, env(safe-area-inset-right, 0px));
   text-decoration: none;
+  cursor: pointer;
+}
+.image-lightbox-download:disabled {
+  cursor: wait;
 }
 .image-lightbox-close {
   top: max(16px, env(safe-area-inset-top, 0px));

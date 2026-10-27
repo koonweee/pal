@@ -276,6 +276,99 @@ test('uploads mixed files, renders image-count grids and uniform document pills,
   ).toHaveCount(2);
 });
 
+test('prepares files in place and hands them to the platform share sheet', async ({
+  page,
+}) => {
+  const pdf = Buffer.from('%PDF fixture');
+  const attachment = {
+    ...fixtureAttachment(
+      'native-share-pdf',
+      'COS-USPS-return-QR.pdf',
+      'application/pdf',
+    ),
+    sizeBytes: pdf.length,
+  };
+  backend.rows.push({
+    ...backend.message('Your return label'),
+    attachments: [attachment],
+  });
+  await page.addInitScript(() => {
+    const scope = window as typeof window & {
+      __palSharedFiles: {
+        name: string;
+        size: number;
+        text: string;
+        type: string;
+      }[];
+    };
+    scope.__palSharedFiles = [];
+    Object.defineProperty(navigator, 'canShare', {
+      configurable: true,
+      value: (data: ShareData) => !!data.files?.length,
+    });
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async (data: ShareData) => {
+        const file = data.files![0]!;
+        scope.__palSharedFiles.push({
+          name: file.name,
+          size: file.size,
+          text: await file.text(),
+          type: file.type,
+        });
+      },
+    });
+  });
+  let releaseFile!: () => void;
+  const fileReady = new Promise<void>((resolve) => {
+    releaseFile = resolve;
+  });
+  await page.route('**/api/files/native-share-pdf/content', async (route) => {
+    await fileReady;
+    await route.fulfill({ contentType: 'application/pdf', body: pdf });
+  });
+  await page.goto('/');
+
+  const file = page.getByRole('button', {
+    name: `Open or share ${attachment.filename}`,
+  });
+  await file.click();
+  await expect(file).toHaveAttribute('aria-busy', 'true');
+  await expect(file.locator('.mantine-Loader-root')).toBeVisible();
+  await expect(file).toContainText('PDF');
+  releaseFile();
+
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __palSharedFiles: unknown[];
+            }
+          ).__palSharedFiles.length,
+      ),
+    )
+    .toBe(1);
+  expect(
+    await page.evaluate(
+      () =>
+        (
+          window as typeof window & {
+            __palSharedFiles: unknown[];
+          }
+        ).__palSharedFiles[0],
+    ),
+  ).toEqual({
+    name: attachment.filename,
+    size: pdf.length,
+    text: pdf.toString(),
+    type: attachment.contentType,
+  });
+  await expect(file.locator('.mantine-Loader-root')).toHaveCount(0);
+  await expect(page).toHaveURL('/');
+});
+
 test('opens an image-first lightbox and navigates within one message by pointer and keyboard', async ({
   page,
 }) => {
