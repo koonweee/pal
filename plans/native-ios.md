@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress. The retained native presentation runs on Pal's first-party contract; physical-device notification acceptance remains.
+Deprecated. The native client is unsupported and retained for reference. Remaining implementation and physical-device acceptance work is abandoned; current client development uses the React PWA.
 
 ## Goal
 

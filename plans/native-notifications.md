@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress. Required for the first release of the [native iOS app](native-ios.md); implementation follows the iOS baseline import.
+Deprecated with the [native iOS app](native-ios.md). The implementation is retained for reference; remaining provider and physical-device acceptance work is abandoned.
 
 ## Goal
 

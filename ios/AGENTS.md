@@ -1,6 +1,8 @@
-# iOS UI guidance
+# Deprecated iOS client guidance
 
-These instructions apply to all work under `ios/`. Follow the repository guidelines, the [iOS README](README.md), the [native iOS plan](../plans/native-ios.md), and the [notifications plan](../plans/native-notifications.md).
+The native iOS client is deprecated and retained for reference. Do not extend, release, or maintain it unless the user explicitly requests iOS work. Use the supported React PWA for current client development.
+
+For explicitly requested work under `ios/`, follow the repository guidelines, the [iOS README](README.md), the [native iOS plan](../plans/native-ios.md), and the [notifications plan](../plans/native-notifications.md).
 
 - Every UI addition or update must follow Apple's current [Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/). Consult the relevant guidance and official SwiftUI/UIKit documentation before choosing components or interaction patterns, accounting for the app's supported iOS versions.
 - Always aim to use native components and platform patterns. Prefer standard SwiftUI controls, navigation, presentations, menus, pickers and system interactions; use supported UIKit components when needed. Compose and configure native components before building custom replacements.

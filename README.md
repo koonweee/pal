@@ -11,6 +11,7 @@ Personal assistant backend with NestJS, PostgreSQL, local file storage, and live
 
 - [Backend setup](backend/README.md)
 - [React PWA](frontend/README.md)
+- [Deprecated native iOS client](ios/README.md)
 - [Full-stack local development](backend/README.md#full-stack-local-development)
 - [Frontend playground](frontend-playground/README.md)
 - [Architecture and API](architecture/backend.md)

@@ -7,6 +7,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 - Planned: not started.
 - In Progress: actively being implemented.
 - Blocked: waiting on a decision or dependency.
+- Deprecated: implementation stopped and retained for reference.
 - Done: implemented and validated.
 - Reference: supporting design or validation guidance.
 
@@ -74,8 +75,8 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 | [Telegram Transport Retry](telegram-transport-retry.md)                                   | Done        | Retry pre-TLS resets and log redacted polling causes.                                                                                                                                     |
 | [Task Activity Ordering](task-activity-ordering.md)                                       | Done        | Order task lists by persisted message and task-record activity.                                                                                                                           |
 | [iOS Motion Refinements](ios-motion.md)                                                   | Done        | Subtle state transitions, stable image previews, faster replies, and production publication.                                                                                              |
-| [Native iOS Reimplementation](native-ios.md)                                              | In Progress | Pal Main, direct task chat, virtualized conversations, accurate send recovery, latest-message Read, and motion refinements; physical-device acceptance remains. |
-| [Native Notifications](native-notifications.md)                                           | In Progress | Durable intent, APNs preview delivery, native lifecycle, and signed packaging pass; provider/device acceptance remains.                                                                   |
+| [Native iOS Reimplementation](native-ios.md)                                              | Deprecated  | Unsupported native client retained as reference; remaining acceptance work is abandoned.                                                                                                  |
+| [Native Notifications](native-notifications.md)                                           | Deprecated  | Native APNs client work is retained as reference; remaining provider/device acceptance is abandoned.                                                                                      |
 | [iOS Conversation Performance](ios-conversation-performance.md)                           | Done        | Virtualized MarkdownUI rows and batched history merges with measured UX gates and resource improvements.                                                                                  |
 | [Citation Normalization](citation-normalization.md)                                       | Done        | Shared model citation links and unresolved-marker fallback.                                                                                                                               |
 | [Conversational Message Grouping](conversational-message-grouping.md)                     | Done        | Casual voice, intentional message boundaries, and complete Task answer delivery.                                                                                                          |

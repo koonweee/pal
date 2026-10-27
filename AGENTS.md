@@ -3,6 +3,7 @@
 ## Project Structure
 
 - `backend/`: NestJS API, with application code in `src/` and end-to-end tests in `test/`.
+- `ios/`: deprecated native SwiftUI client retained for reference. Do not extend, release, or maintain it unless the user explicitly requests iOS work.
 - `architecture/backend.md`: backend architecture, API contracts, and data models.
 - `plans/`: implementation plans, milestone scope, exit criteria, and validation.
 
