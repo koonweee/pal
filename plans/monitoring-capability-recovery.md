@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Done
 
 ## Goal
 
@@ -10,7 +10,7 @@ Prevent remembered tool names and agent assumptions from blocking authorized mon
 
 ## Current Behavior
 
-Discovery exposes current service tools. Agent-authored exact-name constraints can conflict with that catalog. Empty text arrays fail response parsing. The production monitor retains its last successful checkpoint while aborting on a nonexistent reader.
+Main and Task distinguish user constraints from agent assumptions. Task discovery verifies current capabilities, monitoring isolates source failures, and empty text arrays normalize through envelope validation. The production monitor uses verified source checkpoints and the existing ten-minute schedule.
 
 ## Milestones
 
@@ -25,7 +25,7 @@ Exit criteria: parser regression passes; seeded false-name and unavailable-sourc
 
 ### 2. Production recovery
 
-- [ ] Deploy validated backend/guidance through existing production configuration.
+- [x] Deploy validated backend/guidance through existing production configuration.
 - [x] Correct retained task instructions and verify checkpoint pointers against successful artifacts.
 - [x] Resume monitoring with independent source checkpoints and preserved deduplication/history.
 - [x] Verify actual source reads and checkpoint advancement, then clean temporary artifacts.
@@ -64,6 +64,8 @@ The recovery run read and validated Gmail, all six calendars, Drive and Splice, 
 
 Temporary evaluation code (4.7 MB), recovery rollback/scratch files (about 2.5 MB), and operator scripts/private plans are removed after verification. Permanent recovery evidence, audit history and the active ledgers remain.
 
-## Remaining release work
+## Release acceptance
 
-The backend-only release is prepared as application commit `9548fd7` with the matching local Stack v2 build pin. Automatic approval review rejected default-branch publication pending explicit user permission to push Pal and Stack v2 main. No build or deployment was executed. After permission: publish, build/verify the immutable backend image, update pins and deploy only agent-service using the existing Komodo workflow. The production-wide parser and guidance fix is not deployed yet.
+Production runs application `9548fd7` through Stack v2 deployment `1ee87a9`, including `baed0fe`: a 4 GiB container limit and `--max-old-space-size=2560`. The immutable image digest is `sha256:63d3890dda194fbb0dc75082079a5c19b25771e8b80fe7bb493c2ee8d852405b`. Public/internal health, deployed response-parser checks, Main/Task guidance and the 85-tool MCP catalog pass. Only agent-service was replaced; other service identities and web release identity are preserved. The monitor is active and temporary deployment arguments are restored.
+
+The unreferenced previous backend image was removed after checking all containers (about 4.7 MB reclaimable shared-layer delta). Existing referenced images and shared build cache remain.
