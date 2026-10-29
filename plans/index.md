@@ -15,6 +15,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Monitoring memory reliability](monitoring-memory-reliability.md) | In Progress | Evidence-aware compaction, forward-progress guidance and three monitoring checkpoint repairs. |
 | [Monitoring capability recovery](monitoring-capability-recovery.md) | Done | Capability-based discovery, retained-context authority, silent output and production task recovery. |
 | [PWA update lifecycle](pwa-update-lifecycle.md) | Done | Confirmed activation, controller identity checks and retryable update failures. |
 | [User Message Markdown](user-message-markdown.md) | Done | Shared sanitized Markdown rendering for web user and agent bubbles, with dev and production rollout. |

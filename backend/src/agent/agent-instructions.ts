@@ -35,3 +35,13 @@ export async function loadAgentInstructions(role: AgentRole): Promise<string> {
     )
   ).join('\n');
 }
+
+export async function loadMemoryInstructions(): Promise<string> {
+  return (
+    await Promise.all(
+      ['context-authority', 'memory'].map((name) =>
+        readFile(new URL(`./instructions/${name}.md`, import.meta.url), 'utf8'),
+      ),
+    )
+  ).join('\n');
+}

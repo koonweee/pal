@@ -1,3 +1,4 @@
+import { createMemoryOptions } from './memory-options.js';
 import { loadAgentInstructions } from './agent-instructions.js';
 import { agentSkillPaths } from './agent-skills.js';
 import { MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
@@ -111,20 +112,8 @@ export async function createMainSession(options: {
     // Providers start lazily so history and chat remain available during desktop outages.
     const memory = new Memory({
       storage,
-      options: options.memoryOptions ?? {
-        lastMessages: 20,
-        semanticRecall: false,
-        workingMemory: { enabled: false },
-        observationalMemory: {
-          model: options.model,
-          scope: 'thread',
-          observation: {
-            messageTokens: 12_000,
-            bufferActivation: 3_000,
-          },
-          reflection: { observationTokens: 12_000 },
-        },
-      },
+      options:
+        options.memoryOptions ?? (await createMemoryOptions(options.model)),
     });
     // Zero removes the runtime ceiling; stopWhen disables the default five-step stop.
     const unlimitedSteps = {
