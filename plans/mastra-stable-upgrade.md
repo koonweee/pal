@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress. Implementation baseline: `2931465`, after the October 29 monitoring recovery rollout completed. Implementation is authorized; production rollout remains separate.
+Done. Implemented in `8d9e08e` and accepted in development on October 29, 2026. Production rollout remains separate. Baseline: `2931465`, after the monitoring recovery rollout.
 
 ## Goal
 
@@ -62,7 +62,7 @@ New MCP Events, Connect, Factory, durable-engine migrations and observability da
 
 Keep Pal public API, public tables, task IDs, message references, delivery records, schedule IDs/cron/timezones and workspace paths unchanged. Main's runtime session key is explicitly `pal-main-session`; its persisted resource/thread identity stays unchanged.
 
-Let `PostgresStore.init()` own Mastra schema upgrades. Inspect the exact 1.29-to-1.33 storage changes and rehearse initialization twice against an isolated database containing representative existing messages, observations, schedules and pending signals. Record table/column/index changes and old-binary compatibility. Do not promise image-only rollback before proving database compatibility. Never reset conversations or regenerate schedules to resolve an upgrade issue.
+`PostgresStore.init()` owns Mastra schema upgrades. The 1.29-to-1.33 rehearsal and exact schema changes are recorded below. Existing messages, observations, schedules and pending notifications survive initialization twice. Rollback requires a pre-upgrade database backup; conversations and schedules are never reset or regenerated.
 
 ## Milestones
 
@@ -97,11 +97,11 @@ Exit criteria:
 
 Implementation tasks:
 
-- [ ] Rebuild the existing development backend; rebuild execution only if its packaged dependencies/scripts changed. Preserve shared volumes and desktop ownership.
-- [ ] Run the essential checks below and the real-model monitoring/compaction fixtures. Record deterministic guarantees separately from observed model behavior.
-- [ ] Verify existing-thread continuation, unchanged schedule definitions, files, MCP discovery, interaction-worker continuation and shutdown/restart.
-- [ ] Prepare a concrete rollout/rollback procedure from schema evidence. Production deployment requires a subsequent user request.
-- [ ] Clean task-created fixtures and disposable resources. After builds inspect Docker usage; keep protected stack images/volumes and report any retained rollback artifact.
+- [x] Rebuild the existing development backend; rebuild execution only if its packaged dependencies/scripts changed. Preserve shared volumes and desktop ownership.
+- [x] Run the essential checks below and the real-model monitoring/compaction fixtures. Record deterministic guarantees separately from observed model behavior.
+- [x] Verify existing-thread continuation, unchanged schedule definitions, files, MCP discovery, interaction-worker continuation and shutdown/restart.
+- [x] Prepare a concrete rollout/rollback procedure from schema evidence. Production deployment requires a subsequent user request.
+- [x] Clean task-created fixtures and disposable resources. After builds inspect Docker usage; keep protected stack images/volumes and report any retained rollback artifact.
 
 Exit criteria:
 
@@ -143,7 +143,7 @@ Use the existing configured PostgreSQL test environment. Add a narrowly scoped m
 - Existing conversations, task identity, schedules, notification history, secure entry and persistent desktop behavior remain intact.
 - Compaction preserves usable context and monitoring progresses without duplicate notifications in the focused fixtures.
 - Documentation describes the resulting system, checks pass, and completed work is committed locally. Include the required tool/guidance change table when reporting implementation completion.
-- No production deployment occurs as part of planning; any later rollout follows the separately authorized release and cleanup procedure.
+- Production deployment is outside this implementation; any later rollout follows the separately authorized release and cleanup procedure.
 
 ## Implementation evidence — October 29, 2026
 
@@ -161,3 +161,13 @@ Production rollout is deferred until requested. Before rollout, confirm no activ
 Build the pinned backend and execution artifacts. Replace execution because its packaged Mastra dependencies change; preserve agent home/profile and service-data/PostgreSQL volumes. Start the backend, let native PostgresStore initialization migrate storage, then verify health, existing-thread continuation, schedule definitions, pending notifications, delivery idempotency, file access and worker continuation before reopening normal admission. Observe the next normal monitoring check without manually duplicating it; require fresh source progress and no repeated notification for unchanged results.
 
 If acceptance fails, stop new writes and restore the database snapshot together with the prior backend/execution pair; assess any post-cutover messages before restoration to avoid silently discarding them. Do not rely on image-only rollback. After accepted rollout, remove the migration backup and unneeded rollback images under the repository cleanup rules. No production mutation is included in this implementation.
+
+## Development acceptance and cleanup
+
+The existing `pal-dev-split` backend and execution images both contain the pinned package set. Backend restart, health and chat-history HTTP checks passed; execution retains `pal-dev-split_agent_home` and all protected volumes. Development had zero schedules before and after migration; schedule/history preservation and overdue wake were exercised in the isolated PostgreSQL integration fixtures rather than by creating user-facing development work.
+
+Both real-model fixtures passed inside the upgraded development backend using its existing login. The separate host login was expired and was not used. Observation and reflection retained the attributed $659 finding and unsupported coupon, then called only the fresh storefront check and checkpoint save for $649. No historical repair ran. The scheduling fixture stayed silent for unchanged prices, published a changed price, and paused before completing on stop. These are observed model outcomes, not deterministic guarantees for every future run.
+
+On the upgraded development pair, a temporary 2 MB binary roundtrip passed; a stale expected-mtime write was rejected without changing content; outside-root access failed; shell cwd was correct. A dedicated browser worker opened a public fixture, captured a screenshot and continued in the same session. Its group, screenshot and temporary file were removed. Native worker integration separately verifies parent ownership, concurrency, private output and failure/abort cleanup.
+
+Removed the disposable PostgreSQL database (~10.8 MB), temporary schema/probes, copied container fixtures, development migration snapshot (~16 MB), runtime-smoke image (2.66 GB logical size), smoke containers/volume and isolated worktree (including ~1.4 GB dependencies). Docker image usage fell from 9.62 GB to 7.30 GB after removing the smoke image. Protected stack volumes and current service image tags remain; backend/execution images are approximately 2.17/4.33 GB logical size. Shared build cache (~14.3 GB) and unrelated images/volumes were preserved. No task rollback backup or one-off image remains. No production service, task or data was changed.
