@@ -15,7 +15,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Mastra stable upgrade and primitive audit](mastra-stable-upgrade.md) | Done | Stable stack upgraded and validated in development; verified cleanup, retained-gap audit and production release procedure. |
+| [Mastra stable upgrade and primitive audit](mastra-stable-upgrade.md) | Done | Stable stack deployed and validated in development/production; verified cleanup, retained-gap audit and migration evidence. |
 | [Monitoring memory reliability](monitoring-memory-reliability.md) | Complete | Evidence-aware compaction, forward-progress guidance and three monitoring checkpoint repairs. |
 | [Monitoring capability recovery](monitoring-capability-recovery.md) | Done | Capability-based discovery, retained-context authority, silent output and production task recovery. |
 | [PWA update lifecycle](pwa-update-lifecycle.md) | Done | Confirmed activation, controller identity checks and retryable update failures. |

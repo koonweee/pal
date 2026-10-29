@@ -2,7 +2,7 @@
 
 ## Status
 
-Done. Implemented in `8d9e08e` and accepted in development on October 29, 2026. Production rollout remains separate. Baseline: `2931465`, after the monitoring recovery rollout.
+Done. Implemented in `8d9e08e`, accepted in development and deployed to production from `a841fc0` on October 29, 2026. Baseline: `2931465`, after the monitoring recovery rollout.
 
 ## Goal
 
@@ -171,3 +171,13 @@ Both real-model fixtures passed inside the upgraded development backend using it
 On the upgraded development pair, a temporary 2 MB binary roundtrip passed; a stale expected-mtime write was rejected without changing content; outside-root access failed; shell cwd was correct. A dedicated browser worker opened a public fixture, captured a screenshot and continued in the same session. Its group, screenshot and temporary file were removed. Native worker integration separately verifies parent ownership, concurrency, private output and failure/abort cleanup.
 
 Removed the disposable PostgreSQL database (~10.8 MB), temporary schema/probes, copied container fixtures, development migration snapshot (~16 MB), runtime-smoke image (2.66 GB logical size), smoke containers/volume and isolated worktree (including ~1.4 GB dependencies). Docker image usage fell from 9.62 GB to 7.30 GB after removing the smoke image. Protected stack volumes and current service image tags remain; backend/execution images are approximately 2.17/4.33 GB logical size. Shared build cache (~14.3 GB) and unrelated images/volumes were preserved. No task rollback backup or one-off image remains. No production service, task or data was changed.
+
+## Production acceptance
+
+Production runs source `a841fc0` through Stack v2 `52e575f`. Backend and execution use verified immutable Linux AMD64 images; web release identity/contract remain unchanged. Explicit application migrations and native Mastra initialization passed, including the expected observation, notification-key and fencing changes. A backend restart preserved execution, and the normal Stack configuration is restored.
+
+Cutover waited for active monitoring to finish. All pre-cutover identities survived: 2,026 public messages, 39 tasks, 44 attachments, 152 notification intents, 209 delivery jobs, 28,100 native messages, 789 threads and 980 observation records. All eight schedules retain their definitions; native next-fire advancement continues. Both MCP connections are healthy with 85 tools. Home/profile, web, egress, PostgreSQL and Google MCP are retained.
+
+Production file/browser/network checks and both real-model fixtures passed. The first normal scheduled connected-source check fired at 23:40 UTC, used fresh tool discovery/code mode and completed silently; public messages remained 2,026. No duplicate check was injected. Other watches retain their original schedules. Runtime error-level logs were absent during acceptance.
+
+Temporary rollback material was removed after acceptance: the exact rollout-created encrypted snapshot, ~4.1 GiB local database/home/private-state snapshot, fixtures, staging files and superseded backend/execution/migration images. Other backup snapshots, active state, current images and shared caches remain. Snapshot integrity was checked; no production restore rehearsal is claimed. Full image digests and operator update IDs are recorded in Stack v2's `plans/pal-mastra-upgrade-rollout.md`.
