@@ -124,11 +124,10 @@ export async function createMainSession(options: {
       ...unlimitedSteps,
       modelSettings: { headers: { 'session-id': MAIN_THREAD_ID } },
     };
-    const withMainSessionHeader = <T extends { modelSettings?: unknown }>(
-      options: T,
-    ) => {
-      const settings = options.modelSettings as
-        { headers?: Record<string, string> } | undefined;
+    const withMainSessionHeader = <T extends object>(options: T) => {
+      const settings = (
+        'modelSettings' in options ? options.modelSettings : undefined
+      ) as { headers?: Record<string, string> } | undefined;
       return {
         ...options,
         ...mainSteps,
@@ -353,8 +352,8 @@ export async function createMainSession(options: {
       ...machinery,
       buildStreamOptions: async (input) =>
         withMainSessionHeader(await machinery.buildStreamOptions(input)),
-      buildSharedRunOptions: () =>
-        withMainSessionHeader(machinery.buildSharedRunOptions()),
+      buildSharedRunOptions: (requestContext) =>
+        withMainSessionHeader(machinery.buildSharedRunOptions(requestContext)),
     });
     // AgentController has its own approval policy in addition to workspace configuration.
     await session.state.set({ yolo: true });
@@ -383,7 +382,7 @@ export async function createMainSession(options: {
           session.abort();
           await finished;
         }
-        await controller.deleteSession({ resourceId: MAIN_RESOURCE_ID });
+        await controller.deleteSession({ sessionId: 'pal-main-session' });
         unsubscribe();
         await memory.settled();
         await (await worker?.getMemory())?.settled();

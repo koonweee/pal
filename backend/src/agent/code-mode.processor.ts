@@ -33,8 +33,7 @@ export class CodeModeProcessor implements Processor {
     const code = createCodeMode({ tools: codeTools });
     args.messageList.clearSystemMessages(this.id);
     args.messageList.addSystem(
-      code.instructions +
-        '\nUse direct calls for simple operations and media. Use execute_typescript to combine available tools, run independent calls concurrently, or return only the data you need.',
+      code.instructions + '\nUse direct calls for simple operations and media.',
       this.id,
     );
     return { tools: { ...tools, execute_typescript: code.tool } };

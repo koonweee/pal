@@ -26,32 +26,8 @@ export class TaskSchedulesService {
   constructor(@Inject(TasksService) private readonly tasks: TasksService) {}
 
   // The runtime binds its native store after agents are registered.
-  async bind(mastra: Mastra) {
+  bind(mastra: Mastra) {
     this.mastra = mastra;
-    // Normalize persisted Task wake attributes through the native schedule API.
-    for (const schedule of await this.schedules.list({
-      agentId: AGENT_ID,
-      resourceId: OWNER_ID,
-    })) {
-      if (schedule.agentId !== AGENT_ID) continue;
-      const { participantDestinationIds, deliveryChannels, ...attributes } =
-        schedule.attributes ?? {};
-      if (
-        participantDestinationIds !== undefined ||
-        deliveryChannels !== undefined ||
-        schedule.ifIdle?.attributes?.executionStart !== true
-      )
-        await this.schedules.update(schedule.id, {
-          attributes,
-          ifIdle: {
-            ...schedule.ifIdle,
-            attributes: {
-              ...schedule.ifIdle?.attributes,
-              executionStart: true,
-            },
-          },
-        });
-    }
   }
 
   private get schedules() {

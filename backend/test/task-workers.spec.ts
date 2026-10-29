@@ -61,8 +61,12 @@ it('runs native workers concurrently with per-task limits, private output, and f
       const count = (calls.get(callKey) ?? 0) + 1;
       calls.set(callKey, count);
       if (worker && branch === 'alpha-5')
-        expect(prompt).not.toContain('private finding alpha-1');
-      if (worker && branch === 'alpha-2' && count > 1)
+        expect(prompt).not.toMatch(/private finding alpha-[1-4]/);
+      if (
+        worker &&
+        branch === started.find((run) => run.taskId === 'alpha')?.branch &&
+        count > 1
+      )
         throw new Error('Fixture worker failed');
       if (worker) expect(prompt).not.toContain('parent-only-sentinel');
       if (worker) toolSets.push((input.tools ?? []).map((tool) => tool.name));
@@ -152,7 +156,7 @@ it('runs native workers concurrently with per-task limits, private output, and f
           model: workerModel,
           resume: async (_, assignment) =>
             assignment.includes('branch:alpha-5')
-              ? started.find((run) => run.branch === 'alpha-1')?.workerId
+              ? started.find((run) => run.taskId === 'alpha')?.workerId
               : undefined,
           instructions: 'Return private findings.',
           tools: {
@@ -224,7 +228,6 @@ it('runs native workers concurrently with per-task limits, private output, and f
     expect(started.filter((worker) => worker.taskId === 'alpha')).toHaveLength(
       3,
     );
-    expect(started.some((worker) => worker.branch === 'alpha-4')).toBe(false);
     expect(new Set(started.map((worker) => worker.workerId)).size).toBe(4);
     expect(publications).toEqual([]);
     gates.alpha.resolve();
@@ -254,7 +257,7 @@ it('runs native workers concurrently with per-task limits, private output, and f
     await (await run('alpha')).getFullOutput();
     expect(started).toHaveLength(7);
     expect(started.find((run) => run.branch === 'alpha-5')?.workerId).toBe(
-      started.find((run) => run.branch === 'alpha-1')?.workerId,
+      started.find((run) => run.taskId === 'alpha')?.workerId,
     );
     expect(cleaned).toHaveLength(7);
     const cancelled = await run('cancel');

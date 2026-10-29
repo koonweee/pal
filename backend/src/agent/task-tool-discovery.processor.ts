@@ -27,11 +27,6 @@ export class TaskToolDiscoveryProcessor implements Processor {
       tools: this.mcpTools(),
     });
     const tools = { ...args.tools, ...discovered.tools } as ToolsInput;
-    args.messageList.clearSystemMessages(this.id);
-    args.messageList.addSystem(
-      'Discover connected-service tools with search_tools before using them in code.',
-      this.id,
-    );
     return this.codeMode.processInputStep({ ...args, tools });
   }
 }

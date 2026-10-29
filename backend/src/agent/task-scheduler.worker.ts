@@ -1,6 +1,6 @@
 import { SchedulerWorker } from '@mastra/core/worker';
 
-// Mastra 1.74 starts polling before attaching its in-process agent consumer.
+// Mastra 1.80 starts polling before attaching its in-process agent consumer.
 // Start that native consumer first so overdue ticks at boot are delivered.
 export class TaskSchedulerWorker extends SchedulerWorker {
   override async start() {

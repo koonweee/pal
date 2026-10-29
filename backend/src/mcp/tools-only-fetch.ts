@@ -9,7 +9,7 @@ function omitApps(capabilities: unknown) {
     delete capabilities.extensions['io.modelcontextprotocol/ui'];
 }
 
-// Mastra MCP 2.1.2 always adds the Apps extension and offers no disable flag.
+// Mastra MCP 2.6.0 always adds the Apps extension and offers no disable flag.
 // Pal has no MCP Apps renderer. Its supported HTTP fetch hook removes that
 // advertisement from legacy initialization and modern per-request metadata so
 // servers select ordinary text/structured tool responses.

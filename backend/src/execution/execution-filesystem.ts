@@ -14,7 +14,11 @@ import { resolve, relative, isAbsolute, sep } from 'node:path';
 import type { ExecutionService } from './execution.service.js';
 import { AGENT_HOME } from './paths.js';
 
-/** Native LocalFilesystem operations execute inside the agent's filesystem namespace. */
+/**
+ * Native LocalFilesystem operations execute inside the agent's filesystem namespace.
+ * Code SDK 1.16 SandboxFilesystem ignores expectedMtime and puts writes in argv,
+ * which fails for large files. This stdin bridge preserves native write checks.
+ */
 export class ExecutionFilesystem extends MastraFilesystem {
   status: ProviderStatus = 'pending';
   readonly id = 'pal-execution-files';

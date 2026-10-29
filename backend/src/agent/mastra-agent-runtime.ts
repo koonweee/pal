@@ -341,7 +341,7 @@ export class MastraAgentRuntime
         }
       },
     });
-    await this.schedules.bind(this.main.mastra);
+    this.schedules.bind(this.main.mastra);
     await this.main.mastra.startWorkers();
   }
 

@@ -697,12 +697,6 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
     await nativeStore.updateSchedule(scheduled.id, {
       nextFireAt: Date.now() - 86400000,
     });
-    const savedSchedule = await mainSession.mastra.schedules.get(scheduled.id);
-    if (savedSchedule?.agentId) {
-      await mainSession.mastra.schedules.update(scheduled.id, {
-        ifIdle: { ...savedSchedule.ifIdle, attributes: {} },
-      });
-    }
     // A long-lived Task retains older conversation without pulling its origins into new outcomes.
     const memory = (await mainSession.storage.getStore('memory'))!;
     await memory.saveMessages({
@@ -791,6 +785,12 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
         () =>
           fixture!.app.get(AgentActivityService).current().status === 'idle',
         10000,
+      );
+      // Task publication precedes the asynchronous result signal waking Main.
+      await until(async () =>
+        (await chat.history({})).messages.some((message) =>
+          message.text.includes('scheduled check'),
+        ),
       );
       expect(
         (await chat.history({})).messages.find((message) =>
