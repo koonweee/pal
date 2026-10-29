@@ -26,7 +26,10 @@ it('expands intentional messages with one quote and files on the last part', () 
   expect(
     parsePublicResponse(JSON.stringify({ text: 'not yet', replyTo: null })),
   ).toEqual([{ text: 'not yet', replyTo: null, attachmentIds: [], files: [] }]);
-  for (const text of [[], ['answer', ''], ['answer', 7]])
+  for (const text of [
+    ['answer', ''],
+    ['answer', 7],
+  ])
     expect(() =>
       parsePublicResponse(JSON.stringify({ text, replyTo: null })),
     ).toThrow();
@@ -105,5 +108,30 @@ it('validates suggestions and attaches them only to the final message', () => {
       parsePublicResponse(
         JSON.stringify({ text: 'Choose', suggestedReplies: invalid }),
       ),
+    ).toThrow();
+});
+
+it('normalizes empty text arrays while preserving files and envelope validation', () => {
+  expect(parsePublicResponse(JSON.stringify({ text: [] }))).toEqual([
+    { text: '', replyTo: null, attachmentIds: [], files: [] },
+  ]);
+  const files = [
+    {
+      path: '/tmp/report.txt',
+      filename: 'report.txt',
+      contentType: 'text/plain',
+    },
+  ];
+  expect(parsePublicResponse(JSON.stringify({ text: [], files }))).toEqual([
+    { text: '', replyTo: null, attachmentIds: [], files },
+  ]);
+  for (const fields of [
+    { replyTo: -1 },
+    { attachmentIds: ['invented'] },
+    { files: [{}] },
+    { suggestedReplies: [7] },
+  ])
+    expect(() =>
+      parsePublicResponse(JSON.stringify({ text: [], ...fields })),
     ).toThrow();
 });

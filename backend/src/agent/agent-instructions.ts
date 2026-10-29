@@ -7,6 +7,7 @@ const instructionFiles = {
     'files',
     'preferences',
     'preference-learning',
+    'context-authority',
     'main',
   ],
   task: [
@@ -15,6 +16,7 @@ const instructionFiles = {
     'files',
     'preferences',
     'preference-learning',
+    'context-authority',
     'workspace',
     'execution',
     'task',

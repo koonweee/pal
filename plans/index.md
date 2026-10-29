@@ -15,6 +15,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Monitoring capability recovery](monitoring-capability-recovery.md) | In Progress | Capability-based discovery, retained-context authority, silent output and production task recovery. |
 | [PWA update lifecycle](pwa-update-lifecycle.md) | Done | Confirmed activation, controller identity checks and retryable update failures. |
 | [User Message Markdown](user-message-markdown.md) | Done | Shared sanitized Markdown rendering for web user and agent bubbles, with dev and production rollout. |
 | [Browser cleanup after backend reconnect](browser-cold-cleanup.md) | Done | Renderer-independent extension control, cold reconnect regression and dev/production release. |

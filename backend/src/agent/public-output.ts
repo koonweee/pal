@@ -40,7 +40,7 @@ export const publicOutputSchema: JSONSchema7 = {
     text: {
       anyOf: [
         { type: 'string' },
-        { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 } },
+        { type: 'array', items: { type: 'string', minLength: 1 } },
       ],
     },
     suggestedReplies: {
@@ -98,14 +98,12 @@ export function parsePublicOutput(value: string): PublicOutput {
     throw new Error('Invalid public agent output');
   // Intermediate commentary can omit unused structured-output fields.
   const replyTo = 'replyTo' in parsed ? parsed.replyTo : null;
-  if (
-    !(
-      replyTo === null ||
-      (typeof replyTo === 'number' &&
-        Number.isSafeInteger(replyTo) &&
-        replyTo > 0)
-    )
-  )
+  if (!(
+    replyTo === null ||
+    (typeof replyTo === 'number' &&
+      Number.isSafeInteger(replyTo) &&
+      replyTo > 0)
+  ))
     throw new Error('Invalid public agent output');
   const attachmentIds = 'attachmentIds' in parsed ? parsed.attachmentIds : [];
   if (
@@ -168,8 +166,9 @@ export function parsePublicResponse(value: string): PublicOutput[] {
   )
     return [parsePublicOutput(value)];
   const texts: unknown[] = parsed.text;
+  if (!texts.length)
+    return [parsePublicOutput(JSON.stringify({ ...parsed, text: '' }))];
   if (
-    !texts.length ||
     !texts.every(
       (text): text is string => typeof text === 'string' && !!text.trim(),
     )
