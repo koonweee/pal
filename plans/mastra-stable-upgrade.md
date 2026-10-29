@@ -143,7 +143,7 @@ Use the existing configured PostgreSQL test environment. Add a narrowly scoped m
 - Existing conversations, task identity, schedules, notification history, secure entry and persistent desktop behavior remain intact.
 - Compaction preserves usable context and monitoring progresses without duplicate notifications in the focused fixtures.
 - Documentation describes the resulting system, checks pass, and completed work is committed locally. Include the required tool/guidance change table when reporting implementation completion.
-- Production deployment is outside this implementation; any later rollout follows the separately authorized release and cleanup procedure.
+- Production deployment follows the separately authorized release and cleanup procedure.
 
 ## Implementation evidence — October 29, 2026
 
@@ -156,11 +156,11 @@ Use the existing configured PostgreSQL test environment. Add a narrowly scoped m
 
 ## Release and rollback procedure
 
-Production rollout is deferred until requested. Before rollout, confirm no active Main/Task/interaction runs and pause ingress/dispatch so no writer overlaps the backup. Record current image IDs, schedule definitions/status/next-fire times, thread/message/notification counts, and home-volume identity. Take a restricted database backup containing both public and Mastra schemas; retain the current compatible backend/execution image pair until acceptance.
+Production rollout is complete; use this procedure for subsequent explicitly authorized releases. Before rollout, confirm no active Main/Task/interaction runs and pause ingress/dispatch so no writer overlaps the backup. Record current image IDs, schedule definitions/status/next-fire times, thread/message/notification counts, and home-volume identity. Take a restricted database backup containing both public and Mastra schemas; retain the current compatible backend/execution image pair until acceptance.
 
 Build the pinned backend and execution artifacts. Replace execution because its packaged Mastra dependencies change; preserve agent home/profile and service-data/PostgreSQL volumes. Start the backend, let native PostgresStore initialization migrate storage, then verify health, existing-thread continuation, schedule definitions, pending notifications, delivery idempotency, file access and worker continuation before reopening normal admission. Observe the next normal monitoring check without manually duplicating it; require fresh source progress and no repeated notification for unchanged results.
 
-If acceptance fails, stop new writes and restore the database snapshot together with the prior backend/execution pair; assess any post-cutover messages before restoration to avoid silently discarding them. Do not rely on image-only rollback. After accepted rollout, remove the migration backup and unneeded rollback images under the repository cleanup rules. No production mutation is included in this implementation.
+If acceptance fails, stop new writes and restore the database snapshot together with the prior backend/execution pair; assess any post-cutover messages before restoration to avoid silently discarding them. Do not rely on image-only rollback. After accepted rollout, remove the migration backup and unneeded rollback images under the repository cleanup rules. Production mutations require explicit rollout authorization.
 
 ## Development acceptance and cleanup
 
