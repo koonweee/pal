@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Done
 
 ## Goal
 
@@ -13,7 +13,7 @@ Deploy a Sol-medium Task with local execution, web search and MCP, plus a Terra-
 - Main routes work to persistent Task threads. Task owns orchestration, files, services, public updates, task metadata and schedules.
 - The native child role is interaction only, with browser/computer/login tools and code mode. It has no shell/files/web-search/MCP tools or child agents.
 - Existing native cancellation, three-worker cap, trusted browser identities, tab ownership and cleanup remain the lifecycle owners. Role tool placement uses the shared execution environment and is not a security sandbox.
-- The benchmark measured UI/file handoffs; live semantic review and real connected-service performance remain open.
+- Production runs Sol-medium Main/Task and a Terra-medium interaction worker with the verified role-specific tool and skill boundaries. Benchmark semantic review remains tracked separately.
 
 ## Milestones
 
@@ -36,9 +36,9 @@ Exit: dev health and role/handoff checks pass with retained desktop state.
 
 ### 3. Production deployment
 
-- [ ] Publish/stage the validated Terra-medium release through existing Komodo configuration with rollback metadata.
-- [ ] Update agent-service and matching web release identity while retaining execution/profile/data.
-- [ ] Finish the host-only native role/record audit; production health and scoped read-only HTTP acceptance pass.
+- [x] Publish/stage the validated Terra-medium release through existing Komodo configuration with rollback metadata.
+- [x] Update agent-service and matching web release identity while retaining execution/profile/data.
+- [x] Finish the host-only native role/record audit; production health and scoped read-only HTTP acceptance pass.
 
 Exit: production runs the validated release with healthy services and verified boundaries. Komodo uses the configured native operator. Host-only preflight and deployed-role inspection use the owner’s read-only sudo verifier.
 
@@ -65,8 +65,10 @@ cd ..
 
 ## Validation
 
-- Backend build/lint and boundaries pass; 68 integration tests and 37 end-to-end tests pass on a disposable database, including secure-entry continuation and submission/cleanup ordering.
+- Backend build/lint and boundaries pass; 73 integration tests and 41 end-to-end tests pass on disposable databases, including secure-entry continuation and submission/cleanup ordering.
 - Dev runs the role split. Native inspection verifies Sol-medium Task, Terra-medium interaction, role-specific tools/processors/skills, zero inherited messages and no active runs/pending entry. The interaction inventory includes browser, computer, `login_inspect` and `secure_fill`; the execution container remains retained.
 - Disposable real-service MCP/code-mode and Task PDF/image/publication/restart checks pass. Native browser/media/ownership/cancellation checks and two real screenshot/form Task fixtures pass. Two/three concurrent Luna interaction branches, private synthesis, Main responsiveness and browser restart/suspension checks pass after updating the fixture to the current native sendToUser tool.
 - The wrapper's host PWA navigation timed out before agent checks; no frontend source changes are part of this release.
-- Production remains on the previously deployed interaction configuration. Terra-medium production rollout and the final host-only role/record audit remain pending.
+- Production release `eb9afb1` is healthy through GitOps revision `9df4c1f`. Live inspection verifies Sol-medium Main/Task, Terra-medium interaction, zero inherited messages, private worker results and the expected Task/interaction tool, processor and skill inventories.
+- HTTPS/PWA identity, contract 7, SSE, desktop HTTP/RFB routing, real execution browser credential/OTP filling, migrations and Bitwarden prewarm pass. The unchanged execution image, profile, service data and PostgreSQL bind mounts were retained.
+- Rollback configuration and a verified 2.0 GB paired state archive are retained at `/srv/backups/pal-sf-release-20261031-155100` with SHA-256 `b63efd1290640f2986506897210f3f814fabdcd12921281e3cdf2193bd4d9783`.

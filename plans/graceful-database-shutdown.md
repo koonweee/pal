@@ -50,3 +50,8 @@ npm test
 
 - Intentional stack shutdown cannot exit agent-service through an unhandled PostgreSQL pool error.
 - Unexpected idle connection loss remains observable and recoverable through the existing pool.
+
+## Validation
+
+- Backend build, focused database tests, lint and boundaries pass.
+- Production release `eb9afb1` is deployed through GitOps revision `9df4c1f`. The migration exits successfully, agent-service restarts cleanly, startup contains no pool error, and health remains green.

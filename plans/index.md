@@ -27,7 +27,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 | [PWA profile icons](pwa-profile-icons.md) | Done | Direct profile PNGs for PWA installation and Apple touch icons; development rollout. |
 | [Agent profile favicon](agent-profile-favicon.md) | Done | Browser favicon follows the saved agent image and accent-colored donut fallback. |
 | [Markdown list guidance](markdown-list-guidance.md) | Done | Shared Main/Task Markdown list syntax, validated and deployed to dev/production. |
-| [Task execution and interaction worker](interaction-worker-runtime.md) | In Progress | Development runs Task MCP/local execution and Terra-medium interaction; production rollout and the final host-only audit remain. |
+| [Task execution and interaction worker](interaction-worker-runtime.md) | Done | Sol-medium Task and Terra-medium interaction roles are deployed with verified production boundaries and retained state. |
 | [Interaction delegation benchmark](interaction-delegation-benchmark.md) | In Progress | Three-arm, coordinator and interaction-MCP comparisons complete; live semantic review pending. |
 | [Browser worker benchmark](browser-worker-benchmark.md) | In Progress | Direct Task versus compact interaction workers, realistic synthetic/live workflows, timing, correctness and token reporting. |
 | [Staged login entry](staged-login-entry.md) | Done | Role-specific phone, PIN/password and code collection with merged vault accounts and hardened worker recovery. |

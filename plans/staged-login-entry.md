@@ -59,6 +59,18 @@ Exit criteria:
 
 - Focused backend/frontend tests, build, lint, contract checks, and development health pass with Terra-medium interaction still configured.
 
+### 4. Production rollout
+
+Implementation tasks:
+
+- Publish immutable AMD64 agent-service and web images with one release identity.
+- Preserve paired application state and deploy through the existing Komodo Compose definition.
+- Verify migrations, runtime roles, secure browser filling, API/PWA/SSE and desktop routing.
+
+Exit criteria:
+
+- Production runs the staged-entry release with Terra-medium interaction and retained account/profile state.
+
 ## Tests
 
 - One backend end-to-end journey covers phone-only capture, active-account merge, PIN-only capture, and vault reuse.
@@ -88,6 +100,8 @@ cd ..
 - Frontend type, generated API, unit, UI ownership, unused-code, and desktop/mobile secure-entry browser checks pass.
 - The rebuilt development stack is healthy. Runtime inspection confirms the interaction worker uses `gpt-6.1-terra` with medium effort and exposes the expected browser, secure-entry, computer, and authentication-skill surface.
 - The disposable integration-test database and runtime inspection helper were removed. Protected development volumes and the execution desktop were preserved.
+- Production runs release `eb9afb1` through GitOps revision `9df4c1f`; migration, health, HTTPS/PWA release identity, contract 7, SSE, desktop HTTP/RFB and isolated synthetic credential/OTP filling pass.
+- Live role inspection confirms Terra medium and the expected secure-entry contract. Two pre-existing pending secure-entry cards survived the restart and were not opened or modified during acceptance.
 
 ## Overall Exit Criteria
 
