@@ -123,3 +123,12 @@ python3 backend/scripts/browser-benchmark/run.py --variants control,sol-medium -
 - The user-selected control/Sol-medium/Luna-high/Luna-low matrix collected 144 unique rows with verified cleanup: 93 passed, 5 failed and 46 live answers pending review.
 - The separate Astra-low follow-up collected 36 unique rows with verified cleanup: all 24 synthetic cases passed and 12 live answers remain pending review.
 - API-equivalent Standard cost estimates include Task and Worker, cached-input discounts, missing-usage exclusions and cache-write uncertainty. The three Task-boundary comparison is tracked in [Interaction delegation benchmark](interaction-delegation-benchmark.md).
+
+## Terra model-only follow-up
+
+- A sequential current-stack run compared the production Luna-high worker with Terra-medium and Terra-high. Task stayed on Sol-medium; worker instructions, tools, context boundaries and synthetic cases were unchanged. The run used one sample at a time to avoid browser and provider contention.
+- Each arm passed all nine stays, support and desktop samples. Each arm failed all three billing samples because the saved login was not usable. Billing therefore did not distinguish the models and is excluded from the latency comparison.
+- Median successful elapsed time across the nine discriminating samples was 72.3s for Luna-high, 55.1s for Terra-medium and 56.0s for Terra-high. Terra-medium was 24% faster than Luna-high and used median worker totals of 16 requests, 265k input tokens, 547 output tokens and 25 reasoning tokens, versus Luna-high's 18 requests, 327k input tokens, 1,086 output tokens and 398 reasoning tokens.
+- Terra-medium is the preferred setting from this small run. Terra-high had identical correctness and similar latency with slightly higher token use. Three repetitions per case are directional evidence, not a production rollout gate.
+- The prior October Luna-high collection passed the equivalent 12 fresh-context samples with a 52.7s median across the nine non-billing successes. It used four isolated lanes and older images, so it is a historical drift check rather than a direct comparison with this sequential current-stack run.
+- Evidence: `.local/browser-benchmark/terra-model-20261031/`. All 36 samples completed, no provider errors occurred and benchmark cleanup restored the development service.

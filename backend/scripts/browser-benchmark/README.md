@@ -17,6 +17,8 @@ Task always uses `gpt-6.1-sol` with `medium` effort.
 | luna-xhigh   | Worker            | gpt-6-luna  | xhigh  |
 | astra-low    | Worker            | gpt-6-astra | low    |
 | astra-medium | Worker            | gpt-6-astra | medium |
+| terra-medium | Worker            | gpt-6.1-terra | medium |
+| terra-high   | Worker            | gpt-6.1-terra | high   |
 
 Control has current Task instructions, tools, skills, workspace and MCP discovery, with no child agent. Delegated Task retains planning, public output, task management and preferences. It has no browser/login/computer tools, workspace, execution guidance, authentication skill or MCP discovery. Worker owns interaction tools, workspace and authentication guidance. Shared voice/file policies reuse existing instruction files. Its native `messageFilter` returns no inherited messages; Task writes the assignment. Per-request tool lists and context sizes verify these boundaries.
 

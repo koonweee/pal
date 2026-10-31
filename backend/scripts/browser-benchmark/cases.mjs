@@ -19,6 +19,12 @@ export const variants = [
     effort,
     delegated: true,
   })),
+  ...['medium', 'high'].map((effort) => ({
+    id: `terra-${effort}`,
+    model: 'gpt-6.1-terra',
+    effort,
+    delegated: true,
+  })),
 ];
 export const allVariants = [...variants, ...delegationVariants];
 export const cases = [

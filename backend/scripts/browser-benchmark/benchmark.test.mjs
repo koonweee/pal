@@ -5,7 +5,7 @@ import { initialState, transition, installFixture } from './fixtures.mjs';
 import { summarize } from './report.mjs';
 
 test('matrix contains exact settings with paired contexts and counterbalanced repetitions', () => {
-  assert.equal(variants.length, 9);
+  assert.equal(variants.length, 11);
   assert.deepEqual(
     variants.map((v) => v.id),
     [
@@ -18,6 +18,8 @@ test('matrix contains exact settings with paired contexts and counterbalanced re
       'luna-xhigh',
       'astra-low',
       'astra-medium',
+      'terra-medium',
+      'terra-high',
     ],
   );
   const jobs = schedule(
@@ -26,8 +28,8 @@ test('matrix contains exact settings with paired contexts and counterbalanced re
     ['fresh', 'established'],
     3,
   );
-  assert.equal(jobs.length, 324);
-  assert.equal(new Set(jobs.map((j) => j.key)).size, 324);
+  assert.equal(jobs.length, 396);
+  assert.equal(new Set(jobs.map((j) => j.key)).size, 396);
   assert.ok(
     history('established', cases[0]).length > history('fresh', cases[0]).length,
   );
@@ -199,7 +201,7 @@ test('billing refreshes a stale credential list and tolerates an already absent 
   assert.equal(syncs, 2);
 });
 
-test('partitioned variant/round jobs preserve all 324 unique matrix keys', () => {
+test('partitioned variant/round jobs preserve every unique matrix key', () => {
   const expected = schedule(
     variants,
     cases.filter((c) => !c.attachment),
@@ -217,7 +219,7 @@ test('partitioned variant/round jobs preserve all 324 unique matrix keys', () =>
       ),
     ),
   );
-  assert.equal(partitioned.length, 324);
+  assert.equal(partitioned.length, expected.length);
   assert.deepEqual(
     new Set(partitioned.map((x) => x.key)),
     new Set(expected.map((x) => x.key)),
