@@ -1,6 +1,7 @@
 import {
   Inject,
   Injectable,
+  Logger,
   type OnModuleInit,
   type OnApplicationShutdown,
 } from '@nestjs/common';
@@ -23,6 +24,11 @@ export type Executor = Database | Transaction;
 
 @Injectable()
 export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
+  private readonly logger = new Logger(DatabaseService.name);
+  private stopping = false;
+  private readonly markStopping = () => {
+    this.stopping = true;
+  };
   readonly pool: Pool;
   readonly db: Database;
   constructor(@Inject(ConfigService) config: ConfigService) {
@@ -30,12 +36,24 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
       connectionString: config.getOrThrow<string>('DATABASE_URL'),
       max: 10,
     });
+    this.pool.on('error', (error) => {
+      if (this.stopping) return;
+      this.logger.error(
+        'PostgreSQL pool connection failed; the discarded connection will be replaced on demand',
+        error.stack,
+      );
+    });
+    process.once('SIGTERM', this.markStopping);
+    process.once('SIGINT', this.markStopping);
     this.db = drizzle(this.pool, { schema: databaseSchema });
   }
   async onModuleInit() {
     await this.pool.query('select 1');
   }
   async onApplicationShutdown() {
+    this.markStopping();
+    process.removeListener('SIGTERM', this.markStopping);
+    process.removeListener('SIGINT', this.markStopping);
     await this.pool.end();
   }
   transaction<T>(operation: (tx: Transaction) => Promise<T>) {

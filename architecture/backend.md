@@ -6,7 +6,7 @@ The first-party API uses private Tailnet ingress. Execution has no direct backen
 
 ## Implementation
 
-- NestJS with PostgreSQL, Drizzle, and `pg`.
+- NestJS with PostgreSQL, Drizzle, and `pg`. The application pool handles idle connection failures so unexpected database loss is logged and later queries can reconnect. Process stop signals mark planned shutdown before asynchronous Nest cleanup, suppressing expected pool-termination noise while the pool closes.
 - Compose separates agent-service orchestration, persistent execution/desktop, the PWA gateway, and PostgreSQL. Connection settings use `DATABASE_URL`; [deployment](deployment.md) defines paths and persistence.
 - Drizzle generates committed SQL migrations, applied through an explicit command.
 - Controllers and agent tools call application services. Services own business rules and transactions; repositories handle persistence using the same transaction context.
