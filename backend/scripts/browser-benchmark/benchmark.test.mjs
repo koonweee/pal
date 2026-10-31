@@ -336,7 +336,10 @@ test('general-worker requests contribute to usage and missing-usage status', () 
 test('result boundary validation works after generation and rejects forbidden tools', async () => {
   const { validBoundaries } = await import('./delegation.mjs');
   const variant = { delegated: true, boundary: 'services' };
-  const worker = { role: 'worker', tools: ['browser'] };
+  const worker = {
+    role: 'worker',
+    tools: ['browser', 'login_inspect', 'secure_fill'],
+  };
   assert.equal(
     validBoundaries(variant, [
       { role: 'task', tools: ['mastra_workspace_read_file'] },
@@ -386,6 +389,7 @@ test('interaction-MCP arm exposes no general worker or worker file/shell tools',
     role: 'worker',
     tools: [
       'browser',
+      'login_inspect',
       'secure_fill',
       'mastra_workspace_computer_click',
       'search_tools',
@@ -422,6 +426,13 @@ test('interaction-MCP arm exposes no general worker or worker file/shell tools',
   assert.equal(validBoundaries(variant, [task]), false);
   assert.equal(
     validBoundaries(variant, [task, worker, { role: 'general', tools: [] }]),
+    false,
+  );
+  assert.equal(
+    validBoundaries(variant, [
+      task,
+      { role: 'worker', tools: ['browser', 'secure_fill'] },
+    ]),
     false,
   );
   for (const name of [

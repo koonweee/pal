@@ -325,8 +325,9 @@ scope.run = async () => {
           await (await r.browser.selectedPage(task.id)).bringToFront();
         }
         const baseTools = await r.main.taskAgent.listTools({ requestContext });
+        const workerTools = await r.main.worker.listTools({ requestContext });
         const interactionTools = Object.fromEntries(
-          Object.entries(baseTools).filter(([name]) =>
+          Object.entries(workerTools).filter(([name]) =>
             /^(browser|login_|secure_)/.test(name),
           ),
         );

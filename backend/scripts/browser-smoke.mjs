@@ -817,9 +817,9 @@ try {
         },
         worker: {
           model: chatgptModel(
-            'gpt-6-luna',
+            'gpt-6.1-terra',
             process.env.PAL_AGENT_AUTH_PATH,
-            'high',
+            'medium',
           ),
           instructions:
             workerInstructions + '\nCurrent UTC: ' + new Date().toISOString(),

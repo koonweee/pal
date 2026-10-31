@@ -62,9 +62,18 @@ ${boundary === 'coordinator' ? 'You have no execution, file-reading, search or s
 
 export function validBoundaries(variant, boundaries, mcpToolNames = []) {
   if (!variant.delegated) return true;
+  const workers = boundaries.filter((event) => event.role === 'worker');
+  if (
+    !workers.length ||
+    workers.some(
+      (event) =>
+        !event.tools.includes('login_inspect') ||
+        !event.tools.includes('secure_fill'),
+    )
+  )
+    return false;
   if (variant.boundary === 'interaction-mcp') {
     const tasks = boundaries.filter((e) => e.role === 'task');
-    const workers = boundaries.filter((e) => e.role === 'worker');
     return (
       tasks.length > 0 &&
       workers.length > 0 &&
@@ -93,7 +102,6 @@ export function validBoundaries(variant, boundaries, mcpToolNames = []) {
           ? e.tools.every((name) => taskToolAllowed(variant.boundary, name))
           : !e.tools.some(interactionName),
       ) &&
-    boundaries.some((e) => e.role === 'worker') &&
     boundaries
       .filter((e) => e.role === 'general')
       .every(

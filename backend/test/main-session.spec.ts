@@ -446,7 +446,11 @@ it('keeps generation failures private, and shuts down silently', async () => {
   );
   try {
     await runtime.onModuleInit();
-    expect(providerSpy).toHaveBeenCalledWith('gpt-6-luna', '/unused', 'high');
+    expect(providerSpy).toHaveBeenCalledWith(
+      'gpt-6.1-terra',
+      '/unused',
+      'medium',
+    );
     const user = await chat.publish({
       role: 'user',
       text: 'Fail after commentary',

@@ -250,9 +250,9 @@ export class MastraAgentRuntime
         ],
         worker: {
           model: chatgptModel(
-            'gpt-6-luna',
+            'gpt-6.1-terra',
             this.config.getOrThrow<string>('PAL_AGENT_AUTH_PATH'),
-            'high',
+            'medium',
           ),
           instructions: () =>
             workerInstructions +

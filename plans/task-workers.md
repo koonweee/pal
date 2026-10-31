@@ -11,7 +11,7 @@ Let each task agent run up to three focused workers concurrently, one level deep
 ## Current Behavior
 
 - Main delegates to persistent native Task Agent threads through `delegate_task`.
-- Task exposes native `agent-worker` alongside MCP/code mode, local execution, metadata and schedules. The interaction worker uses Luna high for browser/computer/login and code mode, returning private findings from explicit assignments without inherited history. See [current runtime deployment](interaction-worker-runtime.md).
+- Task exposes native `agent-worker` alongside MCP/code mode, local execution, metadata and schedules. The interaction worker uses Terra medium for browser/computer/login and code mode, returning private findings from explicit assignments without inherited history. See [current runtime deployment](interaction-worker-runtime.md).
 - BrowserService pins independent task/worker CLI sessions; the extension maintains parent task groups, per-session/tab ownership, and cleanup membership.
 
 ## Milestones

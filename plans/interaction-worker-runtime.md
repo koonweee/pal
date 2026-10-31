@@ -6,7 +6,7 @@ In Progress
 
 ## Goal
 
-Deploy a Sol-medium Task with local execution, web search and MCP, plus a Luna-high interaction worker for browser, computer and website login. Workers receive explicit assignments with zero inherited history and return private findings.
+Deploy a Sol-medium Task with local execution, web search and MCP, plus a Terra-medium interaction worker for browser, computer and website login. Workers receive explicit assignments with zero inherited history and return private findings.
 
 ## Current Behavior
 
@@ -36,8 +36,8 @@ Exit: dev health and role/handoff checks pass with retained desktop state.
 
 ### 3. Production deployment
 
-- [x] Publish/stage the validated release through existing Komodo configuration with rollback metadata.
-- [x] Update agent-service and matching web release identity while retaining execution/profile/data.
+- [ ] Publish/stage the validated Terra-medium release through existing Komodo configuration with rollback metadata.
+- [ ] Update agent-service and matching web release identity while retaining execution/profile/data.
 - [ ] Finish the host-only native role/record audit; production health and scoped read-only HTTP acceptance pass.
 
 Exit: production runs the validated release with healthy services and verified boundaries. Komodo uses the configured native operator. Host-only preflight and deployed-role inspection use the owner’s read-only sudo verifier.
@@ -59,16 +59,14 @@ cd ..
 
 ## Overall Exit Criteria
 
-- Task owns MCP/local execution and delegates UI/authentication to Luna high without inherited history.
+- Task owns MCP/local execution and delegates UI/authentication to Terra medium without inherited history.
 - Checks, dev and production deployment are verified; current architecture and release evidence are recorded.
 - Data, browser sessions/profile, cancellation and cleanup behavior are preserved.
 
 ## Validation
 
 - Backend build/lint and boundaries pass; 68 integration tests and 37 end-to-end tests pass on a disposable database, including secure-entry continuation and submission/cleanup ordering.
-- Dev runs the role split. Native inspection verifies Sol-medium Task, Luna interaction, role-specific tools/processors/skills, zero inherited messages and no active runs/pending entry. The execution container identity/start time is unchanged.
+- Dev runs the role split. Native inspection verifies Sol-medium Task, Terra-medium interaction, role-specific tools/processors/skills, zero inherited messages and no active runs/pending entry. The interaction inventory includes browser, computer, `login_inspect` and `secure_fill`; the execution container remains retained.
 - Disposable real-service MCP/code-mode and Task PDF/image/publication/restart checks pass. Native browser/media/ownership/cancellation checks and two real screenshot/form Task fixtures pass. Two/three concurrent Luna interaction branches, private synthesis, Main responsiveness and browser restart/suspension checks pass after updating the fixture to the current native sendToUser tool.
 - The wrapper's host PWA navigation timed out before agent checks; no frontend source changes are part of this release.
-- Production runs application release `236cc84` through infrastructure revision `3712973`. Native Komodo backend/web Builds, immutable AMD64 manifests, targeted pull/deploy, HTTP/SSE, matching frontend identity, safe-area HTML and desktop WebSocket greeting pass. Only backend/web container identities changed; execution, egress, PostgreSQL, Google MCP and initialization containers are retained.
-- Original Stack deployment arguments are restored; both Pal ResourceSyncs have no pending changes. Disposable smoke state, copied auth and exact temporary operator plans are removed.
-- The owner-run host verifier saved an idle/no-pending-entry preflight baseline but exited during rollout before its final audit. Its resumable replacement is staged at `/tmp/pal-interaction-236cc84-verify.py` on `sf-internal`; final actual-role inventory and database count comparison remain pending. Production is healthy; no further rollout is required.
+- Production remains on the previously deployed interaction configuration. Terra-medium production rollout and the final host-only role/record audit remain pending.

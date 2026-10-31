@@ -122,7 +122,7 @@ try {
   const result = inspected.result.value;
   assert.equal(result.task.model, 'gpt-6.1-sol');
   assert.equal(result.taskEffort, 'medium');
-  assert.equal(result.interaction.model, 'gpt-6-luna');
+  assert.equal(result.interaction.model, 'gpt-6.1-terra');
   assert.equal(result.inheritedMessages, 0);
   assert(result.privateWorkerToolResults);
   assert(result.task.processors.includes('pal-task-tool-discovery'));
@@ -145,6 +145,8 @@ try {
     ),
   );
   assert(result.interaction.coreTools.includes('browser'));
+  assert(result.interaction.coreTools.includes('login_inspect'));
+  assert(result.interaction.coreTools.includes('secure_fill'));
   assert(
     !result.interaction.coreTools.some((name) =>
       /^(web_search|read_preferences|inspect_message|agent-)/.test(name),
