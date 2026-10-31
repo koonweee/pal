@@ -1,6 +1,6 @@
 ---
 name: website-authentication
-description: Sign in to websites, switch accounts, enter verification codes, recover rejected credentials, and honor website session-persistence preferences using Pal's secure-entry tools.
+description: Sign in to websites, switch accounts, enter verification codes and payment cards, recover rejected credentials, and honor website session-persistence preferences using Pal's secure-entry tools.
 ---
 
 # Website authentication
@@ -30,3 +30,9 @@ On an already authenticated page, honor an explicit persistence instruction wher
 Verify website acceptance, including verification challenges, before `login_session({action:"complete"})`. Saving/filling alone is not login success. Explicit credential rejection calls for fresh inspection and corrected private entry immediately; yield instead of resubmitting rejected credentials. A password stage, verification challenge, CAPTCHA or network error alone is not rejection.
 
 Fix invalid_input arguments directly. Reinspect stale fields or navigation changes. For an automatic recovery notification, inspect and replace the entry selection; stop when recovery reports failure and let the user retry through the card. Handle input_required before continuing.
+
+## Payment entry
+
+Use the same secure-entry tools for payment fields. Assign cardholderName, number, expiry (combined MM/YY), expMonth, expYear and securityCode from inspected page evidence; never mix card and login/code roles. Hosted payment frames and month/year selects are supported. Use secure_fill with only fields to open the private Bitwarden card picker. For new details use secure_entry_request; for a website-saved card request only missing expiry/securityCode roles. Bitwarden cards and website-saved cards are separate sources.
+
+The inline form owns card selection and optional vault saving. Payment values never belong in chat, ordinary browser tools, screenshots or handoffs. Card filling performs no browser action or purchase submission; continue with masked inspection and the user's purchase instructions. Do not save a card on the merchant website unless authorized. Recovery uses the same request ID handoff; transient values must be entered again after stale bindings. Only credentials use login_session.

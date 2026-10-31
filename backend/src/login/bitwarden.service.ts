@@ -1,3 +1,4 @@
+import type { PaymentCard } from './payment-card.js';
 import {
   Inject,
   Injectable,
@@ -19,6 +20,7 @@ export interface VaultItem {
   name: string;
   type: number;
   notes?: string | null;
+  card?: PaymentCard;
   login?: {
     username?: string;
     password?: string;
@@ -222,6 +224,34 @@ export class BitwardenService implements OnModuleInit, OnModuleDestroy {
       '/list/object/items?url=' + encodeURIComponent(url),
     );
     return result.data.filter((item) => item.type === 1 && !!item.login);
+  }
+  async cards() {
+    await this.ensureReady();
+    if (!this.synced) await this.sync();
+    const result = await this.request<{ data: VaultItem[] }>(
+      '/list/object/items',
+    );
+    return result.data.filter((item) => item.type === 3 && !!item.card);
+  }
+  async saveCard(card: PaymentCard, label: string, requestId: string) {
+    const marker = 'pal-card-request:' + requestId;
+    const previous = (await this.cards()).find((item) =>
+      item.notes?.split('\n').includes(marker),
+    );
+    if (previous) return previous.id;
+    const saved = await this.request<VaultItem>('/object/item', 'POST', {
+      type: 3,
+      name: label,
+      notes: marker,
+      card: {
+        cardholderName: card.cardholderName,
+        number: card.number,
+        expMonth: card.expMonth,
+        expYear: card.expYear,
+        securityCode: card.securityCode,
+      },
+    });
+    return saved.id;
   }
   async save(origin: string, input: CredentialInput, requestId: string) {
     const matches = await this.matching(origin);

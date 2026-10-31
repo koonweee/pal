@@ -175,6 +175,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/login/requests/{id}/card': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['submitPaymentCard'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/login/requests/{id}/code': {
     parameters: {
       query?: never;
@@ -608,13 +624,15 @@ export interface components {
     };
     LoginRequestDto: {
       accounts: components['schemas']['LoginAccountDto'][];
+      cards?: components['schemas']['PaymentCardDto'][];
       chooseAccount: boolean;
       configured: boolean;
+      fields?: string[];
       id: string;
       inspectionId: string | null;
       keepMeSignedIn: boolean;
       /** @enum {string} */
-      kind: 'credentials' | 'code';
+      kind: 'credentials' | 'code' | 'card';
       origin: string;
       /** @enum {string} */
       status:
@@ -735,6 +753,12 @@ export interface components {
       updatedAt: string;
       version: number;
     };
+    PaymentCardDto: {
+      brand: string;
+      id: string;
+      label: string;
+      lastFour: string;
+    };
     PreferencePageResponseDto: {
       after: string | null;
       preferences: components['schemas']['PreferenceSnapshotResponseDto'][];
@@ -840,6 +864,16 @@ export interface components {
       taskId?: string;
       /** @default  */
       text: string;
+    };
+    SubmitCardDto: {
+      accountId?: string;
+      cardholderName?: string;
+      expMonth?: string;
+      expYear?: string;
+      label?: string;
+      number?: string;
+      save?: boolean;
+      securityCode?: string;
     };
     SubmitCodeDto: {
       code: string;
@@ -1253,6 +1287,31 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LoginFinishedDto'];
+        };
+      };
+    };
+  };
+  submitPaymentCard: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SubmitCardDto'];
+      };
+    };
     responses: {
       201: {
         headers: {

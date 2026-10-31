@@ -1,0 +1,2 @@
+ALTER TABLE "login_requests" DROP CONSTRAINT "login_request_kind";--> statement-breakpoint
+ALTER TABLE "login_requests" ADD CONSTRAINT "login_request_kind" CHECK ("login_requests"."kind" in ('credentials','code','card'));

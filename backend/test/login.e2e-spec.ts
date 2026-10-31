@@ -1178,3 +1178,154 @@ it('acts before masked inspection across new tabs, delayed navigation, same-page
     await browser.close();
   }
 });
+
+it('fills saved, transient and opted-in payment cards through private API, recovers stale entry and never persists secrets', async () => {
+  const browser = await chromium.launch({
+    channel: 'chrome',
+    executablePath: process.env.TEST_CHROMIUM_PATH,
+    headless: true,
+  });
+  const page = await browser.newPage();
+  await page.route('https://payment.example.test/**', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<input autocomplete="cc-name"><input autocomplete="cc-number"><input autocomplete="cc-exp"><input autocomplete="cc-csc"><button onclick="document.body.dataset.submitted=\'yes\'">Pay</button>',
+    }),
+  );
+  await page.goto('https://payment.example.test/');
+  const task = await fixture.app
+    .get(TasksService)
+    .create({
+      title: 'Synthetic card entry',
+      goal: 'Verify private payment filling',
+    });
+  const service = fixture.app.get(LoginService),
+    vault = fixture.app.get(BitwardenService);
+  const selected = vi
+    .spyOn(fixture.app.get(BrowserService), 'selectedPage')
+    .mockResolvedValue(page);
+  const configured = vi.spyOn(vault, 'configured', 'get').mockReturnValue(true);
+  const matching = vi.spyOn(vault, 'matching').mockResolvedValue([]);
+  const accountId = randomUUID();
+  const card = {
+    cardholderName: 'SYNTHETIC_CARDHOLDER',
+    number: '4242424242424242',
+    expMonth: '12',
+    expYear: '2029',
+    securityCode: '765',
+  };
+  const cards = vi
+    .spyOn(vault, 'cards')
+    .mockImplementation(async () => [
+      { id: accountId, name: 'Synthetic', type: 3, card: { ...card } },
+    ]);
+  const save = vi.spyOn(vault, 'saveCard').mockResolvedValue(randomUUID());
+  const outputs: unknown[] = [];
+  const fields = async () => {
+    const inspected = await service.inspect(task.id);
+    outputs.push({ ...inspected, image: undefined });
+    const ref = (a: string) =>
+      inspected.inputs.find((i) => i.autocomplete === a)!.ref;
+    return {
+      cardholderName: ref('cc-name'),
+      number: ref('cc-number'),
+      expiry: ref('cc-exp'),
+      securityCode: ref('cc-csc'),
+    };
+  };
+  const submit = async (id: string, input: object) => {
+    const response = await request(fixture.url)
+      .post('/login/requests/' + id + '/card')
+      .send(input)
+      .expect(201);
+    outputs.push(response.body);
+    return response.body;
+  };
+  try {
+    const selection = await service.fill(task.id, await fields());
+    expect(selection.status).toBe('awaiting_user');
+    if (!('requestId' in selection)) throw new Error('Expected card picker');
+    const metadata = await service.get(selection.requestId);
+    outputs.push(metadata);
+    expect(metadata.cards).toEqual([
+      { id: accountId, label: 'Synthetic', brand: '', lastFour: '4242' },
+    ]);
+    expect((await submit(selection.requestId, { accountId })).status).toBe(
+      'filled',
+    );
+    expect(await page.locator('[autocomplete="cc-number"]').inputValue()).toBe(
+      card.number,
+    );
+    await page.locator('[autocomplete="cc-number"]').fill('');
+    await submit(selection.requestId, { accountId });
+    expect(await page.locator('[autocomplete="cc-number"]').inputValue()).toBe(
+      '',
+    );
+    const once = await service.request(task.id, await fields());
+    await submit(once.requestId, card);
+    expect(save).not.toHaveBeenCalled();
+    const persist = await service.request(task.id, await fields());
+    await submit(persist.requestId, {
+      ...card,
+      save: true,
+      label: 'Synthetic',
+    });
+    await submit(persist.requestId, {
+      ...card,
+      save: true,
+      label: 'Synthetic',
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    const f = await fields();
+    const partial = await service.request(task.id, {
+      expiry: f.expiry,
+      securityCode: f.securityCode,
+    });
+    await submit(partial.requestId, {
+      expMonth: '11',
+      expYear: '30',
+      securityCode: '876',
+    });
+    expect(await page.locator('[autocomplete="cc-exp"]').inputValue()).toBe(
+      '11/30',
+    );
+    const stale = await service.request(task.id, {
+      securityCode: (await fields()).securityCode,
+    });
+    await page.reload();
+    expect(
+      (await submit(stale.requestId, { securityCode: '987' })).status,
+    ).toBe('updating');
+    const refreshed = await service.request(task.id, {
+      securityCode: (await fields()).securityCode,
+    });
+    expect(refreshed.requestId).not.toBe(stale.requestId);
+    expect((await service.get(stale.requestId)).id).toBe(refreshed.requestId);
+    expect(
+      (await submit(refreshed.requestId, { securityCode: '987' })).status,
+    ).toBe('filled');
+    expect(
+      await page.locator('body').getAttribute('data-submitted'),
+    ).toBeNull();
+    outputs.push(
+      (
+        await fixture.database.pool.query(
+          'SELECT * FROM login_requests WHERE task_id=$1',
+          [task.id],
+        )
+      ).rows,
+    );
+    outputs.push(
+      await fixture.app.get(ChatService).history({ taskId: task.id }),
+    );
+    expect(JSON.stringify(outputs)).not.toContain(card.number);
+    expect(JSON.stringify(outputs)).not.toContain(card.cardholderName);
+  } finally {
+    selected.mockRestore();
+    configured.mockRestore();
+    matching.mockRestore();
+    cards.mockRestore();
+    save.mockRestore();
+    await browser.close();
+  }
+});

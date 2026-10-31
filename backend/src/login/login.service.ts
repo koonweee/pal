@@ -11,7 +11,12 @@ import {
   type LoginRequest,
 } from './login.repository.js';
 import { LoginBrowser } from './login-browser.js';
-import { StaleSecureFieldsError, type SecureFields } from './login-fields.js';
+import { cardValues, type CardSubmission } from './payment-card.js';
+import {
+  fieldKind,
+  StaleSecureFieldsError,
+  type SecureFields,
+} from './login-fields.js';
 
 @Injectable()
 export class LoginService implements OnModuleDestroy {
@@ -112,7 +117,7 @@ export class LoginService implements OnModuleDestroy {
         }
         if (
           row.status === 'pending' &&
-          row.kind === 'code' &&
+          row.kind !== 'credentials' &&
           !this.inspector.live(
             loginOwner(row.taskId, row.workerId ?? undefined),
             row.fields,
@@ -137,9 +142,11 @@ export class LoginService implements OnModuleDestroy {
                   : row.status === 'selected'
                     ? 'The user selected a saved account. Inspect again and use secure_fill without accountId to continue this selected flow.'
                     : row.status === 'filled'
-                      ? row.kind === 'code'
-                        ? 'The verification code was filled directly in the browser.'
-                        : `The complete username and password are stored. The selected ${Object.keys(row.fields ?? {}).join('/')} fields were filled directly in the browser.`
+                      ? row.kind === 'card'
+                        ? 'The payment fields were filled directly in the browser. Filling does not submit a purchase.'
+                        : row.kind === 'code'
+                          ? 'The verification code was filled directly in the browser.'
+                          : `The complete username and password are stored. The selected ${Object.keys(row.fields ?? {}).join('/')} fields were filled directly in the browser.`
                       : 'The request was cancelled.';
           await this.notify(
             row.taskId,
@@ -263,7 +270,12 @@ export class LoginService implements OnModuleDestroy {
       loginOwner(taskId, workerId),
       fields,
     );
-    const kind = target.roles.includes('code') ? 'code' : 'credentials';
+    const kind = fieldKind(fields);
+    if (kind === 'card' && keepMeSignedIn !== undefined)
+      throw new ApplicationError(
+        'invalid_input',
+        'Session preferences apply only to logins',
+      );
     if (chooseAccount && kind === 'code')
       throw new ApplicationError(
         'invalid_input',
@@ -272,7 +284,10 @@ export class LoginService implements OnModuleDestroy {
     const picker =
       chooseAccount &&
       this.vault.configured &&
-      (await this.vault.matching(target.origin)).length > 0;
+      (kind === 'card'
+        ? await this.vault.cards()
+        : await this.vault.matching(target.origin)
+      ).length > 0;
     const row = await this.repository.request(
       taskId,
       target.origin,
@@ -314,6 +329,14 @@ export class LoginService implements OnModuleDestroy {
       loginOwner(taskId, workerId),
       fields,
     );
+    if (fieldKind(fields) === 'card') {
+      if (action || accountId || keepMeSignedIn !== undefined)
+        throw new ApplicationError(
+          'invalid_input',
+          'Payment filling uses the private card picker; omit action, accountId and login preferences',
+        );
+      return this.request(taskId, fields, workerId, undefined, true);
+    }
     if (target.roles.includes('code'))
       return {
         status: 'input_required' as const,
@@ -401,11 +424,13 @@ export class LoginService implements OnModuleDestroy {
   }
   private async publishCard(row: LoginRequest) {
     const text =
-      row.kind === 'code'
-        ? 'Enter the verification code securely.'
-        : row.chooseAccount
-          ? 'Choose an account to sign in.'
-          : 'Enter your sign-in details securely.';
+      row.kind === 'card'
+        ? 'Enter or select payment details securely.'
+        : row.kind === 'code'
+          ? 'Enter the verification code securely.'
+          : row.chooseAccount
+            ? 'Choose an account to sign in.'
+            : 'Enter your sign-in details securely.';
     const metadata = { secureEntryRequestId: row.cardId };
     await this.chat.publish(
       {
@@ -428,6 +453,17 @@ export class LoginService implements OnModuleDestroy {
       status: row.status,
       inspectionId: row.status === 'pending' ? row.inspectionId : null,
       configured: this.vault.configured,
+      ...(row.kind === 'card'
+        ? {
+            fields: Object.keys(row.fields ?? {}),
+            cards:
+              row.status === 'pending' &&
+              row.chooseAccount &&
+              this.vault.configured
+                ? await this.cards().catch(() => [])
+                : [],
+          }
+        : {}),
       keepMeSignedIn: row.keepMeSignedIn,
       accounts:
         row.status === 'pending' &&
@@ -436,6 +472,107 @@ export class LoginService implements OnModuleDestroy {
           ? await this.accounts(row.origin).catch(() => [])
           : [],
     };
+  }
+  private async cards() {
+    return (await this.vault.cards()).map((item) => ({
+      id: item.id,
+      label: item.name,
+      brand: item.card?.brand ?? '',
+      lastFour: (item.card?.number ?? '').replace(/\D/g, '').slice(-4),
+    }));
+  }
+  async submitCard(id: string, input: CardSubmission) {
+    try {
+      const row = await this.repository.finish(id, {
+        kind: 'card',
+        status: 'filled',
+        submit: async (row) => {
+          if (!row.fields || fieldKind(row.fields) !== 'card')
+            throw new StaleSecureFieldsError();
+          if (
+            input.accountId &&
+            (!row.chooseAccount ||
+              input.save ||
+              Object.entries(input).some(
+                ([key, value]) => key !== 'accountId' && value != null,
+              ))
+          ) {
+            throw new ApplicationError(
+              'invalid_input',
+              'Select a saved card or enter new details',
+            );
+          }
+          const saved = input.accountId
+            ? (await this.vault.cards()).find(
+                (item) => item.id === input.accountId,
+              )
+            : undefined;
+          if (input.accountId && !saved)
+            throw new ApplicationError(
+              'invalid_input',
+              'Saved card is unavailable',
+            );
+          const values = cardValues(saved?.card ?? input);
+          try {
+            if (
+              input.save &&
+              (!values.number ||
+                !values.cardholderName ||
+                !values.expMonth ||
+                !values.expYear ||
+                !input.label?.trim())
+            ) {
+              throw new ApplicationError(
+                'invalid_input',
+                'A complete card and label are required to save',
+              );
+            }
+            // Validate the live destination before persisting or filling anything.
+            const page = await this.browser
+              .selectedPage(row.taskId, row.workerId ?? undefined)
+              .catch(() => {
+                throw new StaleSecureFieldsError();
+              });
+            const target = await this.inspector.select(
+              page,
+              loginOwner(row.taskId, row.workerId ?? undefined),
+              row.fields,
+            );
+            if (target.origin !== row.origin)
+              throw new StaleSecureFieldsError();
+            if (target.roles.some((role) => !values[role]))
+              throw new ApplicationError(
+                'invalid_input',
+                'The card is missing required fields. Enter the details privately.',
+              );
+            const accountId = input.save
+              ? await this.vault.saveCard(values, input.label!.trim(), row.id)
+              : saved?.id;
+            await this.fillRequest(row, values);
+            return { accountId, filled: true };
+          } finally {
+            for (const key of Object.keys(values) as (keyof typeof values)[])
+              values[key] = undefined;
+            if (saved) saved.card = undefined;
+          }
+        },
+      });
+      this.events.publish({ event: 'login.updated', taskId: row.taskId });
+      void this.flushNotifications();
+      return { id: row.id, status: row.status };
+    } catch (error) {
+      if (!(error instanceof StaleSecureFieldsError)) throw error;
+      const result = await this.recover(id);
+      void this.flushNotifications();
+      return result;
+    } finally {
+      input.number =
+        input.securityCode =
+        input.cardholderName =
+        input.expMonth =
+        input.expYear =
+          undefined;
+    }
   }
   private async recover(id: string, retry = false) {
     const row = await this.repository.recover(id, retry);

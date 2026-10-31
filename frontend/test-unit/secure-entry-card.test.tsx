@@ -23,6 +23,7 @@ import {
   saveLoginRequest,
   selectLoginAccount,
   submitLoginCode,
+  submitPaymentCard,
   type LoginRequest,
 } from '../src/api/client';
 vi.mock('../src/api/client', () => ({
@@ -31,6 +32,7 @@ vi.mock('../src/api/client', () => ({
   saveLoginRequest: vi.fn(),
   selectLoginAccount: vi.fn(),
   submitLoginCode: vi.fn(),
+  submitPaymentCard: vi.fn(),
   cancelLoginRequest: vi.fn(),
   loginPreviewUrl: (id: string) => '/api/login/inspections/' + id + '/image',
 }));
@@ -272,4 +274,69 @@ test('offers saved accounts and new entry, keeps checkbox drafts local, and sele
   expect(screen.queryByRole('radio')).not.toBeInTheDocument();
   expect(saveLoginRequest).not.toHaveBeenCalled();
   expect(await screen.findByText('Reload safe')).toBeInTheDocument();
+});
+
+test('selects a masked saved card and submits only missing payment details without login preferences', async () => {
+  const cardRequest: LoginRequest = {
+    ...pending,
+    kind: 'card',
+    chooseAccount: true,
+    cards: [
+      { id: 'synthetic', label: 'Personal', brand: 'Visa', lastFour: '4242' },
+    ],
+    fields: ['expiry', 'securityCode'],
+  };
+  vi.mocked(getLoginRequest).mockResolvedValue(cardRequest);
+  vi.mocked(submitPaymentCard).mockResolvedValue({
+    id: 'request',
+    status: 'filled',
+  });
+  render(view());
+  expect(await screen.findByText('Choose a card')).toBeInTheDocument();
+  expect(screen.getByLabelText(/Personal.*4242/)).toBeInTheDocument();
+  expect(screen.queryByText('Keep me signed in')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Use card' }));
+  await waitFor(() =>
+    expect(submitPaymentCard).toHaveBeenCalledWith('request', {
+      accountId: 'synthetic',
+    }),
+  );
+  cleanup();
+  vi.mocked(submitPaymentCard).mockClear();
+  vi.mocked(getLoginRequest).mockResolvedValue({
+    ...cardRequest,
+    chooseAccount: false,
+    configured: false,
+  });
+  render(view());
+  fireEvent.change(await screen.findByLabelText(/^Month/), {
+    target: { value: '12' },
+  });
+  fireEvent.change(screen.getByLabelText(/^Year/), { target: { value: '29' } });
+  fireEvent.change(screen.getByLabelText(/^CVV/), { target: { value: '123' } });
+  expect(screen.queryByLabelText(/^Number/)).not.toBeInTheDocument();
+  expect(screen.queryByText('Save to Bitwarden')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Fill details' }));
+  await waitFor(() =>
+    expect(submitPaymentCard).toHaveBeenCalledWith('request', {
+      expMonth: '12',
+      expYear: '29',
+      securityCode: '123',
+    }),
+  );
+});
+
+test('requires only requested card fields until the user opts into saving a complete card', async () => {
+  vi.mocked(getLoginRequest).mockResolvedValue({
+    ...pending,
+    kind: 'card',
+    fields: ['number', 'expiry', 'securityCode'],
+    cards: [],
+  });
+  render(view());
+  expect(await screen.findByLabelText(/^Name/)).not.toBeRequired();
+  expect(screen.getByLabelText(/^Month/)).toBeRequired();
+  expect(screen.getByLabelText(/^Year/)).toBeRequired();
+  fireEvent.click(screen.getByLabelText('Save to Bitwarden'));
+  expect(screen.getByLabelText(/^Name/)).toBeRequired();
 });

@@ -32,10 +32,49 @@ class LoginAccountDto {
   @ApiProperty() id!: string;
   @ApiProperty() label!: string;
 }
+class PaymentCardDto extends LoginAccountDto {
+  @ApiProperty() brand!: string;
+  @ApiProperty() lastFour!: string;
+}
+class SubmitCardDto {
+  @ApiPropertyOptional() @IsOptional() @IsUUID() accountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() save?: boolean;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Length(1, 80)
+  label?: string;
+  @ApiPropertyOptional({ writeOnly: true })
+  @IsOptional()
+  @IsString()
+  @Length(1, 120)
+  cardholderName?: string;
+  @ApiPropertyOptional({ writeOnly: true })
+  @IsOptional()
+  @IsString()
+  @Length(12, 25)
+  number?: string;
+  @ApiPropertyOptional({ writeOnly: true })
+  @IsOptional()
+  @IsString()
+  @Length(1, 2)
+  expMonth?: string;
+  @ApiPropertyOptional({ writeOnly: true })
+  @IsOptional()
+  @IsString()
+  @Length(2, 4)
+  expYear?: string;
+  @ApiPropertyOptional({ writeOnly: true })
+  @IsOptional()
+  @IsString()
+  @Length(3, 4)
+  securityCode?: string;
+}
 class LoginRequestDto {
   @ApiProperty() id!: string;
   @ApiProperty() origin!: string;
-  @ApiProperty({ enum: ['credentials', 'code'] }) kind!: 'credentials' | 'code';
+  @ApiProperty({ enum: ['credentials', 'code', 'card'] }) kind!:
+    'credentials' | 'code' | 'card';
   @ApiProperty({
     enum: [
       'pending',
@@ -51,6 +90,8 @@ class LoginRequestDto {
   @ApiProperty({ nullable: true, type: String }) inspectionId!: string | null;
   @ApiProperty() configured!: boolean;
   @ApiProperty() keepMeSignedIn!: boolean;
+  @ApiPropertyOptional({ type: [String] }) fields?: string[];
+  @ApiPropertyOptional({ type: [PaymentCardDto] }) cards?: PaymentCardDto[];
   @ApiProperty() chooseAccount!: boolean;
   @ApiProperty({ type: [LoginAccountDto] }) accounts!: LoginAccountDto[];
 }
@@ -137,6 +178,13 @@ export class FirstPartyLoginController {
   @ApiCreatedResponse({ type: LoginFinishedDto })
   code(@Param('id', ParseUUIDPipe) id: string, @Body() input: SubmitCodeDto) {
     return this.login.submitCode(id, input.code);
+  }
+  @Post('requests/:id/card')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ operationId: 'submitPaymentCard' })
+  @ApiCreatedResponse({ type: LoginFinishedDto })
+  card(@Param('id', ParseUUIDPipe) id: string, @Body() input: SubmitCardDto) {
+    return this.login.submitCard(id, input);
   }
   @Post('requests/:id/retry')
   @Header('Cache-Control', 'no-store')

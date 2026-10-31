@@ -115,6 +115,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 | [noVNC Touch Trackpad](novnc-trackpad.md)                                                 | Done        | Pinned relative touch input, header paste/keyboard/fullscreen controls, and live playground trial.                                                                                        |
 | [X11 Desktop and Native Computer Tools](x11-desktop.md)                                   | Done        | Shared Xfce/X11 desktop, native Mastra computer adapter, and playground viewer.                                                                                                           |
 | [Desktop Appearance](desktop-appearance.md)                                               | Done        | Portable coral Xfce profile, 64 px margins, launcher dock, and Chromium defaults.                                                                                                         |
+| [Secure payment entry](secure-payment-entry.md) | Complete | Shared private card entry, Bitwarden selection and saving; synthetic dev acceptance passes. |
 
 ## Templates
 

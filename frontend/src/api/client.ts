@@ -485,3 +485,16 @@ export function cancelLoginRequest(id: string) {
 export function loginPreviewUrl(id: string) {
   return `/api/login/inspections/${encodeURIComponent(id)}/image`;
 }
+
+export function submitPaymentCard(
+  id: string,
+  input: components['schemas']['SubmitCardDto'],
+) {
+  return unwrap(
+    client.POST('/login/requests/{id}/card', {
+      params: { path: { id } },
+      body: input,
+      signal: requestSignal(undefined, 120_000),
+    }),
+  );
+}

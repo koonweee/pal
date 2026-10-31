@@ -1,8 +1,27 @@
 import { ApplicationError } from '../application/contracts/errors.js';
 
-export type SecureFields =
-  | { username?: string; password?: string; code?: never }
-  | { code: string[]; username?: never; password?: never };
+export const cardRoles = [
+  'cardholderName',
+  'number',
+  'expiry',
+  'expMonth',
+  'expYear',
+  'securityCode',
+] as const;
+export type CardRole = (typeof cardRoles)[number];
+export type SecureRole = 'username' | 'password' | 'code' | CardRole;
+export type SecureFields = Partial<
+  Record<Exclude<SecureRole, 'code'>, string>
+> & { code?: string[] };
+export type SecureValues = Partial<Record<SecureRole, string>>;
+export const isCardRole = (role: string): role is CardRole =>
+  (cardRoles as readonly string[]).includes(role);
+export const fieldKind = (fields: SecureFields) =>
+  Object.keys(fields).some(isCardRole)
+    ? ('card' as const)
+    : fields.code
+      ? ('code' as const)
+      : ('credentials' as const);
 export class StaleSecureFieldsError extends ApplicationError {
   constructor() {
     super(
@@ -12,7 +31,6 @@ export class StaleSecureFieldsError extends ApplicationError {
   }
 }
 
-export type SecureRole = 'username' | 'password' | 'code';
 export interface LoginInput {
   ref: string;
   origin: string;
@@ -26,21 +44,50 @@ export interface LoginInput {
 // Serialized by Playwright into the page. These checks validate destinations;
 // the model assigns semantic roles from the metadata and masked screenshot.
 export function isEligibleInput(
-  el: HTMLInputElement,
+  el: HTMLInputElement | HTMLSelectElement,
   role: 'any' | SecureRole,
 ) {
   if (
     !el.isConnected ||
     el.disabled ||
-    el.readOnly ||
-    !['text', 'email', 'tel', 'number', 'password', 'url', 'search'].includes(
-      el.type,
+    ('readOnly' in el && el.readOnly) ||
+    !(
+      el instanceof HTMLSelectElement ||
+      ['text', 'email', 'tel', 'number', 'password', 'url', 'search'].includes(
+        el.type,
+      )
     ) ||
     !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
   )
     return false;
   const purposes = el.autocomplete.toLowerCase().split(/\s+/);
-  if (role !== 'any' && purposes.some((p) => p.startsWith('cc-'))) return false;
+  const card = [
+    'cardholderName',
+    'number',
+    'expiry',
+    'expMonth',
+    'expYear',
+    'securityCode',
+  ].includes(role);
+  if (
+    el instanceof HTMLSelectElement &&
+    !['any', 'expMonth', 'expYear'].includes(role)
+  )
+    return false;
+  if (role !== 'any' && !card && purposes.some((p) => p.startsWith('cc-')))
+    return false;
+  if (
+    card &&
+    purposes.some((p) =>
+      [
+        'username',
+        'current-password',
+        'new-password',
+        'one-time-code',
+      ].includes(p),
+    )
+  )
+    return false;
   if (
     role === 'password' &&
     (el.type !== 'password' ||
@@ -85,7 +132,7 @@ export function isEligibleInput(
   return right > left && bottom > top;
 }
 
-export function inputMetadata(el: HTMLInputElement) {
+export function inputMetadata(el: HTMLInputElement | HTMLSelectElement) {
   const root = el.getRootNode() as Document | ShadowRoot;
   const label = [
     el.getAttribute('aria-label') ?? '',
@@ -107,7 +154,9 @@ export function inputMetadata(el: HTMLInputElement) {
     form: el.form
       ? Array.from(root.querySelectorAll('form')).indexOf(el.form)
       : -1,
-    ...(el.maxLength > 0 ? { maxLength: el.maxLength } : {}),
+    ...('maxLength' in el && el.maxLength > 0
+      ? { maxLength: el.maxLength }
+      : {}),
   };
 }
 
@@ -118,12 +167,26 @@ export function selectedFields(fields: unknown): [SecureRole, string][] {
   if (!fields || typeof fields !== 'object' || Array.isArray(fields))
     throw invalid();
   const entries = Object.entries(fields);
-  if (entries.some(([key]) => !['username', 'password', 'code'].includes(key)))
+  if (
+    entries.some(
+      ([key]) => !['username', 'password', 'code', ...cardRoles].includes(key),
+    )
+  )
     throw invalid();
   const active = entries.filter(
     ([, value]) => value !== null && value !== undefined,
   );
   if (!active.length) throw invalid();
+  if (
+    active.some(([role]) => isCardRole(role)) &&
+    active.some(([role]) => !isCardRole(role))
+  )
+    throw invalid();
+  if (
+    active.some(([role]) => role === 'expiry') &&
+    active.some(([role]) => role === 'expMonth' || role === 'expYear')
+  )
+    throw invalid();
   const code = active.find(([key]) => key === 'code');
   let result: [SecureRole, string][];
   if (code) {

@@ -572,3 +572,69 @@ it('skips unconfigured prewarming and retries a sanitized startup failure on dem
     warning.mockRestore();
   }
 });
+
+it('fills payment frames and expiry selects privately, rejects mixed roles and stale top-level navigation', async () => {
+  const inspector = new LoginBrowser();
+  await page.route('https://checkout.example.test/**', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<iframe src="https://processor.example.test/number"></iframe><iframe src="https://processor.example.test/security"></iframe><select autocomplete="cc-exp-month"><option value="">Month</option><option value="12">December</option></select><input autocomplete="cc-exp-year" maxlength="2"><input autocomplete="username">',
+    }),
+  );
+  await page.route('https://processor.example.test/**', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: route.request().url().endsWith('number')
+        ? '<input autocomplete="cc-number">'
+        : '<input autocomplete="cc-csc">',
+    }),
+  );
+  await page.goto('https://checkout.example.test/');
+  const first = await inspector.inspect(page, 'card-owner');
+  const ref = (autocomplete: string) =>
+    first.inputs.find((i) => i.autocomplete === autocomplete)!.ref;
+  const fields = {
+    number: ref('cc-number'),
+    securityCode: ref('cc-csc'),
+    expMonth: ref('cc-exp-month'),
+    expYear: ref('cc-exp-year'),
+  };
+  expect(() =>
+    normalizeFields({ ...fields, username: ref('username') }),
+  ).toThrow();
+  expect(() => normalizeFields({ expiry: 'a', expMonth: 'b' })).toThrow();
+  await expect(
+    inspector.fill(page, 'another-owner', fields, {
+      number: '4242424242424242',
+    }),
+  ).rejects.toThrow();
+  await expect(
+    inspector.fill(page, 'card-owner', fields, {
+      number: '4242424242424242',
+      securityCode: '123',
+      expMonth: '11',
+      expYear: '2029',
+    }),
+  ).rejects.toThrow('Expiry option');
+  expect(await page.frames()[1].locator('input').inputValue()).toBe('');
+  const result = await inspector.fill(page, 'card-owner', fields, {
+    number: '4242424242424242',
+    securityCode: '123',
+    expMonth: '12',
+    expYear: '2029',
+  });
+  expect(await page.frames()[1].locator('input').inputValue()).toBe(
+    '4242424242424242',
+  );
+  expect(await page.locator('select').inputValue()).toBe('12');
+  expect(
+    await page.locator('input[autocomplete="cc-exp-year"]').inputValue(),
+  ).toBe('29');
+  expect(JSON.stringify({ result, inputs: first.inputs })).not.toContain(
+    '4242424242424242',
+  );
+  await page.evaluate(() => history.pushState({}, '', '/different-checkout'));
+  await expect(
+    inspector.fill(page, 'card-owner', fields, { securityCode: '123' }),
+  ).rejects.toMatchObject({ code: 'conflict' });
+});

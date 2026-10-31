@@ -411,11 +411,23 @@
             },
             "type": "array"
           },
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/PaymentCardDto"
+            },
+            "type": "array"
+          },
           "chooseAccount": {
             "type": "boolean"
           },
           "configured": {
             "type": "boolean"
+          },
+          "fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "id": {
             "type": "string"
@@ -430,7 +442,8 @@
           "kind": {
             "enum": [
               "credentials",
-              "code"
+              "code",
+              "card"
             ],
             "type": "string"
           },
@@ -881,6 +894,29 @@
         ],
         "type": "object"
       },
+      "PaymentCardDto": {
+        "properties": {
+          "brand": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "lastFour": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "brand",
+          "lastFour"
+        ],
+        "type": "object"
+      },
       "PreferencePageResponseDto": {
         "properties": {
           "after": {
@@ -1285,6 +1321,40 @@
         ],
         "type": "object"
       },
+      "SubmitCardDto": {
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "cardholderName": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "expMonth": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "expYear": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "label": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "save": {
+            "type": "boolean"
+          },
+          "securityCode": {
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "type": "object"
+      },
       "SubmitCodeDto": {
         "properties": {
           "code": {
@@ -1633,7 +1703,7 @@
     "contact": {},
     "description": "Private single-owner HTTP and SSE contract for canonical Pal clients.",
     "title": "Pal First-party API",
-    "version": "6"
+    "version": "7"
   },
   "openapi": "3.0.0",
   "paths": {
@@ -2090,6 +2160,47 @@
             }
           }
         ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginFinishedDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "",
+        "tags": [
+          "login"
+        ]
+      }
+    },
+    "/login/requests/{id}/card": {
+      "post": {
+        "operationId": "submitPaymentCard",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitCardDto"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "201": {
             "content": {

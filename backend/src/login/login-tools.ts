@@ -4,10 +4,10 @@ import { jsonSchema } from 'ai';
 import { taskIdFromThread } from '../agent/task-tools.js';
 import { WORKER_ID, PARENT_TASK_ID } from '../agent/task-workers.js';
 import type { LoginService } from './login.service.js';
-import { normalizeFields } from './login-fields.js';
+import { cardRoles, normalizeFields, type CardRole } from './login-fields.js';
 import { ApplicationError } from '../application/contracts/errors.js';
 
-type FieldInput = {
+type FieldInput = Partial<Record<CardRole, string | null>> & {
   username?: string | null;
   password?: string | null;
   code?: string[] | null;
@@ -46,6 +46,9 @@ export function loginTools(service: LoginService) {
   const fieldsSchema: Parameters<typeof jsonSchema>[0] = {
     type: 'object',
     properties: {
+      ...Object.fromEntries(
+        cardRoles.map((role) => [role, { type: ['string', 'null'] }]),
+      ),
       username: { type: ['string', 'null'] },
       password: { type: ['string', 'null'] },
       code: {
@@ -61,6 +64,7 @@ export function loginTools(service: LoginService) {
       { required: ['username'] },
       { required: ['password'] },
       { required: ['code'] },
+      ...cardRoles.map((role) => ({ required: [role] })),
     ],
   };
   const keepSchema: Parameters<typeof jsonSchema>[0] = {
@@ -91,7 +95,7 @@ export function loginTools(service: LoginService) {
     login_inspect: createTool({
       id: 'login_inspect',
       description:
-        'Inspect editable inputs in your selected tab. Optional action runs agent-browser arguments before inspection. Returns opaque input refs, HTML metadata, matching account IDs/labels and a masked numbered screenshot. Assign username/password or ordered code refs to secure_fill or secure_entry_request. Never read existing values. Reinspect after navigation or stale refs; after a loading page or action failure inspect without repeating action.',
+        'Inspect editable inputs in your selected tab. Optional action runs agent-browser arguments before inspection. Returns opaque input refs, HTML metadata, matching account IDs/labels and a masked numbered screenshot. Assign username/password, ordered code refs, or cardholderName/number/expiry/expMonth/expYear/securityCode refs to secure_fill or secure_entry_request. Never read existing values. Reinspect after navigation or stale refs; after a loading page or action failure inspect without repeating action.',
       inputSchema: jsonSchema<{ action?: string[] | null }>({
         type: 'object',
         properties: {
@@ -119,7 +123,7 @@ export function loginTools(service: LoginService) {
     secure_entry_request: createTool({
       id: 'secure_entry_request',
       description:
-        'Show a private inline entry card in Main and Task. fields selects username/password entry or ordered verification-code inputs. Credential entry collects the complete login, saves it and fills bound fields; codes fill without storage. chooseAccount shows saved accounts and Use a new account. Returns awaiting_user; the host sets needs-input and notifies the owning Task after submission. Stale-field saves/selections remain available for fresh filling.',
+        'Show a private inline entry card in Main and Task. fields selects login, code, or payment entry; never mix these roles. Card fields show private one-time entry with optional Bitwarden saving. Request only missing roles for a website-saved card. Credential entry collects the complete login, saves it and fills bound fields; codes fill without storage. chooseAccount shows saved login accounts or Bitwarden cards. Returns awaiting_user; the host sets needs-input and notifies the owning Task after submission. Stale-field saves/selections remain available for fresh filling.',
       inputSchema: jsonSchema<{
         fields: FieldInput;
         chooseAccount?: boolean | null;
@@ -131,7 +135,7 @@ export function loginTools(service: LoginService) {
           chooseAccount: {
             type: ['boolean', 'null'],
             description:
-              'Show saved accounts and Use a new account for an explicit account-switch request.',
+              'Show the saved-item picker for login or payment entry.',
           },
           keepMeSignedIn: keepSchema,
         },
@@ -154,7 +158,7 @@ export function loginTools(service: LoginService) {
     secure_fill: createTool({
       id: 'secure_fill',
       description:
-        'Fill inspected username/password refs from a matching vault account without exposing values; passwords require password inputs. Omit accountId for automatic reuse or an ambiguity picker. Code refs currently return input_required. Optional action runs only after successful filling and returns the resulting masked inspection. Waiting, input-required and failed fills never run action. After an action/inspection error, inspect without action before retrying. Without action only fills. Returns session-persistence intent; filling does not prove authentication.',
+        'Fill inspected username/password refs from a matching vault account without exposing values; passwords require password inputs. Omit accountId for automatic reuse or an ambiguity picker. Code refs return input_required. Card refs open the private card picker; omit accountId, action and keepMeSignedIn for cards. Card filling never submits a purchase. Optional action runs only after successful filling and returns the resulting masked inspection. Waiting, input-required and failed fills never run action. After an action/inspection error, inspect without action before retrying. Without action only fills. Returns session-persistence intent; filling does not prove authentication.',
       inputSchema: jsonSchema<{
         fields: FieldInput;
         accountId?: string | null;

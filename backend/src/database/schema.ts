@@ -410,7 +410,7 @@ export const loginRequests = pgTable(
       .notNull()
       .default('pending'),
     kind: text('kind')
-      .$type<'credentials' | 'code'>()
+      .$type<'credentials' | 'code' | 'card'>()
       .notNull()
       .default('credentials'),
     chooseAccount: boolean('choose_account').notNull().default(false),
@@ -432,7 +432,10 @@ export const loginRequests = pgTable(
     uniqueIndex('login_request_pending_idx')
       .on(t.taskId, t.origin, t.kind)
       .where(sql`${t.status} in ('pending','updating','failed')`),
-    check('login_request_kind', sql`${t.kind} in ('credentials','code')`),
+    check(
+      'login_request_kind',
+      sql`${t.kind} in ('credentials','code','card')`,
+    ),
     check(
       'login_request_status',
       sql`${t.status} in ('pending','saved','selected','filled','cancelled','updating','failed')`,

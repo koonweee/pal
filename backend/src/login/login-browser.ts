@@ -3,6 +3,8 @@ import type { ElementHandle, Frame, Page } from 'playwright-core';
 import { ApplicationError } from '../application/contracts/errors.js';
 import {
   isEligibleInput,
+  fieldKind,
+  type SecureValues,
   inputMetadata,
   selectedFields,
   StaleSecureFieldsError,
@@ -20,7 +22,9 @@ interface BoundInput {
   frame: Frame;
   url: string;
   document: ElementHandle<HTMLHtmlElement>;
-  element: ElementHandle<HTMLInputElement>;
+  element: ElementHandle<HTMLInputElement | HTMLSelectElement>;
+  topUrl: string;
+  topDocument: ElementHandle<HTMLHtmlElement>;
 }
 export class LoginBrowser {
   private readonly inputs = new Map<string, BoundInput>();
@@ -33,7 +37,13 @@ export class LoginBrowser {
       }
     await Promise.all(
       [
-        ...new Set(removed.flatMap((input) => [input.element, input.document])),
+        ...new Set(
+          removed.flatMap((input) => [
+            input.element,
+            input.document,
+            input.topDocument,
+          ]),
+        ),
       ].map((handle) => handle.dispose().catch(() => {})),
     );
   }
@@ -62,7 +72,12 @@ export class LoginBrowser {
         const document = await frame.$('html');
         if (!document) continue;
         inspected.add(document);
-        const elements = await frame.$$('input');
+        const topDocument = await page.$('html');
+        if (!topDocument) continue;
+        inspected.add(topDocument);
+        const elements = (await frame.$$('input, select')) as ElementHandle<
+          HTMLInputElement | HTMLSelectElement
+        >[];
         for (const element of elements) inspected.add(element);
         for (const element of elements) {
           if (
@@ -92,6 +107,8 @@ export class LoginBrowser {
             url: frame.url(),
             document,
             element,
+            topUrl: page.url(),
+            topDocument,
           });
           inputs.push(view);
           const box = await element.boundingBox();
@@ -130,7 +147,7 @@ export class LoginBrowser {
             .frames()
             .flatMap((frame) => [
               frame.locator(
-                'input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="image"]):not([type="range"]):not([type="color"]):not([type="file"]), textarea, [contenteditable]:not([contenteditable="false"])',
+                'input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="image"]):not([type="range"]):not([type="color"]):not([type="file"]), textarea, select, [contenteditable]:not([contenteditable="false"])',
               ),
             ]),
           maskColor: '#334155',
@@ -152,6 +169,7 @@ export class LoginBrowser {
         [...this.inputs.values()].flatMap((input) => [
           input.element,
           input.document,
+          input.topDocument,
         ]),
       );
       await Promise.all(
@@ -170,6 +188,10 @@ export class LoginBrowser {
   private async current(page: Page, input: BoundInput, role: SecureRole) {
     if (
       input.page !== page ||
+      page.url() !== input.topUrl ||
+      !(await input.topDocument.evaluate(
+        (el) => el === document.documentElement,
+      )) ||
       input.frame.isDetached() ||
       input.frame.url() !== input.url ||
       new URL(input.frame.url()).origin !== input.view.origin ||
@@ -208,13 +230,25 @@ export class LoginBrowser {
       });
       const first = selected[0].input;
       for (const { role, input } of selected) {
-        if (input.frame !== first.frame || input.document !== first.document)
+        if (
+          input.inspectionId !== first.inspectionId ||
+          (fieldKind(fields) !== 'card' &&
+            (input.frame !== first.frame || input.document !== first.document))
+        )
+          throw new Error();
+        if (
+          fieldKind(fields) === 'card' &&
+          new URL(input.topUrl).protocol !== 'https:'
+        )
           throw new Error();
         await this.current(page, input, role);
       }
       return {
         inspectionId: first.inspectionId,
-        origin: first.view.origin,
+        origin:
+          fieldKind(fields) === 'card'
+            ? new URL(first.topUrl).origin
+            : first.view.origin,
         url: first.url,
         roles: [...new Set(selected.map((item) => item.role))],
         selected,
@@ -227,7 +261,7 @@ export class LoginBrowser {
     page: Page,
     owner: string,
     fields: SecureFields,
-    values: { username?: string; password?: string; code?: string },
+    values: SecureValues,
   ) {
     const target = await this.select(page, owner, fields);
     try {
@@ -244,14 +278,18 @@ export class LoginBrowser {
           'invalid_input',
           'Enter a complete verification code',
         );
+      const prepared = new Map<string, { value: string; select: boolean }>();
       for (const { role, input } of target.selected) {
-        const value = role === 'code' ? code : values[role];
+        let value = role === 'code' ? code : values[role];
         if (!value)
           throw new ApplicationError(
             'invalid_input',
             'Missing secure entry value',
           );
-        const max = await input.element.evaluate((el) => el.maxLength);
+        const max = await input.element.evaluate((el) =>
+          'maxLength' in el ? el.maxLength : -1,
+        );
+        if (role === 'expYear' && max === 2) value = value.slice(-2);
         if (
           max > 0 &&
           (role === 'code' && target.selected.length > 1 ? 1 : value.length) >
@@ -261,18 +299,42 @@ export class LoginBrowser {
             'invalid_input',
             'Secure entry exceeds the selected input length',
           );
+        const select = await input.element.evaluate(
+          (el) => el instanceof HTMLSelectElement,
+        );
+        if (select) {
+          const option = await input.element.evaluate((el, value) => {
+            if (!(el instanceof HTMLSelectElement)) return undefined;
+            const matches = [...el.options].filter(
+              (o) =>
+                !o.disabled &&
+                (o.value === value ||
+                  o.text.trim() === value ||
+                  (/^\d+$/.test(o.value) && Number(o.value) === Number(value))),
+            );
+            return matches.length === 1 ? matches[0].value : undefined;
+          }, value);
+          if (option === undefined)
+            throw new ApplicationError(
+              'invalid_input',
+              'Expiry option is unavailable',
+            );
+          value = option;
+        }
+        prepared.set(input.view.ref, { value, select });
       }
       // Every destination was checked before any value is written. Recheck each
       // bound element immediately before writing; never resolve a selector/focus.
       for (const [index, { role, input }] of target.selected.entries()) {
         await this.current(page, input, role);
+        const preparedValue = prepared.get(input.view.ref)!;
         const value =
-          role === 'code'
-            ? target.selected.length === 1
-              ? code!
-              : code![index]
-            : values[role]!;
-        await input.element.fill(value, { timeout: 3000 });
+          role === 'code' && target.selected.length > 1
+            ? code![index]
+            : preparedValue.value;
+        if (preparedValue.select)
+          await input.element.selectOption(value, { timeout: 3000 });
+        else await input.element.fill(value, { timeout: 3000 });
       }
       return { status: 'filled' as const, fields: target.roles };
     } catch (error) {

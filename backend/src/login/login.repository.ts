@@ -32,7 +32,7 @@ export class LoginRepository {
   async request(
     taskId: string,
     origin: string,
-    kind: 'credentials' | 'code' = 'credentials',
+    kind: 'credentials' | 'code' | 'card' = 'credentials',
     fields?: SecureFields,
     workerId?: string,
     inspectionId?: string,
@@ -100,7 +100,8 @@ export class LoginRepository {
         existing.status === 'pending' &&
         existing.chooseAccount === chooseAccount &&
         (kind === 'credentials' ||
-          JSON.stringify(existing.fields) === JSON.stringify(fields))
+          (existing.workerId === (workerId ?? null) &&
+            JSON.stringify(existing.fields) === JSON.stringify(fields)))
       ) {
         if (keepMeSignedIn !== undefined) {
           const [updated] = await tx
@@ -203,7 +204,7 @@ export class LoginRepository {
   async finish(
     id: string,
     completion?: {
-      kind: 'credentials' | 'code';
+      kind: 'credentials' | 'code' | 'card';
       status: 'saved' | 'filled' | 'selected';
       submit: (
         row: LoginRequest,
@@ -235,7 +236,7 @@ export class LoginRepository {
       if (
         completion &&
         Date.now() - row.createdAt.getTime() >
-          (row.kind === 'code' ? 10 * 60_000 : 24 * 3600_000)
+          (row.kind !== 'credentials' ? 10 * 60_000 : 24 * 3600_000)
       )
         throw new StaleSecureFieldsError();
       if (completion?.status === 'selected' && !row.chooseAccount)
@@ -439,7 +440,7 @@ export class LoginRepository {
       .where(
         and(
           eq(loginRequests.status, 'pending'),
-          eq(loginRequests.kind, 'credentials'),
+          ne(loginRequests.kind, 'code'),
           lt(loginRequests.createdAt, cutoff),
         ),
       )

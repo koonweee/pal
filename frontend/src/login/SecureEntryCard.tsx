@@ -29,6 +29,7 @@ import {
   saveLoginRequest,
   selectLoginAccount,
   submitLoginCode,
+  submitPaymentCard,
   type LoginRequest,
 } from '../api/client';
 import { useReloadSafety } from '../pwa/ReloadSafetyProvider';
@@ -75,12 +76,16 @@ export function SecureEntryCard({ requestId }: { requestId: string }) {
         ? 'Account selected'
         : current.kind === 'code'
           ? 'Code filled'
-          : 'Login filled'
+          : current.kind === 'card'
+            ? 'Card filled'
+            : 'Login filled'
     : cancelled
       ? 'Request cancelled'
       : current?.kind === 'code'
         ? 'Verification code'
-        : 'Sign-in details';
+        : current?.kind === 'card'
+          ? 'Card details'
+          : 'Sign-in details';
   async function changeRecovery(cancel = false) {
     setActionBusy(true);
     setError('');
@@ -223,8 +228,42 @@ function SecureEntryForm({
   onFinished(status: LoginRequest['status']): void;
 }) {
   const codeEntry = request.kind === 'code';
+  const cardEntry = request.kind === 'card';
+  const items = cardEntry
+    ? (request.cards ?? []).map((card) => ({
+        id: card.id,
+        label: [card.label, card.brand, '•••• ' + card.lastFour]
+          .filter(Boolean)
+          .join(' · '),
+      }))
+    : request.accounts;
+  const [card, setCard] = useState({
+    cardholderName: '',
+    number: '',
+    expMonth: '',
+    expYear: '',
+    securityCode: '',
+  });
+  const [saveCard, setSaveCard] = useState(false);
+  const cardRoles = request.fields ?? [];
+  const fullCard = cardRoles.includes('number');
+  const cardFields = (
+    [
+      ['cardholderName', 'Name', 'cc-name'],
+      ['number', 'Number', 'cc-number'],
+      ['expMonth', 'Month', 'cc-exp-month'],
+      ['expYear', 'Year', 'cc-exp-year'],
+      ['securityCode', 'CVV', 'cc-csc'],
+    ] as const
+  ).filter(
+    ([role]) =>
+      fullCard ||
+      cardRoles.includes(role) ||
+      (cardRoles.includes('expiry') &&
+        (role === 'expMonth' || role === 'expYear')),
+  );
   const [choosing, setChoosing] = useState(
-    request.chooseAccount && request.accounts.length > 0,
+    request.chooseAccount && items.length > 0,
   );
   const [preview, setPreview] = useState(false);
   const [username, setUsername] = useState('');
@@ -232,7 +271,7 @@ function SecureEntryForm({
   const [code, setCode] = useState('');
   const [label, setLabel] = useState('Personal');
   const [accountId, setAccountId] = useState<string | null>(
-    request.chooseAccount ? (request.accounts[0]?.id ?? null) : null,
+    request.chooseAccount ? (items[0]?.id ?? null) : null,
   );
   const [keepMeSignedIn, setKeepMeSignedIn] = useState(request.keepMeSignedIn);
   const [busy, setBusy] = useState(false);
@@ -245,36 +284,58 @@ function SecureEntryForm({
     try {
       const result = cancel
         ? await cancelLoginRequest(request.id)
-        : choosing
-          ? await selectLoginAccount(request.id, {
-              accountId: accountId!,
-              keepMeSignedIn,
-            })
-          : codeEntry
-            ? await submitLoginCode(request.id, code)
-            : await saveLoginRequest(request.id, {
-                username,
-                password,
-                label,
+        : cardEntry
+          ? await submitPaymentCard(
+              request.id,
+              choosing
+                ? { accountId: accountId! }
+                : {
+                    ...Object.fromEntries(
+                      Object.entries(card).filter(([, value]) => value),
+                    ),
+                    ...(saveCard ? { save: true, label } : {}),
+                  },
+            )
+          : choosing
+            ? await selectLoginAccount(request.id, {
+                accountId: accountId!,
                 keepMeSignedIn,
-                ...(accountId ? { accountId } : {}),
-              });
+              })
+            : codeEntry
+              ? await submitLoginCode(request.id, code)
+              : await saveLoginRequest(request.id, {
+                  username,
+                  password,
+                  label,
+                  keepMeSignedIn,
+                  ...(accountId ? { accountId } : {}),
+                });
       setUsername('');
       setPassword('');
       setCode('');
+      setCard({
+        cardholderName: '',
+        number: '',
+        expMonth: '',
+        expYear: '',
+        securityCode: '',
+      });
       onFinished(result.status);
     } catch {
       setError(
         cancel
           ? 'Could not cancel the request.'
-          : choosing
-            ? 'Could not select the account. Try again.'
-            : codeEntry
-              ? 'Could not fill the code. Check it and try again.'
-              : 'Could not save credentials. Check vault setup and try again.',
+          : cardEntry
+            ? 'Could not fill card details. Check the required fields or use a new card.'
+            : choosing
+              ? 'Could not select the account. Try again.'
+              : codeEntry
+                ? 'Could not fill the code. Check it and try again.'
+                : 'Could not save credentials. Check vault setup and try again.',
       );
     } finally {
       setCode('');
+      setCard((value) => ({ ...value, securityCode: '' }));
       setBusy(false);
     }
   }
@@ -283,10 +344,16 @@ function SecureEntryForm({
       <SecureEntryHeading
         title={
           choosing
-            ? 'Choose an account'
+            ? cardEntry
+              ? 'Choose a card'
+              : 'Choose an account'
             : codeEntry
               ? 'Verification code'
-              : 'Sign-in details'
+              : cardEntry
+                ? fullCard
+                  ? 'Card details'
+                  : 'Card verification'
+                : 'Sign-in details'
         }
         origin={request.origin}
       />
@@ -321,19 +388,19 @@ function SecureEntryForm({
         }}
       >
         <Stack gap={8}>
-          {!codeEntry && !request.configured && (
+          {!codeEntry && !cardEntry && !request.configured && (
             <Alert color="yellow">
               Bitwarden needs setup before credentials can be saved.
             </Alert>
           )}
           {choosing ? (
             <Radio.Group
-              aria-label="Saved accounts"
+              aria-label={cardEntry ? 'Saved cards' : 'Saved accounts'}
               value={accountId ?? ''}
               onChange={setAccountId}
             >
               <Stack gap={4}>
-                {request.accounts.map((account) => (
+                {items.map((account) => (
                   <Radio
                     key={account.id}
                     className="secure-entry-account"
@@ -344,6 +411,80 @@ function SecureEntryForm({
                 ))}
               </Stack>
             </Radio.Group>
+          ) : cardEntry ? (
+            <>
+              {cardFields.map(([role, title, autocomplete]) =>
+                role === 'number' || role === 'securityCode' ? (
+                  <PasswordInput
+                    key={role}
+                    className="secure-entry-field"
+                    label={title}
+                    value={card[role]}
+                    onChange={(e) => {
+                      const text = e.currentTarget.value;
+                      setCard((value) => ({ ...value, [role]: text }));
+                    }}
+                    autoComplete={autocomplete}
+                    inputMode="numeric"
+                    required={cardRoles.includes(role)}
+                    maxLength={role === 'number' ? 25 : 4}
+                    disabled={busy}
+                  />
+                ) : (
+                  <TextInput
+                    key={role}
+                    className="secure-entry-field"
+                    label={title}
+                    value={card[role]}
+                    onChange={(e) => {
+                      const text = e.currentTarget.value;
+                      setCard((value) => ({ ...value, [role]: text }));
+                    }}
+                    autoComplete={autocomplete}
+                    inputMode={role === 'cardholderName' ? 'text' : 'numeric'}
+                    required={
+                      saveCard ||
+                      cardRoles.includes(role) ||
+                      ((role === 'expMonth' || role === 'expYear') &&
+                        cardRoles.includes('expiry'))
+                    }
+                    maxLength={
+                      role === 'cardholderName'
+                        ? 120
+                        : role === 'expMonth'
+                          ? 2
+                          : 4
+                    }
+                    disabled={busy}
+                  />
+                ),
+              )}
+              {fullCard && request.configured && (
+                <Checkbox
+                  className="secure-entry-remember"
+                  label="Save to Bitwarden"
+                  checked={saveCard}
+                  onChange={(e) => setSaveCard(e.currentTarget.checked)}
+                  disabled={busy}
+                />
+              )}
+              {saveCard && (
+                <TextInput
+                  className="secure-entry-field"
+                  label="Label"
+                  value={label}
+                  onChange={(e) => setLabel(e.currentTarget.value)}
+                  required
+                  maxLength={80}
+                  disabled={busy}
+                />
+              )}
+              {!fullCard && (
+                <Text size="xs" c="dimmed" className="secure-entry-note">
+                  Used once. Not saved.
+                </Text>
+              )}
+            </>
           ) : codeEntry ? (
             <TextInput
               className="secure-entry-field"
@@ -369,7 +510,7 @@ function SecureEntryForm({
                   }
                   data={[
                     { value: 'new', label: 'New account' },
-                    ...request.accounts.map((account) => ({
+                    ...items.map((account) => ({
                       value: account.id,
                       label: account.label,
                     })),
@@ -411,7 +552,7 @@ function SecureEntryForm({
               />
             </>
           )}
-          {!codeEntry && (
+          {!codeEntry && !cardEntry && (
             <Checkbox
               className={choosing ? undefined : 'secure-entry-remember'}
               label="Keep me signed in"
@@ -434,10 +575,21 @@ function SecureEntryForm({
               type="submit"
               loading={busy}
               disabled={
-                (!codeEntry && !request.configured) || (choosing && !accountId)
+                (!codeEntry && !cardEntry && !request.configured) ||
+                (choosing && !accountId)
               }
             >
-              {choosing ? 'Continue' : codeEntry ? 'Fill code' : 'Save login'}
+              {cardEntry
+                ? choosing
+                  ? 'Use card'
+                  : saveCard
+                    ? 'Save and fill'
+                    : 'Fill details'
+                : choosing
+                  ? 'Continue'
+                  : codeEntry
+                    ? 'Fill code'
+                    : 'Save login'}
             </Button>
             {request.chooseAccount && (
               <Button
@@ -445,18 +597,28 @@ function SecureEntryForm({
                 variant="subtle"
                 disabled={busy}
                 onClick={() => {
+                  setCard({
+                    cardholderName: '',
+                    number: '',
+                    expMonth: '',
+                    expYear: '',
+                    securityCode: '',
+                  });
+                  setSaveCard(false);
                   setUsername('');
                   setPassword('');
                   setCode('');
                   setError('');
                   setPreview(false);
-                  setAccountId(
-                    choosing ? null : (request.accounts[0]?.id ?? null),
-                  );
+                  setAccountId(choosing ? null : (items[0]?.id ?? null));
                   setChoosing(!choosing);
                 }}
               >
-                {choosing ? 'Use a new account' : 'Back'}
+                {choosing
+                  ? cardEntry
+                    ? 'Use a new card'
+                    : 'Use a new account'
+                  : 'Back'}
               </Button>
             )}
             <Button

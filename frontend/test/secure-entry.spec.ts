@@ -105,6 +105,17 @@ for (const width of [900, 390]) {
         });
         accountSelections++;
         rows.set(root, { ...current, status: 'selected', inspectionId: null });
+      } else if (action === 'card') {
+        expect(route.request().postDataJSON()).toEqual({
+          cardholderName: 'Synthetic Customer',
+          number: '4242424242424242',
+          expMonth: '12',
+          expYear: '29',
+          securityCode: '123',
+          save: true,
+          label: 'Personal',
+        });
+        rows.set(root, { ...current, status: 'filled', inspectionId: null });
       } else if (action === 'code') {
         expect(route.request().postDataJSON()).toEqual({ code: '731946' });
         codeSubmissions++;
@@ -315,6 +326,32 @@ for (const width of [900, 390]) {
       await expect(
         page.getByText('Code filled', { exact: true }),
       ).toBeVisible();
+      rows.set('payment-root', {
+        ...rows.get('login-root')!,
+        id: 'payment-root',
+        kind: 'card',
+        status: 'pending',
+        chooseAccount: false,
+        fields: ['cardholderName', 'number', 'expiry', 'securityCode'],
+        accounts: [],
+        cards: [],
+      });
+      const paymentMessage = card('payment-root');
+      backend.publish(paymentMessage);
+      await expect(
+        page.getByText('Card details', { exact: true }),
+      ).toBeVisible();
+      await page.getByLabel(/^Name/).fill('Synthetic Customer');
+      await page.getByLabel(/^Number/).fill('4242424242424242');
+      await page.getByLabel(/^Month/).fill('12');
+      await page.getByLabel(/^Year/).fill('29');
+      await page.getByLabel(/^CVV/).fill('123');
+      await page.getByLabel('Save to Bitwarden').check();
+      await assertCardLayout();
+      await page.getByRole('button', { name: 'Save and fill' }).click();
+      await expect(
+        page.getByText('Card filled', { exact: true }),
+      ).toBeVisible();
       expect(credentialSubmissions).toBe(1);
       expect(accountSelections).toBe(1);
       expect(codeSubmissions).toBe(2);
@@ -326,7 +363,9 @@ for (const width of [900, 390]) {
       ).toBe(false);
       expect(
         await page.evaluate(() => JSON.stringify({ ...localStorage })),
-      ).not.toMatch(/dummy-user|dummy-password|731946/);
+      ).not.toMatch(
+        /dummy-user|dummy-password|731946|4242424242424242|Synthetic Customer/,
+      );
       expect(errors).toEqual([]);
     } finally {
       await context.close();
