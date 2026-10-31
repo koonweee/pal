@@ -3,6 +3,7 @@ import type { LoginRequest, Message, TaskDetails } from '../src/api/client';
 import { backend, usePalBackend } from './support/pal-backend';
 
 usePalBackend(test);
+test.setTimeout(20_000);
 for (const width of [900, 390]) {
   test(`inline secure entry and recovery at ${width}px`, async ({
     browser,
@@ -39,6 +40,8 @@ for (const width of [900, 390]) {
       status: 'pending',
       inspectionId: 'login-preview',
       configured: true,
+      fields: ['username', 'password'],
+      fieldLabels: { username: 'Username', password: 'Password' },
       chooseAccount: true,
       keepMeSignedIn: true,
       accounts: [
@@ -90,12 +93,26 @@ for (const width of [900, 390]) {
       const root = [...rows.keys()].find((key) => rows.get(key)!.id === id)!;
       const current = rows.get(root)!;
       if (action === 'save') {
-        expect(route.request().postDataJSON()).toEqual({
-          username: 'dummy-user',
-          password: 'dummy-password',
-          label: 'Personal',
-          keepMeSignedIn: true,
-        });
+        const body = route.request().postDataJSON();
+        if (id === 'phone-root')
+          expect(body).toEqual({
+            username: '6287266027',
+            label: 'Personal',
+            keepMeSignedIn: true,
+          });
+        else if (id === 'pin-root')
+          expect(body).toEqual({
+            password: '123456',
+            keepMeSignedIn: true,
+            accountId: 'personal',
+          });
+        else
+          expect(body).toEqual({
+            username: 'dummy-user',
+            password: 'dummy-password',
+            label: 'Personal',
+            keepMeSignedIn: true,
+          });
         credentialSubmissions++;
         rows.set(root, { ...current, status: 'saved', inspectionId: null });
       } else if (action === 'select') {
@@ -253,6 +270,52 @@ for (const width of [900, 390]) {
       await expect(
         page.getByText('Login saved', { exact: true }),
       ).toBeVisible();
+      rows.set('phone-root', {
+        ...rows.get('login-root')!,
+        id: 'phone-root',
+        status: 'pending',
+        chooseAccount: false,
+        accountId: undefined,
+        accounts: [],
+        fields: ['username'],
+        fieldLabels: { username: 'Phone number' },
+      });
+      const phoneMessage = card('phone-root');
+      backend.publish(phoneMessage);
+      const phoneCard = page.locator(`[data-message-id="${phoneMessage.id}"]`);
+      await expect(
+        phoneCard.getByText('Phone number', { exact: true }).first(),
+      ).toBeVisible();
+      await expect(page.getByLabel(/^Password/)).toHaveCount(0);
+      await expect(page.getByLabel('Label', { exact: true })).toHaveCount(0);
+      await page.getByLabel(/^Phone number/).fill('6287266027');
+      await page.getByRole('button', { name: 'Save login' }).click();
+      await expect(
+        phoneCard.getByText('Login saved', { exact: true }),
+      ).toBeVisible();
+      rows.set('pin-root', {
+        ...rows.get('login-root')!,
+        id: 'pin-root',
+        status: 'pending',
+        chooseAccount: false,
+        accountId: 'personal',
+        accounts: [{ id: 'personal', label: 'Personal' }],
+        fields: ['password'],
+        fieldLabels: { password: 'PIN' },
+      });
+      const pinMessage = card('pin-root');
+      backend.publish(pinMessage);
+      const pinCard = page.locator(`[data-message-id="${pinMessage.id}"]`);
+      await expect(
+        pinCard.getByText('PIN', { exact: true }).first(),
+      ).toBeVisible();
+      await expect(page.getByLabel(/^Username/)).toHaveCount(0);
+      await expect(page.getByLabel('Label', { exact: true })).toHaveCount(0);
+      await page.getByLabel(/^PIN/).fill('123456');
+      await page.getByRole('button', { name: 'Save login' }).click();
+      await expect(
+        pinCard.getByText('Login saved', { exact: true }),
+      ).toBeVisible();
       rows.set('picker-root', {
         ...rows.get('login-root')!,
         id: 'picker-root',
@@ -352,7 +415,7 @@ for (const width of [900, 390]) {
       await expect(
         page.getByText('Card filled', { exact: true }),
       ).toBeVisible();
-      expect(credentialSubmissions).toBe(1);
+      expect(credentialSubmissions).toBe(3);
       expect(accountSelections).toBe(1);
       expect(codeSubmissions).toBe(2);
       expect(backend.submissions).toHaveLength(0);
@@ -364,7 +427,7 @@ for (const width of [900, 390]) {
       expect(
         await page.evaluate(() => JSON.stringify({ ...localStorage })),
       ).not.toMatch(
-        /dummy-user|dummy-password|731946|4242424242424242|Synthetic Customer/,
+        /dummy-user|dummy-password|6287266027|123456|731946|4242424242424242|Synthetic Customer/,
       );
       expect(errors).toEqual([]);
     } finally {

@@ -241,6 +241,17 @@
         ],
         "type": "object"
       },
+      "CredentialFieldLabelsDto": {
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "FrontendUpdatedEventResponseDto": {
         "properties": {
           "contractVersion": {
@@ -405,6 +416,9 @@
       },
       "LoginRequestDto": {
         "properties": {
+          "accountId": {
+            "type": "string"
+          },
           "accounts": {
             "items": {
               "$ref": "#/components/schemas/LoginAccountDto"
@@ -422,6 +436,9 @@
           },
           "configured": {
             "type": "boolean"
+          },
+          "fieldLabels": {
+            "$ref": "#/components/schemas/CredentialFieldLabelsDto"
           },
           "fields": {
             "items": {
@@ -1233,11 +1250,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "username",
-          "password",
-          "label"
-        ],
         "type": "object"
       },
       "SaveMcpServerDto": {

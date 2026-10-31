@@ -575,6 +575,10 @@ export interface components {
       statement: string;
       topic: string;
     };
+    CredentialFieldLabelsDto: {
+      password?: string;
+      username?: string;
+    };
     FrontendUpdatedEventResponseDto: {
       contractVersion: number;
       /** @enum {string} */
@@ -623,10 +627,12 @@ export interface components {
         | 'failed';
     };
     LoginRequestDto: {
+      accountId?: string;
       accounts: components['schemas']['LoginAccountDto'][];
       cards?: components['schemas']['PaymentCardDto'][];
       chooseAccount: boolean;
       configured: boolean;
+      fieldLabels?: components['schemas']['CredentialFieldLabelsDto'];
       fields?: string[];
       id: string;
       inspectionId: string | null;
@@ -837,9 +843,9 @@ export interface components {
     SaveLoginDto: {
       accountId?: string;
       keepMeSignedIn?: boolean;
-      label: string;
-      password: string;
-      username: string;
+      label?: string;
+      password?: string;
+      username?: string;
     };
     SaveMcpServerDto: {
       auth?: components['schemas']['McpAuthDto'];

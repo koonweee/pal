@@ -201,6 +201,15 @@ export class LoginRepository {
       throw new ApplicationError('not_found', 'Inspection expired');
     return Buffer.from(row.image, 'base64');
   }
+  async inspectionInputs(id?: string | null) {
+    if (!id) return [];
+    const [row] = await this.database.db
+      .select({ metadata: loginInspections.metadata })
+      .from(loginInspections)
+      .where(eq(loginInspections.id, id));
+    if (!row || !('inputs' in row.metadata)) return [];
+    return row.metadata.inputs;
+  }
   async finish(
     id: string,
     completion?: {

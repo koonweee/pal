@@ -36,6 +36,10 @@ class PaymentCardDto extends LoginAccountDto {
   @ApiProperty() brand!: string;
   @ApiProperty() lastFour!: string;
 }
+class CredentialFieldLabelsDto {
+  @ApiPropertyOptional() username?: string;
+  @ApiPropertyOptional() password?: string;
+}
 class SubmitCardDto {
   @ApiPropertyOptional() @IsOptional() @IsUUID() accountId?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() save?: boolean;
@@ -91,6 +95,9 @@ class LoginRequestDto {
   @ApiProperty() configured!: boolean;
   @ApiProperty() keepMeSignedIn!: boolean;
   @ApiPropertyOptional({ type: [String] }) fields?: string[];
+  @ApiPropertyOptional({ type: CredentialFieldLabelsDto })
+  fieldLabels?: CredentialFieldLabelsDto;
+  @ApiPropertyOptional() accountId?: string;
   @ApiPropertyOptional({ type: [PaymentCardDto] }) cards?: PaymentCardDto[];
   @ApiProperty() chooseAccount!: boolean;
   @ApiProperty({ type: [LoginAccountDto] }) accounts!: LoginAccountDto[];
@@ -100,18 +107,21 @@ export class LoginUpdatedEventDto {
   @ApiProperty() taskId!: string;
 }
 class SaveLoginDto {
-  @ApiProperty({ minLength: 1, maxLength: 1024 })
+  @ApiPropertyOptional({ minLength: 1, maxLength: 1024 })
+  @IsOptional()
   @IsString()
   @Length(1, 1024)
-  username!: string;
-  @ApiProperty({ minLength: 1, maxLength: 4096, writeOnly: true })
+  username?: string;
+  @ApiPropertyOptional({ minLength: 1, maxLength: 4096, writeOnly: true })
+  @IsOptional()
   @IsString()
   @Length(1, 4096)
-  password!: string;
-  @ApiProperty({ minLength: 1, maxLength: 80 })
+  password?: string;
+  @ApiPropertyOptional({ minLength: 1, maxLength: 80 })
+  @IsOptional()
   @IsString()
   @Length(1, 80)
-  label!: string;
+  label?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() accountId?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() keepMeSignedIn?: boolean;
 }

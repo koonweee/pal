@@ -29,6 +29,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 | [Task execution and interaction worker](interaction-worker-runtime.md) | In Progress | Development runs Task MCP/local execution and Terra-medium interaction; production rollout and the final host-only audit remain. |
 | [Interaction delegation benchmark](interaction-delegation-benchmark.md) | In Progress | Three-arm, coordinator and interaction-MCP comparisons complete; live semantic review pending. |
 | [Browser worker benchmark](browser-worker-benchmark.md) | In Progress | Direct Task versus compact interaction workers, realistic synthetic/live workflows, timing, correctness and token reporting. |
+| [Staged login entry](staged-login-entry.md) | Done | Role-specific phone, PIN/password and code collection with merged vault accounts and hardened worker recovery. |
 | [Production dev release](production-dev-release.md) | Complete | Publish validated dev changes and immutable images, migrate production routed egress and verify preserved state. |
 | [Memory compaction budgets](memory-compaction-budgets.md) | Done | Native 12k history/observation thresholds, 3k raw retention and dev deployment verification. |
 | [PWA update activation recovery](pwa-update-activation-recovery.md) | Done | Lifetime-safe waiting-worker activation, bounded reload recovery and dev PWA deployment. |

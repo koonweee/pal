@@ -40,6 +40,23 @@ export const SecureEntryUpdates = createContext({
   connected: false,
 });
 
+type CredentialRole = 'username' | 'password';
+function credentialRoles(request: LoginRequest): CredentialRole[] {
+  const roles = (request.fields ?? []).filter(
+    (role): role is CredentialRole =>
+      role === 'username' || role === 'password',
+  );
+  return roles.length ? roles : ['username', 'password'];
+}
+function credentialTitle(request: LoginRequest) {
+  const roles = credentialRoles(request);
+  const role = roles.length === 1 ? roles[0] : undefined;
+  return role
+    ? (request.fieldLabels?.[role] ??
+        (role === 'username' ? 'Username' : 'Password'))
+    : 'Sign-in details';
+}
+
 export function SecureEntryCard({ requestId }: { requestId: string }) {
   const updates = useContext(SecureEntryUpdates);
   const [request, setRequest] = useState<LoginRequest>();
@@ -229,6 +246,10 @@ function SecureEntryForm({
 }) {
   const codeEntry = request.kind === 'code';
   const cardEntry = request.kind === 'card';
+  const loginRoles = credentialRoles(request);
+  const needsUsername = loginRoles.includes('username');
+  const needsPassword = loginRoles.includes('password');
+  const stagedCredential = !codeEntry && !cardEntry && loginRoles.length === 1;
   const items = cardEntry
     ? (request.cards ?? []).map((card) => ({
         id: card.id,
@@ -271,7 +292,8 @@ function SecureEntryForm({
   const [code, setCode] = useState('');
   const [label, setLabel] = useState('Personal');
   const [accountId, setAccountId] = useState<string | null>(
-    request.chooseAccount ? (items[0]?.id ?? null) : null,
+    request.accountId ??
+      (request.chooseAccount ? (items[0]?.id ?? null) : null),
   );
   const [keepMeSignedIn, setKeepMeSignedIn] = useState(request.keepMeSignedIn);
   const [busy, setBusy] = useState(false);
@@ -304,9 +326,9 @@ function SecureEntryForm({
             : codeEntry
               ? await submitLoginCode(request.id, code)
               : await saveLoginRequest(request.id, {
-                  username,
-                  password,
-                  label,
+                  ...(needsUsername ? { username } : {}),
+                  ...(needsPassword ? { password } : {}),
+                  ...(!accountId ? { label } : {}),
                   keepMeSignedIn,
                   ...(accountId ? { accountId } : {}),
                 });
@@ -353,7 +375,7 @@ function SecureEntryForm({
                 ? fullCard
                   ? 'Card details'
                   : 'Card verification'
-                : 'Sign-in details'
+                : credentialTitle(request)
         }
         origin={request.origin}
       />
@@ -518,38 +540,54 @@ function SecureEntryForm({
                   disabled={busy}
                 />
               )}
-              <TextInput
-                className="secure-entry-field"
-                label="Label"
-                value={label}
-                onChange={(event) => setLabel(event.currentTarget.value)}
-                required
-                maxLength={80}
-                autoComplete="off"
-                disabled={busy}
-              />
-              <TextInput
-                className="secure-entry-field"
-                label="Username"
-                value={username}
-                onChange={(event) => setUsername(event.currentTarget.value)}
-                required
-                maxLength={1024}
-                autoComplete="username"
-                autoCapitalize="off"
-                spellCheck={false}
-                disabled={busy}
-              />
-              <PasswordInput
-                className="secure-entry-field"
-                label="Password"
-                value={password}
-                onChange={(event) => setPassword(event.currentTarget.value)}
-                required
-                maxLength={4096}
-                autoComplete="current-password"
-                disabled={busy}
-              />
+              {!accountId && !stagedCredential && (
+                <TextInput
+                  className="secure-entry-field"
+                  label="Label"
+                  value={label}
+                  onChange={(event) => setLabel(event.currentTarget.value)}
+                  required
+                  maxLength={80}
+                  autoComplete="off"
+                  disabled={busy}
+                />
+              )}
+              {needsUsername && (
+                <TextInput
+                  className="secure-entry-field"
+                  label={request.fieldLabels?.username ?? 'Username'}
+                  value={username}
+                  onChange={(event) => setUsername(event.currentTarget.value)}
+                  required
+                  maxLength={1024}
+                  autoComplete="username"
+                  inputMode={
+                    request.fieldLabels?.username === 'Phone number'
+                      ? 'tel'
+                      : undefined
+                  }
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  disabled={busy}
+                />
+              )}
+              {needsPassword && (
+                <PasswordInput
+                  className="secure-entry-field"
+                  label={request.fieldLabels?.password ?? 'Password'}
+                  value={password}
+                  onChange={(event) => setPassword(event.currentTarget.value)}
+                  required
+                  maxLength={4096}
+                  autoComplete="current-password"
+                  inputMode={
+                    request.fieldLabels?.password === 'PIN'
+                      ? 'numeric'
+                      : undefined
+                  }
+                  disabled={busy}
+                />
+              )}
             </>
           )}
           {!codeEntry && !cardEntry && (

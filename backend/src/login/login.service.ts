@@ -13,6 +13,8 @@ import {
 import { LoginBrowser } from './login-browser.js';
 import { cardValues, type CardSubmission } from './payment-card.js';
 import {
+  credentialFieldLabels,
+  credentialRoles,
   fieldKind,
   StaleSecureFieldsError,
   type SecureFields,
@@ -138,7 +140,7 @@ export class LoginService implements OnModuleDestroy {
               : row.status === 'failed'
                 ? 'Automatic recovery stopped. Yield; the inline card lets the user retry. Do not create more requests until the user retries.'
                 : row.status === 'saved'
-                  ? 'The complete username and password are stored. Inspect again and use secure_fill with the saved account for subsequent login stages.'
+                  ? 'The requested credential fields are stored. Inspect again and use secure_fill with the saved account for subsequent login stages.'
                   : row.status === 'selected'
                     ? 'The user selected a saved account. Inspect again and use secure_fill without accountId to continue this selected flow.'
                     : row.status === 'filled'
@@ -146,7 +148,7 @@ export class LoginService implements OnModuleDestroy {
                         ? 'The payment fields were filled directly in the browser. Filling does not submit a purchase.'
                         : row.kind === 'code'
                           ? 'The verification code was filled directly in the browser.'
-                          : `The complete username and password are stored. The selected ${Object.keys(row.fields ?? {}).join('/')} fields were filled directly in the browser.`
+                          : `The requested credential fields are stored. The selected ${Object.keys(row.fields ?? {}).join('/')} fields were filled directly in the browser.`
                       : 'The request was cancelled.';
           await this.notify(
             row.taskId,
@@ -413,16 +415,43 @@ export class LoginService implements OnModuleDestroy {
     try {
       return {
         ...filled,
+        actionStatus: 'completed' as const,
         ...(await this.inspect(taskId, workerId, action, signal)),
       };
     } catch {
-      throw new ApplicationError(
-        'unavailable',
-        'Fields were filled, but browser action or inspection failed. Inspect again without action before retrying.',
-      );
+      return {
+        ...filled,
+        actionStatus: 'failed' as const,
+        message:
+          'Fields were filled, but the browser action or resulting inspection failed. Inspect without action and do not refill.',
+      };
     }
   }
+  private async credentialDetails(row: LoginRequest) {
+    const fields = credentialRoles(row.fields);
+    return {
+      fields,
+      fieldLabels: credentialFieldLabels(
+        row.fields,
+        await this.repository.inspectionInputs(row.inspectionId),
+      ),
+    };
+  }
   private async publishCard(row: LoginRequest) {
+    const credential =
+      row.kind === 'credentials'
+        ? await this.credentialDetails(row)
+        : undefined;
+    const singleCredential =
+      credential?.fields.length === 1
+        ? credential.fieldLabels[credential.fields[0]]
+        : undefined;
+    const credentialName =
+      singleCredential && singleCredential === singleCredential.toUpperCase()
+        ? singleCredential
+        : singleCredential
+          ? singleCredential[0].toLowerCase() + singleCredential.slice(1)
+          : undefined;
     const text =
       row.kind === 'card'
         ? 'Enter or select payment details securely.'
@@ -430,7 +459,9 @@ export class LoginService implements OnModuleDestroy {
           ? 'Enter the verification code securely.'
           : row.chooseAccount
             ? 'Choose an account to sign in.'
-            : 'Enter your sign-in details securely.';
+            : credentialName
+              ? `Enter your ${credentialName} securely.`
+              : 'Enter your sign-in details securely.';
     const metadata = { secureEntryRequestId: row.cardId };
     await this.chat.publish(
       {
@@ -445,6 +476,17 @@ export class LoginService implements OnModuleDestroy {
   }
   async get(id: string) {
     const row = await this.repository.current(id);
+    const credential =
+      row.kind === 'credentials'
+        ? await this.credentialDetails(row)
+        : undefined;
+    const flow = credential
+      ? await this.repository.selection(row.taskId, row.workerId ?? undefined)
+      : undefined;
+    const accountId =
+      flow?.origin === row.origin && !flow.confirmedAt
+        ? flow.accountId
+        : undefined;
     return {
       id: row.id,
       origin: row.origin,
@@ -463,7 +505,9 @@ export class LoginService implements OnModuleDestroy {
                 ? await this.cards().catch(() => [])
                 : [],
           }
-        : {}),
+        : credential
+          ? { ...credential, ...(accountId ? { accountId } : {}) }
+          : {}),
       keepMeSignedIn: row.keepMeSignedIn,
       accounts:
         row.status === 'pending' &&
@@ -601,31 +645,68 @@ export class LoginService implements OnModuleDestroy {
     id: string,
     input?: CredentialInput & { keepMeSignedIn?: boolean },
   ) {
-    const row = await this.repository.finish(
-      id,
-      input
-        ? {
-            kind: 'credentials',
-            status: 'saved',
-            submit: async (row) => {
-              const accountId = await this.vault.save(
-                row.origin,
-                input,
-                row.id,
-              );
-              const filled = await this.fillRequest(row, input).then(
-                () => true,
-                () => false,
-              );
-              return { accountId, filled };
-            },
-            keepMeSignedIn: input.keepMeSignedIn,
-          }
-        : undefined,
-    );
-    this.events.publish({ event: 'login.updated', taskId: row.taskId });
-    void this.flushNotifications();
-    return { id: row.id, status: row.status };
+    try {
+      const current = input ? await this.repository.current(id) : undefined;
+      const flow = current
+        ? await this.repository.selection(
+            current.taskId,
+            current.workerId ?? undefined,
+          )
+        : undefined;
+      const activeAccountId =
+        current && flow?.origin === current.origin && !flow.confirmedAt
+          ? flow.accountId
+          : undefined;
+      const row = await this.repository.finish(
+        id,
+        input
+          ? {
+              kind: 'credentials',
+              status: 'saved',
+              submit: async (row) => {
+                const roles = credentialRoles(row.fields);
+                const supplied = (['username', 'password'] as const).filter(
+                  (role) => input[role] !== undefined,
+                );
+                if (
+                  supplied.some((role) => !roles.includes(role)) ||
+                  roles.some((role) => !input[role])
+                )
+                  throw new ApplicationError(
+                    'invalid_input',
+                    'Enter only the requested login fields',
+                  );
+                const credentials: CredentialInput = {
+                  ...Object.fromEntries(
+                    roles.map((role) => [role, input[role]]),
+                  ),
+                  label: input.label,
+                  accountId: input.accountId ?? activeAccountId,
+                };
+                const accountId = await this.vault.save(
+                  row.origin,
+                  credentials,
+                  row.id,
+                );
+                const filled = await this.fillRequest(row, credentials).then(
+                  () => true,
+                  () => false,
+                );
+                return { accountId, filled };
+              },
+              keepMeSignedIn: input.keepMeSignedIn,
+            }
+          : undefined,
+      );
+      this.events.publish({ event: 'login.updated', taskId: row.taskId });
+      void this.flushNotifications();
+      return { id: row.id, status: row.status };
+    } finally {
+      if (input) {
+        input.username = undefined;
+        input.password = undefined;
+      }
+    }
   }
   async selectAccount(id: string, accountId: string, keepMeSignedIn?: boolean) {
     const row = await this.repository.finish(id, {

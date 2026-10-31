@@ -45,8 +45,15 @@ it('accepts null optional roles and distinguishes malformed selections from stal
   });
   expect(fields).toEqual({ username: inspection.inputs[1].ref });
   expect(
-    normalizeFields({ username: null, password: null, code: ['code-ref'] }),
-  ).toEqual({ code: ['code-ref'] });
+    normalizeFields({
+      username: null,
+      password: null,
+      code: ['i1-abcdefghijklmnop'],
+    }),
+  ).toEqual({ code: ['i1-abcdefghijklmnop'] });
+  expect(() => normalizeFields({ username: '6287266027' })).toThrow(
+    /opaque input refs/,
+  );
   await expect(
     service.fill(page, 'a', fields, { username: 'dummy' }),
   ).resolves.toMatchObject({ status: 'filled' });
@@ -65,7 +72,7 @@ it('accepts null optional roles and distinguishes malformed selections from stal
     }
   }
   await expect(
-    service.select(page, 'a', { username: 'missing-ref' }),
+    service.select(page, 'a', { username: 'i1-0000000000000000' }),
   ).rejects.toMatchObject({ code: 'conflict' });
 });
 
@@ -389,7 +396,6 @@ it('uses the supported vault routes, reconciles repeated saves, and sanitizes pr
   try {
     const input = {
       username: 'dummy',
-      password: 'dummy-pass',
       label: 'Personal',
     };
     expect(
@@ -400,14 +406,17 @@ it('uses the supported vault routes, reconciles repeated saves, and sanitizes pr
     ).toBe('fixture-account');
     expect(items).toHaveLength(1);
     expect(items[0].login!.uris![0].match).toBe(1);
+    expect(items[0].login!.username).toBe('dummy');
+    expect(items[0].login!.password).toBeUndefined();
     expect(
       await vault.save(
         'https://login.example.test',
-        { ...input, accountId: 'fixture-account', password: 'updated-dummy' },
+        { accountId: 'fixture-account', password: 'updated-dummy' },
         'request-b',
       ),
     ).toBe('fixture-account');
     expect(items).toHaveLength(1);
+    expect(items[0].login!.username).toBe('dummy');
     expect(items[0].login!.password).toBe('updated-dummy');
     await expect(
       new BitwardenService(new ConfigService()).matching(

@@ -170,7 +170,7 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
   await page.route('https://example.test/**', (route) =>
     route.fulfill({
       contentType: 'text/html',
-      body: '<form><input autocomplete="username" id="user"><button>Next</button></form><textarea id="comment"></textarea>',
+      body: '<form><input autocomplete="username" id="user"><input type="password" autocomplete="current-password" id="pass"><button>Next</button></form><textarea id="comment"></textarea>',
     }),
   );
   await page.goto('https://example.test/login');
@@ -222,7 +222,7 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
       {
         fields: {
           username: inspection.inputs[0].ref,
-          password: null,
+          password: inspection.inputs[1].ref,
           code: null,
         } as unknown as SecureFields,
         chooseAccount: true,
@@ -346,7 +346,12 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
     const otherInspection = await login.inspect(otherTask.id);
     expect(otherInspection.accounts).toHaveLength(1);
     const otherRequest = await loginTools(login).secure_entry_request.execute!(
-      { fields: { username: otherInspection.inputs[0].ref } },
+      {
+        fields: {
+          username: otherInspection.inputs[0].ref,
+          password: otherInspection.inputs[1].ref,
+        },
+      },
       {
         requestContext: new RequestContext([
           [MASTRA_THREAD_ID_KEY, 'pal-task:' + otherTask.id],
@@ -515,6 +520,128 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
     matching.mockRestore();
     save.mockRestore();
     configured.mockRestore();
+    await browser.close();
+  }
+});
+
+it('collects phone and PIN stages separately and merges one vault account', async () => {
+  const browser = await chromium.launch({
+    channel: 'chrome',
+    executablePath: process.env.TEST_CHROMIUM_PATH,
+    headless: true,
+  });
+  const page = await browser.newPage();
+  await page.route('https://phone.example.test/**', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<form><label>Phone number *<input id="phone" type="tel" autocomplete="username"></label></form>',
+    }),
+  );
+  await page.goto('https://phone.example.test/login');
+  const task = await fixture.app.get(TasksService).create({
+    title: 'Staged phone login',
+    goal: 'Sign in with phone and PIN',
+  });
+  const login = fixture.app.get(LoginService);
+  const vault = fixture.app.get(BitwardenService);
+  const selected = vi
+    .spyOn(fixture.app.get(BrowserService), 'selectedPage')
+    .mockResolvedValue(page);
+  const items: {
+    id: string;
+    name: string;
+    type: number;
+    login: { username?: string; password?: string };
+  }[] = [];
+  const matching = vi
+    .spyOn(vault, 'matching')
+    .mockImplementation(async () => structuredClone(items));
+  const configured = vi.spyOn(vault, 'configured', 'get').mockReturnValue(true);
+  const save = vi
+    .spyOn(vault, 'save')
+    .mockImplementation(async (_origin, input) => {
+      let item = input.accountId
+        ? items.find((candidate) => candidate.id === input.accountId)
+        : undefined;
+      if (!item) {
+        item = {
+          id: randomUUID(),
+          name: input.label!,
+          type: 1,
+          login: {},
+        };
+        items.push(item);
+      }
+      if (input.label) item.name = input.label;
+      if (input.username) item.login.username = input.username;
+      if (input.password) item.login.password = input.password;
+      return item.id;
+    });
+  try {
+    const phoneInspection = await login.inspect(task.id);
+    const phoneRequest = await login.request(task.id, {
+      username: phoneInspection.inputs[0].ref,
+    });
+    const phoneCard = (
+      await request(fixture.url)
+        .get(`/login/requests/${phoneRequest.requestId}`)
+        .expect(200)
+    ).body;
+    expect(phoneCard).toMatchObject({
+      fields: ['username'],
+      fieldLabels: { username: 'Phone number' },
+    });
+    expect(phoneCard).not.toHaveProperty('accountId');
+    const phone = '6287266027';
+    const phoneResult = await request(fixture.url)
+      .post(`/login/requests/${phoneRequest.requestId}/save`)
+      .send({ username: phone, label: 'Personal' })
+      .expect(201);
+    expect(phoneResult.body.status).toBe('filled');
+    expect(await page.locator('#phone').inputValue()).toBe(phone);
+    expect(items).toHaveLength(1);
+    expect(items[0].login).toEqual({ username: phone });
+
+    await page.setContent(
+      '<form><label>PIN *<input id="pin" type="password" maxlength="15"></label></form>',
+    );
+    const pinInspection = await login.inspect(task.id);
+    const pinFields = { password: pinInspection.inputs[0].ref };
+    await expect(login.fill(task.id, pinFields)).rejects.toMatchObject({
+      code: 'conflict',
+    });
+    const pinRequest = await login.request(task.id, pinFields);
+    const pinCard = (
+      await request(fixture.url)
+        .get(`/login/requests/${pinRequest.requestId}`)
+        .expect(200)
+    ).body;
+    expect(pinCard).toMatchObject({
+      fields: ['password'],
+      fieldLabels: { password: 'PIN' },
+      accountId: items[0].id,
+    });
+    const pin = '123456';
+    const pinResult = await request(fixture.url)
+      .post(`/login/requests/${pinRequest.requestId}/save`)
+      .send({ password: pin })
+      .expect(201);
+    expect(pinResult.body.status).toBe('filled');
+    expect(await page.locator('#pin').inputValue()).toBe(pin);
+    expect(items).toHaveLength(1);
+    expect(items[0].login).toEqual({ username: phone, password: pin });
+    expect(save).toHaveBeenCalledTimes(2);
+    const persisted = await fixture.database.pool.query(
+      'select row_to_json(r) as value from login_requests r where task_id=$1',
+      [task.id],
+    );
+    expect(JSON.stringify(persisted.rows)).not.toContain(phone);
+    expect(JSON.stringify(persisted.rows)).not.toContain(pin);
+  } finally {
+    selected.mockRestore();
+    matching.mockRestore();
+    configured.mockRestore();
+    save.mockRestore();
     await browser.close();
   }
 });
@@ -1153,8 +1280,8 @@ it('acts before masked inspection across new tabs, delayed navigation, same-page
       caller,
     );
     expect(failedAfterFill).toMatchObject({
-      status: 'error',
-      code: 'unavailable',
+      status: 'filled',
+      actionStatus: 'failed',
     });
     expect(JSON.stringify(failedAfterFill)).toContain('Fields were filled');
     expect(JSON.stringify(failedAfterFill)).not.toContain('SECRET');
@@ -1193,12 +1320,10 @@ it('fills saved, transient and opted-in payment cards through private API, recov
     }),
   );
   await page.goto('https://payment.example.test/');
-  const task = await fixture.app
-    .get(TasksService)
-    .create({
-      title: 'Synthetic card entry',
-      goal: 'Verify private payment filling',
-    });
+  const task = await fixture.app.get(TasksService).create({
+    title: 'Synthetic card entry',
+    goal: 'Verify private payment filling',
+  });
   const service = fixture.app.get(LoginService),
     vault = fixture.app.get(BitwardenService);
   const selected = vi

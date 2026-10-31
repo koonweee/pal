@@ -14,6 +14,9 @@ export type SecureFields = Partial<
   Record<Exclude<SecureRole, 'code'>, string>
 > & { code?: string[] };
 export type SecureValues = Partial<Record<SecureRole, string>>;
+export type CredentialRole = Extract<SecureRole, 'username' | 'password'>;
+export const inputRefPattern = '^i[1-9][0-9]*-[A-Za-z0-9_-]{16}$';
+const inputRef = new RegExp(inputRefPattern);
 export const isCardRole = (role: string): role is CardRole =>
   (cardRoles as readonly string[]).includes(role);
 export const fieldKind = (fields: SecureFields) =>
@@ -39,6 +42,41 @@ export interface LoginInput {
   label: string;
   group: string;
   maxLength?: number;
+}
+
+export function credentialRoles(fields?: SecureFields | null) {
+  if (!fields) return ['username', 'password'] as CredentialRole[];
+  return selectedFields(fields)
+    .map(([role]) => role)
+    .filter((role): role is CredentialRole =>
+      ['username', 'password'].includes(role),
+    );
+}
+
+export function credentialFieldLabels(
+  fields: SecureFields | null | undefined,
+  inputs: LoginInput[],
+) {
+  const byRef = new Map(inputs.map((input) => [input.ref, input]));
+  const labels: Partial<Record<CredentialRole, string>> = {};
+  for (const role of credentialRoles(fields)) {
+    const ref = fields?.[role];
+    const input = ref ? byRef.get(ref) : undefined;
+    const label = input?.label
+      .replace(/\s*(?:\*|\(required\))\s*$/i, '')
+      .trim()
+      .slice(0, 80);
+    labels[role] =
+      label ||
+      (role === 'username'
+        ? input?.type === 'tel'
+          ? 'Phone number'
+          : input?.type === 'email'
+            ? 'Email'
+            : 'Username'
+        : 'Password');
+  }
+  return labels;
 }
 
 // Serialized by Playwright into the page. These checks validate destinations;
@@ -207,6 +245,11 @@ export function selectedFields(fields: unknown): [SecureRole, string][] {
   }
   if (new Set(result.map(([, ref]) => ref)).size !== result.length)
     throw invalid();
+  if (result.some(([, ref]) => !inputRef.test(ref)))
+    throw new ApplicationError(
+      'invalid_input',
+      'Use opaque input refs from the latest login_inspect result',
+    );
   return result;
 }
 

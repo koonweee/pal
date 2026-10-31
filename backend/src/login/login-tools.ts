@@ -4,7 +4,12 @@ import { jsonSchema } from 'ai';
 import { taskIdFromThread } from '../agent/task-tools.js';
 import { WORKER_ID, PARENT_TASK_ID } from '../agent/task-workers.js';
 import type { LoginService } from './login.service.js';
-import { cardRoles, normalizeFields, type CardRole } from './login-fields.js';
+import {
+  cardRoles,
+  inputRefPattern,
+  normalizeFields,
+  type CardRole,
+} from './login-fields.js';
 import { ApplicationError } from '../application/contracts/errors.js';
 
 type FieldInput = Partial<Record<CardRole, string | null>> & {
@@ -43,17 +48,21 @@ export function loginTools(service: LoginService) {
       };
     }
   };
+  const refSchema = { type: 'string' as const, pattern: inputRefPattern };
   const fieldsSchema: Parameters<typeof jsonSchema>[0] = {
     type: 'object',
     properties: {
       ...Object.fromEntries(
-        cardRoles.map((role) => [role, { type: ['string', 'null'] }]),
+        cardRoles.map((role) => [
+          role,
+          { type: ['string', 'null'], pattern: inputRefPattern },
+        ]),
       ),
-      username: { type: ['string', 'null'] },
-      password: { type: ['string', 'null'] },
+      username: { type: ['string', 'null'], pattern: inputRefPattern },
+      password: { type: ['string', 'null'], pattern: inputRefPattern },
       code: {
         type: ['array', 'null'],
-        items: { type: 'string' },
+        items: { type: 'string', pattern: inputRefPattern },
         minItems: 1,
         maxItems: 64,
         uniqueItems: true,
@@ -61,10 +70,34 @@ export function loginTools(service: LoginService) {
     },
     additionalProperties: false,
     anyOf: [
-      { required: ['username'] },
-      { required: ['password'] },
-      { required: ['code'] },
-      ...cardRoles.map((role) => ({ required: [role] })),
+      {
+        required: ['username'],
+        properties: {
+          username: refSchema,
+        },
+      },
+      {
+        required: ['password'],
+        properties: {
+          password: refSchema,
+        },
+      },
+      {
+        required: ['code'],
+        properties: {
+          code: {
+            type: 'array',
+            items: { type: 'string', pattern: inputRefPattern },
+            minItems: 1,
+          },
+        },
+      },
+      ...cardRoles.map((role) => ({
+        required: [role],
+        properties: {
+          [role]: refSchema,
+        },
+      })),
     ],
   };
   const keepSchema: Parameters<typeof jsonSchema>[0] = {
@@ -123,7 +156,7 @@ export function loginTools(service: LoginService) {
     secure_entry_request: createTool({
       id: 'secure_entry_request',
       description:
-        'Show a private inline entry card in Main and Task. fields selects login, code, or payment entry; never mix these roles. Card fields show private one-time entry with optional Bitwarden saving. Request only missing roles for a website-saved card. Credential entry collects the complete login, saves it and fills bound fields; codes fill without storage. chooseAccount shows saved login accounts or Bitwarden cards. Returns awaiting_user; the host sets needs-input and notifies the owning Task after submission. Stale-field saves/selections remain available for fresh filling.',
+        'Show a private inline entry card in Main and Task. Pass only opaque refs from the latest login_inspect; never pass labels or values. fields selects login, code, or payment entry and the card requests only those roles. Staged username and password/PIN requests merge into one vault account; codes stay transient. Never mix role kinds. chooseAccount shows saved login accounts or Bitwarden cards. Returns awaiting_user; the host sets needs-input and notifies the owning Task after submission. Stale-field saves/selections remain available for fresh filling.',
       inputSchema: jsonSchema<{
         fields: FieldInput;
         chooseAccount?: boolean | null;
@@ -158,7 +191,7 @@ export function loginTools(service: LoginService) {
     secure_fill: createTool({
       id: 'secure_fill',
       description:
-        'Fill inspected username/password refs from a matching vault account without exposing values; passwords require password inputs. Omit accountId for automatic reuse or an ambiguity picker. Code refs return input_required. Card refs open the private card picker; omit accountId, action and keepMeSignedIn for cards. Card filling never submits a purchase. Optional action runs only after successful filling and returns the resulting masked inspection. Waiting, input-required and failed fills never run action. After an action/inspection error, inspect without action before retrying. Without action only fills. Returns session-persistence intent; filling does not prove authentication.',
+        'Fill inspected username/password refs from a matching vault account without exposing values. Pass only opaque refs from the latest login_inspect; never pass labels or values. Password and reusable PIN roles require password inputs. Omit accountId for automatic reuse or an ambiguity picker. Code refs return input_required. Card refs open the private card picker; omit accountId, action and keepMeSignedIn for cards. Card filling never submits a purchase. Optional action runs only after successful filling. actionStatus failed means filling succeeded: inspect without action and do not refill. Without action only fills. Returns session-persistence intent; filling does not prove authentication.',
       inputSchema: jsonSchema<{
         fields: FieldInput;
         accountId?: string | null;

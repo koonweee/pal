@@ -28,9 +28,9 @@ export interface VaultItem {
   };
 }
 export interface CredentialInput {
-  username: string;
-  password: string;
-  label: string;
+  username?: string;
+  password?: string;
+  label?: string;
   accountId?: string;
 }
 
@@ -254,6 +254,11 @@ export class BitwardenService implements OnModuleInit, OnModuleDestroy {
     return saved.id;
   }
   async save(origin: string, input: CredentialInput, requestId: string) {
+    if (!input.username && !input.password)
+      throw new ApplicationError(
+        'invalid_input',
+        'Enter the requested login field',
+      );
     const matches = await this.matching(origin);
     const marker = 'pal-login-request:' + requestId;
     const previous = matches.find((item) =>
@@ -268,15 +273,20 @@ export class BitwardenService implements OnModuleInit, OnModuleDestroy {
         'invalid_input',
         'Account does not match this website',
       );
+    if (!selected && !input.label?.trim())
+      throw new ApplicationError(
+        'invalid_input',
+        'A label is required for a new account',
+      );
     const item = {
       ...selected,
       type: 1,
-      name: input.label,
+      name: input.label?.trim() || selected!.name,
       notes: [selected?.notes, marker].filter(Boolean).join('\n'),
       login: {
         ...selected?.login,
-        username: input.username,
-        password: input.password,
+        ...(input.username ? { username: input.username } : {}),
+        ...(input.password ? { password: input.password } : {}),
         uris: selected?.login?.uris ?? [{ uri: origin, match: 1 }],
       },
     };
