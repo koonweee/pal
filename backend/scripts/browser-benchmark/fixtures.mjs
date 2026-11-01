@@ -1,3 +1,8 @@
+import {
+  comparisonState,
+  comparisonPage,
+  comparisonTransition,
+} from './comparison-cases.mjs';
 import { driverState, driverPage, driverTransition } from './driver-cases.mjs';
 const escape = (value) =>
   String(value)
@@ -128,7 +133,11 @@ export async function installFixture(browserService, scenario, tag) {
   // Use the same CDP connection that resolves owned tabs, avoiding routing races.
   const browser = await browserService.connect();
   const context = browser.contexts()[0];
-  const state = scenario.driverCase ? driverState() : initialState();
+  const state = scenario.comparison
+    ? comparisonState()
+    : scenario.driverCase
+      ? driverState()
+      : initialState();
   const owners = new Map();
   const predicate = (url) =>
     url.hostname === host ||
@@ -153,9 +162,11 @@ export async function installFixture(browserService, scenario, tag) {
         state.laneOwners[lane] = owner;
       }
       return route.fulfill({
-        json: scenario.driverCase
-          ? driverTransition(state, action, values, lane)
-          : transition(state, action, values),
+        json: scenario.comparison
+          ? comparisonTransition(state, action, values)
+          : scenario.driverCase
+            ? driverTransition(state, action, values, lane)
+            : transition(state, action, values),
       });
     }
     if (
@@ -177,9 +188,11 @@ export async function installFixture(browserService, scenario, tag) {
       state.completedAt = Date.now();
     return route.fulfill({
       contentType: 'text/html',
-      body: scenario.driverCase
-        ? driverPage(url.pathname, state, origin)
-        : page(url.pathname, state),
+      body: scenario.comparison
+        ? comparisonPage(url.pathname, state)
+        : scenario.driverCase
+          ? driverPage(url.pathname, state, origin)
+          : page(url.pathname, state),
     });
   };
   await context.route(predicate, handler);

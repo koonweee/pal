@@ -9,10 +9,11 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-/** Synthetic acceptance target. Values are never echoed or persisted. */
+/** Synthetic acceptance target. Credential values are never echoed or persisted. */
 public final class Fixture extends Activity {
     private int stage;
     private boolean username, password;
+    private int saves;
     @Override public void onCreate(Bundle state) { super.onCreate(state); screen(); }
     private void screen() {
         LinearLayout layout = new LinearLayout(this); layout.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS); layout.setOrientation(LinearLayout.VERTICAL); layout.setPadding(36, 90, 36, 20);
@@ -31,7 +32,12 @@ public final class Fixture extends Activity {
             }); layout.addView(next);
         } else {
             TextView verified = new TextView(this); verified.setText("Verified stages: username, password, transient code"); layout.addView(verified);
-            Button reset = new Button(this); reset.setText("Start again"); reset.setOnClickListener(view -> { stage = 0; username = false; password = false; screen(); }); layout.addView(reset);
+            EditText reference = new EditText(this); reference.setSingleLine(true); reference.setHint("Draft reference"); layout.addView(reference);
+            TextView receipt = new TextView(this);
+            Button save = new Button(this); save.setText("Save draft"); save.setOnClickListener(view -> {
+                if (reference.getText().toString().equals("PAL-DRAFT-42")) { saves++; receipt.setText("Draft saved: PAL-DRAFT-42; saves: " + saves); }
+            }); layout.addView(save); layout.addView(receipt);
+            Button reset = new Button(this); reset.setText("Start again"); reset.setOnClickListener(view -> { stage = 0; saves = 0; username = false; password = false; screen(); }); layout.addView(reset);
         }
         // Readonly editable semantics can expose a text child. Mask descendants.
         LinearLayout privateRegion = new LinearLayout(this) {

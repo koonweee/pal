@@ -1,3 +1,5 @@
+import { assistedQueue } from './comparison-tools.mjs';
+import { comparisonCases, comparisonScore } from './comparison-cases.mjs';
 import { cases, score } from './cases.mjs';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -18,7 +20,11 @@ export function summarize(results, traces) {
   const samples = results.map((row) => {
     const events = traces.filter((e) => e.sample === row.sample);
     const roleUsage = {};
-    for (const role of ['task', 'worker', ...(row.generalModel ? ['general'] : [])]) {
+    for (const role of [
+      'task',
+      'worker',
+      ...(row.generalModel ? ['general'] : []),
+    ]) {
       const starts = events.filter(
         (e) => e.event === 'model.start' && e.role === role,
       );
@@ -95,11 +101,14 @@ export function summarize(results, traces) {
     const group = samples.filter(
       (r) => [r.case, r.context, r.variant].join('/') === key,
     );
-    const measured = group.filter((r) => r.status !== 'unsupported');
+    const measured = group.filter(
+      (r) => !['unsupported', 'deferred'].includes(r.status),
+    );
     groups.push({
       key,
       samples: group.length,
-      unsupported: group.length - measured.length,
+      unsupported: group.filter((r) => r.status === 'unsupported').length,
+      deferred: group.filter((r) => r.status === 'deferred').length,
       passed: measured.filter((r) => r.success === true).length,
       failed: measured.filter((r) => r.success === false).length,
       pendingReview: measured.filter((r) => r.success === null).length,
@@ -131,7 +140,7 @@ const escape = (value) =>
     .replaceAll('"', '&quot;');
 export function render(summary) {
   const seconds = (ms) => (ms == null ? '—' : (ms / 1000).toFixed(1));
-  return `<!doctype html><meta charset="utf-8"><title>Pal browser worker benchmark</title><style>body{font:15px system-ui;margin:32px;color:#17283b}table{border-collapse:collapse;width:100%}td,th{padding:10px;text-align:left;border-bottom:1px solid #ddd}th{background:#eef2f6}pre{white-space:pre-wrap}details{margin:14px 0}p{max-width:1000px}</style><h1>Pal browser worker benchmark</h1><p>Task remains Sol medium. Worker history contains only its handoff. Results include parent planning and synthesis. Raw synthetic history is fixed; observational memory is disabled. Live answers require review. Token totals include failed attempts when provider usage is available; missing usage is flagged. Reasoning and cached tokens are subsets, not additional totals. Model/tool durations can overlap and must not be added to elapsed time.</p><table><thead><tr><th>Case / context / variant</th><th>Pass / fail / review / unsupported</th><th>Median seconds (all)</th><th>Range seconds</th><th>Median seconds (passed)</th><th>Input tokens</th><th>Output tokens</th><th>Cached input</th><th>Reasoning output</th><th>Missing usage runs</th></tr></thead><tbody>${summary.groups.map((g) => `<tr><td>${escape(g.key)}</td><td>${g.passed} / ${g.failed} / ${g.pendingReview} / ${g.unsupported}</td><td>${seconds(g.medianMs)}</td><td>${seconds(g.minMs)}–${seconds(g.maxMs)}</td><td>${seconds(g.successfulMedianMs)}</td><td>${escape(g.medianInputTokens)}</td><td>${escape(g.medianOutputTokens)}</td><td>${escape(g.medianCachedTokens)}</td><td>${escape(g.medianReasoningTokens)}</td><td>${g.incompleteUsage}</td></tr>`).join('')}</tbody></table><h2>Evidence and role breakdown</h2>${summary.samples.map((s) => `<details><summary>${escape(s.key)} — ${escape(s.status)} — ${s.success === null ? 'review required' : s.success ? 'pass' : 'fail'}</summary><pre>${escape(JSON.stringify(s, null, 2))}</pre></details>`).join('')}`;
+  return `<!doctype html><meta charset="utf-8"><title>Pal browser worker benchmark</title><style>body{font:15px system-ui;margin:32px;color:#17283b}table{border-collapse:collapse;width:100%}td,th{padding:10px;text-align:left;border-bottom:1px solid #ddd}th{background:#eef2f6}pre{white-space:pre-wrap}details{margin:14px 0}p{max-width:1000px}</style><h1>Pal browser worker benchmark</h1><p>Task remains Sol medium. Worker history contains only its handoff. Results include parent planning and synthesis. Raw synthetic history is fixed; observational memory is disabled. Live answers require review. Token totals include failed attempts when provider usage is available; missing usage is flagged. Reasoning and cached tokens are subsets, not additional totals. Model/tool durations can overlap and must not be added to elapsed time.</p><table><thead><tr><th>Case / context / variant</th><th>Pass / fail / review / unavailable / deferred</th><th>Median seconds (all)</th><th>Range seconds</th><th>Median seconds (passed)</th><th>Input tokens</th><th>Output tokens</th><th>Cached input</th><th>Reasoning output</th><th>Missing usage runs</th></tr></thead><tbody>${summary.groups.map((g) => `<tr><td>${escape(g.key)}</td><td>${g.passed} / ${g.failed} / ${g.pendingReview} / ${g.unsupported} / ${g.deferred}</td><td>${seconds(g.medianMs)}</td><td>${seconds(g.minMs)}–${seconds(g.maxMs)}</td><td>${seconds(g.successfulMedianMs)}</td><td>${escape(g.medianInputTokens)}</td><td>${escape(g.medianOutputTokens)}</td><td>${escape(g.medianCachedTokens)}</td><td>${escape(g.medianReasoningTokens)}</td><td>${g.incompleteUsage}</td></tr>`).join('')}</tbody></table><h2>Evidence and role breakdown</h2>${summary.samples.map((s) => `<details><summary>${escape(s.key)} — ${escape(s.status)} — ${s.success === null ? 'review required' : s.success ? 'pass' : 'fail'}</summary><pre>${escape(JSON.stringify(s, null, 2))}</pre></details>`).join('')}`;
 }
 if (
   process.argv[1] &&
@@ -158,7 +167,17 @@ if (
       const tools = traces
         .filter((e) => e.sample === row.sample && e.event === 'tool.start')
         .map((e) => e.tool);
-      const grading = score(scenario, row.websiteState, row.answer, tools);
+      const grading = scenario
+        ? score(scenario, row.websiteState, row.answer, tools)
+        : comparisonScore({
+            scenario: comparisonCases.find((c) => c.id === row.case),
+            state: row.websiteState,
+            fillRoles: row.fillRoles,
+            boundaryValid: row.boundaryValid,
+            privacyValid: row.privacyValid,
+            answer: row.answer,
+            status: row.status,
+          });
       row = {
         ...row,
         originalChecks: row.checks,
@@ -184,16 +203,55 @@ if (
     return {
       ...row,
       humanReview: review,
-      success: row.status === 'completed' && row.boundaryValid && review.passed,
+      reviewRequired: false,
+      success:
+        row.status === 'completed' &&
+        row.boundaryValid &&
+        row.privacyValid !== false &&
+        Object.values(row.checks ?? {}).every((value) => value === true) &&
+        review.passed,
     };
   });
   const summary = summarize(results, traces);
+  const config = JSON.parse(readFileSync(dir + '/config.json', 'utf8'));
+  if (config.suite === 'interaction') {
+    summary.assistedQueue = assistedQueue(results);
+    if (config.phase === 'main')
+      summary.assistedQueue.push({
+        case: 'apple-store',
+        action:
+          'confirm URL, then run separate browser/computer human-assisted comparison',
+        timing: 'after-main-run',
+        samples: 6,
+      });
+    writeFileSync(
+      dir + '/assisted-queue.json',
+      JSON.stringify(summary.assistedQueue, null, 2),
+    );
+  }
   if (process.argv.includes('--rescore'))
     summary.scoringSourceHash = createHash('sha256')
-      .update(readFileSync(new URL('./cases.mjs', import.meta.url)))
+      .update(
+        readFileSync(
+          new URL(
+            config.suite === 'interaction'
+              ? './comparison-cases.mjs'
+              : './cases.mjs',
+            import.meta.url,
+          ),
+        ),
+      )
       .digest('hex');
   writeFileSync(dir + '/summary.json', JSON.stringify(summary, null, 2));
-  writeFileSync(dir + '/report.html', render(summary));
+  writeFileSync(
+    dir + '/report.html',
+    config.suite === 'interaction'
+      ? render(summary).replaceAll(
+          'Pal browser worker benchmark',
+          'Pal Android / browser / computer comparison',
+        )
+      : render(summary),
+  );
   console.log(
     JSON.stringify({
       samples: summary.samples.length,

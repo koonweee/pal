@@ -151,3 +151,33 @@ Use `--variants luna-coordinator,luna-services,luna-execution --cases billing,st
 The opt-in `luna-coordinator-both` follow-up keeps the coordinator boundary and Sol-medium Task, with both interaction and general workers on Luna high. Select it with the same seven cases for 42 samples. Worker assignments, tools, empty inherited history and scoring stay the same. General-worker selection remains model judgment; report its actual use and price each role from the recorded model.
 
 The opt-in `luna-interaction-mcp` arm has only Task and interaction roles. Sol-medium Task owns shell, files, web search, task management, preferences and code mode for local tools. Luna-high interaction owns browser/computer/login, MCP discovery and code mode for its available tools. It has no direct shell, file-processing or web-search tools; Task has no MCP catalog or discovery. No general worker is registered. Both code runners still use the shared execution sandbox, so this is exposed-tool placement rather than a security boundary. Explicit assignments and zero inherited history remain fixed. Use the same seven cases for 42 samples in a new dataset. Those cases do not exercise connected-service MCP actions; report that limitation separately from verified tool availability.
+
+## Android / browser / computer comparison
+
+`--suite interaction` runs Sol medium Task → Terra medium interaction with empty inherited worker history. The three arms share Pal login/account/private-entry policy. Browser has browser controls; computer has screenshot/mouse/keyboard plus private inspection/filling; Android has native controls and masked observations. Shell, files, web search, connected-service APIs and code mode are absent. Production defaults are unchanged.
+
+```sh
+python3 backend/scripts/browser-benchmark/run.py --suite interaction --check
+node --test backend/scripts/browser-benchmark/comparison.test.mjs
+node backend/scripts/browser-benchmark/comparison-fixtures-check.mjs
+# The Android sidecar must contain the current fixture APK (android-up builds it).
+python3 backend/scripts/browser-benchmark/run.py --suite interaction --phase smoke \
+  --repetitions 1 --output .local/android-browser-comparison/SMOKE
+python3 backend/scripts/browser-benchmark/run.py --suite interaction \
+  --validated-smoke .local/android-browser-comparison/SMOKE \
+  --output .local/android-browser-comparison/MAIN
+python3 backend/scripts/browser-benchmark/run.py --resume .local/android-browser-comparison/MAIN
+node backend/scripts/browser-benchmark/report.mjs .local/android-browser-comparison/MAIN
+# Separate final run, only after main is complete and user readiness/URL is confirmed:
+python3 backend/scripts/browser-benchmark/run.py --suite interaction --phase assisted \
+  --parent .local/android-browser-comparison/MAIN --human-wait 900 \
+  --output .local/android-browser-comparison/ASSISTED
+```
+
+Main has 36 scheduled cells: staged private login/draft, Amazon order lookup, Amazon product comparison and Facebook event lookup × three methods × three rotations. Smoke must pass all three fixture arms on identical sources/images before collection. Synthetic values cross the actual private HTTP controller; exact app/web state proves authenticated login and one draft save. The synthetic vault is isolated from real accounts. Live private filling uses the existing Pal service/PWA card; no secret values enter prompts or benchmark files.
+
+Preflight records account-match counts, native setup availability and trusted-mapping coverage without exporting vault values. Missing accounts, account choice, native setup and challenges become deferred outcomes in `assisted-queue.json`. All user-dependent steps and live evidence review occur after independent main work. The assisted manifest imports every deferred main cell and appends the six Apple Store browser/computer samples last. It requires completed main evidence and cleanup. Use --cases to select particular deferred services; resolved main cells are preserved. Assisted private input waits use the existing private PWA card; total and human-wait time are retained separately. Confirm the intended Apple Store URL before that run. A public product task may use an anonymous available session; its state/marketplace must be reviewed before treating it as the planned warm-session result.
+
+`protocol.json` captures prompts, skills, jobs and capability preflight. Environment records the backend, desktop and Android image IDs plus source hashes. Method inventories are checked during execution. Only bounded public product title/price/URL evidence is captured; live success requires separate evidence review. Review cannot bypass failed fill/privacy/boundary gates. Raw hierarchies, screenshots, credentials and tool arguments are excluded from benchmark files. Do not use `--rescore` to combine different protocol versions.
+
+The runner checkpoints trace/results/protocol to the Mac about every five seconds. Resume rejects changed sources/images, preserves completed failures/deferred cells, and records an interrupted cell as uncertain instead of replaying it. Unverified cleanup blocks resume. Owned task IDs and scratch database/phone state are recorded for reconciliation. Fixture installation/uninstallation and USB power restoration are automatic; real app data and unrelated browser groups remain intact. Stop with `stop.request`, allow cleanup, then inspect `runtime.json` before restarting.

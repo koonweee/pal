@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned. [Android Secure Fill](android-secure-fill.md) meets development acceptance. All comparison milestones remain open. This plan authorizes planning only; implementation and benchmark collection are subsequent work.
+In Progress. Implementation and development collection are authorized. [Android Secure Fill](android-secure-fill.md) meets development acceptance. The user authorizes benchmark sign-outs. Every user-dependent setup, account choice, verification challenge and review is queued after independent main work. Apple Store is a separate final run; no human-assisted sample is interleaved with main.
 
 ## Goal
 
@@ -13,7 +13,7 @@ Measure when Pal should prefer Android apps, browser automation or desktop compu
 - Task owns coordination and delegates UI work to an interaction worker. Current shared guidance prefers service tools/APIs, then suitable Android apps for UI workflows, with browser/computer available as appropriate. See `backend/src/agent/instructions/interaction-methods.md`.
 - The interaction worker uses `gpt-6.1-terra` at medium effort; Task uses `gpt-6.1-sol` at medium effort. Android controls are configured through the development sidecar; detailed procedures load on demand.
 - [Existing benchmark infrastructure](../backend/scripts/browser-benchmark/README.md) already measures Task/Worker timing, usage, boundaries and fixture results. [Cua comparison findings](cua-driver-comparison.md) identify evidence-loss and interpretation limits to avoid repeating.
-- Android private filling passes new private-entry and saved-login fixture journeys with OTP. Ordinary observations are masked; WebView screenshots are fully masked, so Android Chrome visual verification is unavailable through that path. Amazon and Facebook remain blocked by first-run setup; benchmark preflight must verify their actual login surfaces and configure trusted package/signing identities. Existing acceptance evidence does not establish live-app fill capability or benchmark results.
+- Android private filling passes new private-entry and saved-login fixture journeys with OTP. Ordinary observations are masked; WebView screenshots are fully masked, so Android Chrome visual verification is unavailable through that path. Preflight identifies account setup, Amazon’s permission screen and native trust mappings as remaining live-login prerequisites. Native login surfaces still require verification after setup. Existing acceptance evidence does not establish live-app fill capability or benchmark results.
 
 ## Comparison Protocol
 
@@ -50,6 +50,7 @@ Use a native fixture only for repeatable lifecycle/privacy and staged-OTP eviden
 ### State, repetitions and timing
 
 - Minimum matrix: four matched cases x three arms x three repetitions = 36 samples; Apple Store x two arms x three repetitions = six additional samples. Total 42, excluding preflight, smoke and separate recovery probes. Keep incomplete/unavailable cells visible. Three repetitions are exploratory.
+- Run the 36 main samples first. The six Apple Store samples belong to a separate assisted manifest referencing the completed main run; start them last. Main-run challenges that require human action retain their blocked outcome.
 - Run sequentially in a quiet window; the phone and desktop are shared resources. Rotate first arm across repetitions, using all three cyclic orders for matched cases. Alternate Apple Store order; report the unavoidable imbalance with three repetitions.
 - Match account, marketplace/region, delivery location, locale, currency, product variants and account access across app/web. Record device/browser versions, connectivity/egress and native/web differences. Do not attribute all differences to the tools alone.
 - Login cases start demonstrably signed out with credentials ready in the shared vault or an explicitly defined private-entry scenario. Prefer dedicated accounts or isolated profiles. Obtain user agreement before signing out an existing personal app session; never clear app data or reset credentials to manufacture state.
@@ -68,7 +69,7 @@ Record privacy and ownership gates separately from task correctness. Keep final-
 
 ## Milestones
 
-### 1. Preflight accounts and freeze the protocol
+### 1. Preflight accounts and freeze the protocol — independent preflight complete
 
 Implementation tasks:
 
@@ -82,7 +83,7 @@ Exit criteria:
 
 - A versioned protocol identifies supported actual fill flows, pending user steps and capability blockers. No scored collection starts before Android privacy/direct-fill acceptance.
 
-### 2. Extend the harness and prove real filling
+### 2. Extend the harness and prove real filling — complete
 
 Implementation tasks:
 
@@ -132,19 +133,32 @@ Exit criteria:
 
 ## Validation Commands
 
-Existing relevant checks:
+Run the existing runner from the repository root. It uses the idle development service, desktop and connected phone.
 
 ```sh
-./scripts/dev-local android-status
-./scripts/dev-local status
-node --test backend/scripts/browser-benchmark/benchmark.test.mjs
-node backend/scripts/browser-benchmark/fixtures-check.mjs
+node --test backend/scripts/browser-benchmark/comparison.test.mjs backend/scripts/browser-benchmark/benchmark.test.mjs
+node backend/scripts/browser-benchmark/comparison-fixtures-check.mjs
+python3 backend/scripts/browser-benchmark/run.py --suite interaction --check
+python3 backend/scripts/browser-benchmark/run.py --suite interaction --phase smoke --repetitions 1 --output .local/android-browser-comparison/SMOKE
+python3 backend/scripts/browser-benchmark/run.py --suite interaction --validated-smoke .local/android-browser-comparison/SMOKE --output .local/android-browser-comparison/MAIN
+python3 backend/scripts/browser-benchmark/run.py --resume .local/android-browser-comparison/MAIN
+node backend/scripts/browser-benchmark/report.mjs .local/android-browser-comparison/MAIN
+# Only after main and the user's setup/URL confirmation:
+python3 backend/scripts/browser-benchmark/run.py --suite interaction --phase assisted --parent .local/android-browser-comparison/MAIN --output .local/android-browser-comparison/ASSISTED
 ```
 
-Implementation must add documented commands for the frozen matrix dry run, capability preflight, three-arm synthetic smoke, selective live collection, safe resume and report regeneration. Run backend build/lint and targeted tests when harness/runtime adapters change. Do not describe new commands as available before implementing them.
+`--check` validates the manifest without Docker or model calls. `--preflight-only` records model/account/native readiness. `--cases` selects services. Main collection requires a passing three-arm smoke with identical sources/images. The assisted manifest imports deferred main cells and appends six Apple Store samples last. Source/image changes require a new dataset; unverified prior cleanup blocks resume.
 
 ## Overall Exit Criteria
 
 - Android secure fill is validated before collection. The comparison includes actual native and browser private filling, staged OTP coverage and Apple Store browser login with user assistance as needed.
 - Same-model, method-isolated arms have matched requirements and explicit platform differences. Correctness, manual assistance and privacy gates are visible alongside time and usage.
 - Durable evidence supports conditional method-selection guidance, with unavailable/pending cases and uncertainty stated. Existing development resources and personal account state are preserved.
+
+## Implementation and Collection State
+
+- The existing runner supports the `interaction` suite, exact method inventories, a matched native/web staged-login and single-draft fixture, actual private HTTP filling, source/image fingerprints, five-second host checkpoints and separate assisted outcomes. Production method priorities are unchanged.
+- Initial development probes are smoke-only. A missing fixture `pages` field caused a service restart during setup; the shared-route browser regression now covers that contract. Private continuation waits for the shared asynchronous notification sweep before resuming. Restored checkpoint files are assigned to the service user before attachment. The matched web/native draft receipt includes the exact reference and save count; web reload preserves that receipt.
+- Preflight finds no matching saved Amazon/Facebook accounts. Amazon remains at Android permission-controller setup. Facebook now reaches com.facebook.katana, with no eligible native inputs observed. These account/setup dependencies belong to the final assisted queue. No personal account values are exported.
+- Protocol amendment before collection: the public Amazon product task may use the available anonymous web session. Record/review its authentication state, marketplace and delivery context; do not describe an anonymous sample as the planned authenticated warm-session condition. The unavailable native cell remains explicit.
+- Nineteen focused benchmark tests and the real browser fixture/reload/public-evidence privacy checks pass. The final acceptance directory is `.local/android-browser-comparison/acceptance/`; all three methods pass, including one private write per role and one draft save. Completed-run resume retains exactly three sample starts and nine original private fills with no replay, complete artifact export and no cleanup errors. Main collection is next on these frozen sources/images. The six Apple Store samples and every user-dependent prerequisite remain outside the active independent-work goal.
