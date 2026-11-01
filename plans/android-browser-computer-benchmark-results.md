@@ -2,7 +2,7 @@
 
 ## Status and evidence
 
-Independent collection and review are complete. The [full plan](android-browser-computer-benchmark.md) remains In Progress for the separate assisted phase.
+Warm-session collection is in progress. The [full plan](android-browser-computer-benchmark.md) preserves the earlier fixture and anonymous-web results as historical datasets. Live logins are setup only; sign-outs and repeated login comparisons are excluded.
 
 Primary dataset: `.local/android-browser-comparison/main-reset-verified/` on this Mac. It contains the frozen protocol/environment, incremental traces, original results, independent reviews, `audit.json`, `summary.json`, `report.html` and `assisted-queue.json`. Collection ran on November 1, 2026, 03:27–04:10 UTC (October 31 locally), using implementation `1b3bb0e` and reset correction `d136e5a`.
 
@@ -57,26 +57,27 @@ The earlier `main-20261101/` dataset is excluded from primary aggregates. Androi
 
 ## Guidance recommendation
 
-Keep service/API preference and current production prompts unchanged pending review. For this Amazon offer-panel workflow, the evidence supports computer interaction as a fallback after browser retrieval fails; repeating the same failed browser interaction has low value. Report the blocker and missing facts explicitly.
+The historical dataset supports keeping service/API preference and current production prompts unchanged pending the warm-session review. For this Amazon offer-panel workflow, the evidence supports computer interaction as a fallback after browser retrieval fails; repeating the same failed browser interaction has low value. Report the blocker and missing facts explicitly.
 
-Native Android is viable for supported private-fill flows, but current evidence does not justify a universal Android-first rule. Test the live assisted cases before ranking app access against browser/computer access. Unsupported native login destinations, WebViews, an occupied phone or a device challenge require another supported method or a human handoff. Structured or bulk web work was not measured here.
+Native Android is viable for supported private-fill flows, but current evidence does not justify a universal Android-first rule. Use the warm-session collection before ranking app access against browser/computer access. Unsupported native login destinations, WebViews, an occupied phone or a device challenge require another supported method or a human handoff. Structured or bulk web work was not measured here.
 
-## Separate assisted phase
+## Current warm-session collection
 
-The validated manifest has **27 samples**, preserving source links to all 21 deferred main cells, then appending six Apple Store browser/computer samples last.
+Amazon and Facebook native apps, Amazon web, Facebook web and Apple Store web have verified logins. Browser automation and computer use share the persistent execution Chromium profile. Android Chrome has a separate cookie store; any Apple authentication challenge is queued after independent work.
 
-1. Prepare matching Amazon and Facebook accounts through Pal's private UI/account picker. Never enter credentials or verification codes in benchmark chat. Verify native login surfaces and trusted app signer/origin mappings after setup; the current real-app mapping is empty. Unsupported native surfaces retain an explicit capability outcome.
-2. Resolve Amazon's Android permission/setup screen. Confirm account, marketplace and delivery context for matched live comparisons. Facebook reaches its installed app, but no eligible input fields were observed in preflight.
-3. Run the deferred account/order/event/product comparisons, handling challenges through the existing private UI or directly on the device. User authorization for benchmark sign-outs remains in effect.
-4. Confirm the intended Apple Store URL (planned `https://www.apple.com/shop/account/home`), then execute its six samples last. Passkey-only paths without field filling must be labeled accordingly.
+The current matrix contains 27 Amazon order/product and Facebook event samples, followed by nine Apple account-access checks across browser, computer and Android Chrome. Each method has three repetitions. Facebook uses the identical public event [Quarry Lakes 25th Anniversary Celebration](https://www.facebook.com/events/1711829129869706/); no RSVP or other account mutation is requested.
+
+Datasets are `.local/android-browser-comparison/warm-retrieval/` and `.local/android-browser-comparison/warm-apple/`. Original outcomes and timing remain unchanged; independent reviews record incomplete retrieval as failure even when the model honestly reports missing facts. A reported authentication blocker alone does not prove a missing login: the first browser order sample read authenticated order details, then a follow-up worker inspected a remaining sign-in tab and withheld the result.
+
+Timing covers the Task stream, delegation, UI interaction and final answer. Setup and human wait are excluded. Browser pages are opened before timing, while Android app/URL navigation occurs inside the measured task. Native/web layout, delivery context, caches and this starting-navigation difference limit causal speed comparisons. These are operational retrieval trials, not a navigation-normalized microbenchmark.
 
 ```sh
-python3 backend/scripts/browser-benchmark/run.py --suite interaction --phase assisted \
-  --parent .local/android-browser-comparison/main-reset-verified \
-  --output .local/android-browser-comparison/ASSISTED
+python3 backend/scripts/browser-benchmark/run.py --suite interaction --phase warm \
+  --output .local/android-browser-comparison/warm-retrieval
+# After all 27 samples and verified cleanup:
+python3 backend/scripts/browser-benchmark/run.py --suite interaction --phase warm \
+  --cases apple-store --output .local/android-browser-comparison/warm-apple
 ```
-
-Independent execution is complete; the full comparison plan remains open until assisted coverage and final recommendations are reviewed.
 
 ## Validation and cleanup
 
