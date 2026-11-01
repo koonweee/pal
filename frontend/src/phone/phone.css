@@ -35,17 +35,18 @@
 .phone-navigation {
   display: flex;
   justify-content: space-around;
-  flex: 0 0 26px;
+  flex: 0 0 34px;
+  align-self: center;
+  align-items: center;
+  max-width: 100%;
   gap: 4px;
 }
 .phone-navigation .pal-icon-action {
-  flex: 1;
-  height: 26px;
-  min-height: 26px;
+  --pal-icon-action-size: 32px;
 }
 .phone-navigation svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 .phone-status {
   position: absolute;

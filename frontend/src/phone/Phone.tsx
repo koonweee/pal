@@ -9,7 +9,13 @@ import {
   RefreshCw,
   X,
 } from 'lucide-react';
-import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+} from 'react';
 import {
   ScrcpyControlMessageWriter,
   ScrcpyOptions3_3_3,
@@ -28,6 +34,7 @@ import './phone.css';
 export function Phone({ onClose }: { onClose(): void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const controller = useRef<ScrcpyControlMessageWriter | undefined>(undefined);
+  const [previewWidth, setPreviewWidth] = useState<number>();
   const [pasting, setPasting] = useState(false);
   const [pasteError, setPasteError] = useState('');
   const [retry, setRetry] = useState(0);
@@ -156,6 +163,15 @@ export function Phone({ onClose }: { onClose(): void }) {
       setPasting(false);
     }
   }
+  useLayoutEffect(() => {
+    const screen = canvas.current;
+    if (!screen) return;
+    const observer = new ResizeObserver(() => {
+      setPreviewWidth(screen.getBoundingClientRect().width);
+    });
+    observer.observe(screen);
+    return () => observer.disconnect();
+  }, [retry, ready]);
   function key(keyCode: AndroidKeyCode) {
     const c = controller.current;
     if (c)
@@ -302,7 +318,7 @@ export function Phone({ onClose }: { onClose(): void }) {
               }}
             />
           </div>
-          <div className="phone-navigation">
+          <div className="phone-navigation" style={{ width: previewWidth }}>
             <IconAction
               label="Phone back"
               disabled={!ready}
