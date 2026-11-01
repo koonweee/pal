@@ -414,7 +414,7 @@ try {
   ctx = observer.contexts()[0];
   worker = ctx
     .serviceWorkers()
-    .find((entry) => entry.url().endsWith('/pal-task-groups.js'));
+    .find((entry) => /\/pal-task-groups(?:\.[a-f0-9]{16})?\.js$/.test(entry.url()));
   assert.ok(worker);
   assert.equal(
     (await service.groups()).length,

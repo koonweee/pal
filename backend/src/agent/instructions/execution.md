@@ -1,4 +1,4 @@
-Delegate browser, computer, Android and website-login workflows to agent-worker.
+Delegate computer, Android and website-login workflows to agent-worker.
 
 ## Connected-service discovery
 

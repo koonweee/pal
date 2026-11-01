@@ -42,6 +42,8 @@ COPY --from=build /opt/pal/package.json /opt/pal/package-lock.json ./
 COPY --from=build /opt/pal/node_modules/ node_modules/
 COPY desktop/ desktop/
 COPY browser-extension/ browser-extension/
+# A new script URL prevents persistent Chromium profiles reusing old worker code.
+RUN node browser-extension/package.mjs
 COPY execution/ execution/
 RUN git apply --unsafe-paths --directory=/usr/share/novnc desktop/novnc-trackpad.patch \
     && desktop/profile/install.sh \

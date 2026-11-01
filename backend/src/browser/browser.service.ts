@@ -19,19 +19,29 @@ export interface BrowserGroup {
   groupId: number;
   lastActivity: number;
   sessions?: string[];
+  computerSessions?: string[];
   tabs?: {
     id: number;
     targetId?: string;
     url?: string;
     title?: string;
     sessionId?: string;
+    active?: boolean;
+    windowId?: number;
   }[];
 }
 type CliResult =
   | { success: true; data: Record<string, unknown>; error: null }
   | { success: false; data: Record<string, unknown> | null; error: string };
 interface GroupRequest {
-  action: 'get' | 'list' | 'group' | 'touch' | 'close' | 'close_session';
+  action:
+    | 'get'
+    | 'list'
+    | 'group'
+    | 'touch'
+    | 'close'
+    | 'close_session'
+    | 'computer_prepare';
   taskId?: string;
   title?: string;
   targetId?: string;
@@ -48,6 +58,11 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
   private readonly operations = new Map<string, number>();
   private activeTasks: () => string[] = () => [];
   private closing = false;
+  private computerOwner?: {
+    taskId: string;
+    workerId: string;
+    ready?: Promise<void>;
+  };
 
   constructor(
     @Inject(ConfigService) private readonly config: ConfigService,
@@ -339,8 +354,42 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Resolve the CLI session's pinned target, then enforce group/session ownership. */
+  /** Resolve the active owned computer tab, or an internal CLI session's pinned target. */
   async selectedPage(taskId: string, workerId?: string) {
+    const owned = (await this.groups()).find(
+      (group) => group.taskId === taskId,
+    );
+    const identity = this.identity(taskId, workerId);
+    if (owned?.computerSessions?.includes(identity)) {
+      const active = owned.tabs?.find(
+        (tab) => tab.active && tab.sessionId === identity,
+      );
+      if (!active?.targetId)
+        throw new Error(
+          'Select a tab in your owned browser window before secure inspection',
+        );
+      const browser = await this.connect();
+      const find = async () => {
+        for (const page of browser.contexts()[0].pages()) {
+          const session = await page.context().newCDPSession(page);
+          try {
+            const { targetInfo } = await session.send('Target.getTargetInfo');
+            if (targetInfo.targetId === active.targetId) return page;
+          } finally {
+            await session.detach();
+          }
+        }
+      };
+      // Chrome target creation can precede Playwright Page initialization.
+      const deadline = Date.now() + 10_000;
+      do {
+        const page = await find();
+        if (page) return page;
+        await delay(100);
+      } while (Date.now() < deadline);
+      throw new Error('Browser tab is unavailable');
+    }
+
     const result = await this.command(
       taskId,
       ['tab', 'list'],
@@ -412,7 +461,47 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async prepareComputer(taskId: string, workerId: string) {
+    const owner = this.computerOwner;
+    if (owner && (owner.taskId !== taskId || owner.workerId !== workerId))
+      throw new Error('Desktop is busy with another interaction worker');
+    if (!owner) {
+      const current = { taskId, workerId, ready: Promise.resolve() };
+      this.computerOwner = current;
+      current.ready = (async () => {
+        try {
+          await this.connect();
+          const task = await this.tasks.details(taskId);
+          const prepared = await this.groupRequest<{ ready: boolean } | null>({
+            action: 'computer_prepare',
+            taskId,
+            title: task.title,
+            sessionId: this.identity(taskId, workerId),
+          });
+          if (!prepared?.ready)
+            throw new Error(
+              'Computer browser setup requires the current Pal extension; restart Chromium after updating',
+            );
+        } catch (error) {
+          this.releaseComputer(taskId, workerId);
+          throw error;
+        }
+      })();
+    }
+    await this.computerOwner?.ready;
+    await this.groupRequest({ action: 'touch', taskId });
+  }
+
+  releaseComputer(taskId: string, workerId: string) {
+    if (
+      this.computerOwner?.taskId === taskId &&
+      this.computerOwner.workerId === workerId
+    )
+      this.computerOwner = undefined;
+  }
+
   async closeSession(taskId: string, workerId: string) {
+    this.releaseComputer(taskId, workerId);
     if (!(await this.existingBrowser())) return;
     const sessionId = this.identity(taskId, workerId);
     const group = await this.groupRequest<BrowserGroup | null>({
@@ -425,6 +514,7 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
   }
 
   async closeGroup(taskId: string, idleBefore?: number) {
+    if (this.computerOwner?.taskId === taskId) this.computerOwner = undefined;
     if (!(await this.existingBrowser())) return;
     const group = await this.groupRequest<BrowserGroup | null>({
       action: 'get',

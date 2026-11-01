@@ -105,13 +105,6 @@ export function loginTools(service: LoginService) {
     description:
       'Only supply when the user explicitly requests whether to stay signed in; otherwise reuse the stored website preference.',
   };
-  const actionSchema: Parameters<typeof jsonSchema>[0] = {
-    type: ['array', 'null'],
-    items: { type: 'string' },
-    minItems: 1,
-    description:
-      'Agent-browser arguments to run before inspecting, such as ["tab","new","https://example.com/login"] or ["click","@e4"].',
-  };
   const modelOutput = (output: object) => {
     if (!('image' in output) || typeof output.image !== 'string')
       return { type: 'text' as const, value: JSON.stringify(output) };
@@ -128,40 +121,36 @@ export function loginTools(service: LoginService) {
     login_inspect: createTool({
       id: 'login_inspect',
       description:
-        'Inspect editable inputs in your selected browser tab or target Android phone. Optional action runs agent-browser arguments before inspection. Returns opaque input refs, field metadata, matching account IDs/labels and a screenshot (masked for browser, unmasked for Android). For Android, supply the account website for vault matching; installed apps require no registration. Android accepts no browser action. Assign username/password, ordered code refs, or cardholderName/number/expiry/expMonth/expYear/securityCode refs to secure_fill or secure_entry_request. Never read existing values. Reinspect after navigation or stale refs; after a loading page or action failure inspect without repeating action.',
+        'Inspect editable inputs in your selected browser tab or target Android phone. Returns opaque input refs, field metadata, matching account IDs/labels and a screenshot (masked for browser, unmasked for Android). For Android, supply the account website for vault matching; installed apps require no registration. Assign username/password, ordered code refs, or cardholderName/number/expiry/expMonth/expYear/securityCode refs to secure_fill or secure_entry_request. Never read existing values. Reinspect after navigation or stale refs; after a loading page inspect again.',
       inputSchema: jsonSchema<{
-        action?: string[] | null;
         target?: 'browser' | 'android' | null;
         website?: string | null;
       }>({
         type: 'object',
-        properties: {
-          action: actionSchema,
-          ...(service.androidEnabled
-            ? {
-                website: {
-                  type: ['string', 'null'],
-                  description:
-                    'HTTPS account website for Android vault matching, such as https://www.amazon.com. Required for Android; browser uses its actual page origin.',
-                },
-                target: {
-                  type: ['string', 'null'],
-                  enum: ['browser', 'android', null],
-                  description:
-                    'Browser by default; Android inspects the configured phone.',
-                },
-              }
-            : {}),
-        },
+        properties: service.androidEnabled
+          ? {
+              website: {
+                type: ['string', 'null'],
+                description:
+                  'HTTPS account website for Android vault matching, such as https://www.amazon.com. Required for Android; browser uses its actual page origin.',
+              },
+              target: {
+                type: ['string', 'null'],
+                enum: ['browser', 'android', null],
+                description:
+                  'Browser by default; Android inspects the configured phone.',
+              },
+            }
+          : {},
         additionalProperties: false,
       }),
-      execute: ({ action, target, website }, context) => {
+      execute: ({ target, website }, context) => {
         const { taskId, workerId } = identity(context);
         return safe(() =>
           service.inspect(
             taskId,
             workerId,
-            action ?? undefined,
+            undefined,
             context?.abortSignal,
             target ?? 'browser',
             website ?? undefined,
@@ -212,12 +201,11 @@ export function loginTools(service: LoginService) {
     secure_fill: createTool({
       id: 'secure_fill',
       description:
-        'Fill inspected username/password refs from a matching vault account without exposing values. Pass only opaque refs from the latest login_inspect; never pass labels or values. Password and reusable PIN roles require password inputs. Omit accountId for automatic reuse or an ambiguity picker. Code refs return input_required. Card refs open the private card picker; omit accountId, action and keepMeSignedIn for cards. Card filling never submits a purchase. Optional action runs only after successful filling. actionStatus failed means filling succeeded: inspect without action and do not refill. Without action only fills. Android accepts login/code fields; omit browser action and keepMeSignedIn. Returns session-persistence intent; filling does not prove authentication.',
+        'Fill inspected username/password refs from a matching vault account without exposing values. Pass only opaque refs from the latest login_inspect; never pass labels or values. Password and reusable PIN roles require password inputs. Omit accountId for automatic reuse or an ambiguity picker. Code refs return input_required. Card refs open the private card picker; omit accountId and keepMeSignedIn for cards. Card filling never submits a purchase. Filling does not click submit; continue with computer or Android tools after filling. Android accepts login/code fields; omit keepMeSignedIn. Returns session-persistence intent; filling does not prove authentication.',
       inputSchema: jsonSchema<{
         fields: FieldInput;
         accountId?: string | null;
         keepMeSignedIn?: boolean | null;
-        action?: string[] | null;
       }>({
         type: 'object',
         properties: {
@@ -228,12 +216,11 @@ export function loginTools(service: LoginService) {
               'Only for an explicit user choice of a matching saved account.',
           },
           keepMeSignedIn: keepSchema,
-          action: actionSchema,
         },
         required: ['fields'],
         additionalProperties: false,
       }),
-      execute: ({ fields, accountId, keepMeSignedIn, action }, context) => {
+      execute: ({ fields, accountId, keepMeSignedIn }, context) => {
         const { taskId, workerId } = identity(context);
         return safe(() =>
           service.fill(
@@ -242,7 +229,7 @@ export function loginTools(service: LoginService) {
             accountId ?? undefined,
             workerId,
             keepMeSignedIn ?? undefined,
-            action ?? undefined,
+            undefined,
             context?.abortSignal,
           ),
         );

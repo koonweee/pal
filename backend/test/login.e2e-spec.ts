@@ -1079,17 +1079,26 @@ it('recovers code requests after restart, bounds attempts, times out, and resume
   }
 });
 
-it('acts before masked inspection across new tabs, delayed navigation, same-page updates and failures', async () => {
+it('inspects the selected page and fills privately without browser navigation commands', async () => {
   const browser = await chromium.launch({
     channel: 'chrome',
     executablePath: process.env.TEST_CHROMIUM_PATH,
     headless: true,
   });
-  const context = await browser.newContext();
+  const page = await browser.newPage();
+  await page.route('https://computer.example.test/**', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: `<input autocomplete="username"><input type="password" autocomplete="current-password"><button onclick="document.body.innerHTML='<input autocomplete=one-time-code>'">Sign in</button>`,
+    }),
+  );
+  await page.goto('https://computer.example.test/login');
   const task = await fixture.app
     .get(TasksService)
-    .create({ title: 'Action inspection', goal: 'Inspect after navigation' });
-  const login = fixture.app.get(LoginService);
+    .create({
+      title: 'Computer private fill',
+      goal: 'Fill without navigation',
+    });
   const workerId = randomUUID();
   const caller = {
     requestContext: new RequestContext([
@@ -1099,212 +1108,54 @@ it('acts before masked inspection across new tabs, delayed navigation, same-page
     ]),
     observe: noopObserve,
   };
-  let releaseStep!: () => void;
-  const step = new Promise<void>((resolve) => {
-    releaseStep = resolve;
-  });
-  let requested = false;
-  await context.route('https://action.example.test/**', async (route) => {
-    const path = new URL(route.request().url()).pathname;
-    if (path === '/step') {
-      requested = true;
-      await step;
-      return route.fulfill({ json: {} });
-    }
-    return route.fulfill({
-      contentType: 'text/html',
-      body:
-        path === '/password'
-          ? `<input type="password" autocomplete="current-password" value="MASKED_INITIAL"><button onclick="if(document.querySelector('input').value==='SENTINEL_PASSWORD')location.href='/verify'">Sign in</button>`
-          : path === '/verify'
-            ? '<input autocomplete="one-time-code">'
-            : '<input autocomplete="username"><button onclick="fetch(\'/step\').then(()=>location.href=\'/password\')">Next</button>',
-    });
-  });
-  let current = await context.newPage();
   const selected = vi
     .spyOn(fixture.app.get(BrowserService), 'selectedPage')
-    .mockImplementation(async () => current);
+    .mockResolvedValue(page);
   const command = vi
     .spyOn(fixture.app.get(BrowserService), 'command')
-    .mockImplementation(async (_id, args) => {
-      if (args[0] === 'fail')
-        return { success: false, data: null, error: 'SECRET_PROVIDER_ERROR' };
-      if (args[0] === 'tab') {
-        current = await context.newPage();
-        await current.goto(args[2]);
-      } else if (args[0] === 'click') await current.locator('button').click();
-      else if (args[0] === 'eval') await current.evaluate(args[1]);
-      return { success: true, data: {}, error: null };
-    });
-  const repository = fixture.app.get(LoginRepository);
-  const stored = vi.spyOn(repository, 'inspection');
+    .mockRejectedValue(new Error('Unexpected browser command'));
+  const vault = fixture.app.get(BitwardenService);
   const item = {
     id: randomUUID(),
-    name: 'Personal',
+    name: 'Fixture',
     type: 1,
     login: { username: 'SENTINEL_USER', password: 'SENTINEL_PASSWORD' },
   };
-  let items = [item, { ...item, id: randomUUID(), name: 'Work' }];
-  const vault = fixture.app.get(BitwardenService);
   const configured = vi.spyOn(vault, 'configured', 'get').mockReturnValue(true);
   const matching = vi
     .spyOn(vault, 'matching')
-    .mockImplementation(async () => structuredClone(items));
+    .mockImplementation(async () => [structuredClone(item)]);
   try {
-    const tools = loginTools(login);
-    const tool = tools.login_inspect;
-    const opened = await tool.execute!(
-      { action: ['tab', 'new', 'https://action.example.test/login'] },
-      caller,
-    );
-    if (!('inputs' in opened)) throw new Error('Expected initial inspection');
-    expect(opened.inputs[0].autocomplete).toBe('username');
-    expect(command).toHaveBeenCalledWith(
-      task.id,
-      ['tab', 'new', 'https://action.example.test/login'],
-      undefined,
-      workerId,
-    );
-    const beforeStored = stored.mock.calls.length;
-    const navigating = tool.execute!({ action: ['click', 'button'] }, caller);
-    await until(() => requested);
-    expect(stored).toHaveBeenCalledTimes(beforeStored);
-    releaseStep();
-    const next = await navigating;
-    if (!('inputs' in next)) throw new Error('Expected password inspection');
-    expect(next.inputs.map((input) => input.type)).toEqual(['password']);
-    expect(JSON.stringify(next.inputs)).not.toContain('SENTINEL');
-    await expect(
-      login.fill(
-        task.id,
-        { username: opened.inputs[0].ref },
-        undefined,
-        workerId,
-      ),
-    ).rejects.toMatchObject({ code: 'conflict' });
-    const fields = { password: next.inputs[0].ref };
-    let commands = command.mock.calls.length;
-    const picker = await tools.secure_fill.execute!(
-      { fields, action: ['click', 'button'] },
-      caller,
-    );
-    expect(picker).toMatchObject({ status: 'awaiting_user' });
-    expect(command).toHaveBeenCalledTimes(commands);
-    expect((await fixture.app.get(TasksService).details(task.id)).status).toBe(
-      'needs-input',
-    );
-    if (!('requestId' in picker)) throw new Error('Expected picker');
-    await repository.finish(picker.requestId);
-    items = [item];
-    const wrongOwner = await tools.secure_fill.execute!(
-      { fields, action: ['click', 'button'] },
-      {
-        requestContext: new RequestContext([
-          [MASTRA_THREAD_ID_KEY, 'pal-task:' + task.id],
-        ]),
-        observe: noopObserve,
-      },
-    );
-    expect(wrongOwner).toMatchObject({ status: 'error', code: 'conflict' });
-    expect(command).toHaveBeenCalledTimes(commands);
-    const filled = await tools.secure_fill.execute!(
-      { fields, action: ['click', 'button'] },
-      caller,
-    );
+    const tools = loginTools(fixture.app.get(LoginService));
+    const inspected = await tools.login_inspect.execute!({}, caller);
+    if (!('inputs' in inspected)) throw Error('Expected inspected fields');
+    const fields = {
+      username: inspected.inputs[0].ref,
+      password: inspected.inputs[1].ref,
+    };
+    const filled = await tools.secure_fill.execute!({ fields }, caller);
     expect(filled).toMatchObject({ status: 'filled', accountId: item.id });
-    if (!('inputs' in filled))
-      throw new Error('Expected native inspection after fill');
-    expect(filled.inputs[0].autocomplete).toBe('one-time-code');
-    expect(current.url()).toBe('https://action.example.test/verify');
-    expect(command).toHaveBeenLastCalledWith(
-      task.id,
-      ['click', 'button'],
-      undefined,
-      workerId,
+    expect(await page.locator('input[type=password]').inputValue()).toBe(
+      'SENTINEL_PASSWORD',
     );
-    const media = tools.secure_fill.toModelOutput!(filled);
-    expect(media).toMatchObject({
-      type: 'content',
-      value: [{ type: 'text' }, { type: 'media', mediaType: 'image/png' }],
+    expect(JSON.stringify(filled)).not.toContain('SENTINEL');
+    expect(await page.locator('button').count()).toBe(1);
+    expect(command).not.toHaveBeenCalled();
+    // Navigation is a separate UI operation; fresh inspection follows it.
+    await page.locator('button').click();
+    const next = await tools.login_inspect.execute!({}, caller);
+    if (!('inputs' in next)) throw Error('Expected code inspection');
+    expect(next.inputs[0].autocomplete).toBe('one-time-code');
+    expect(await tools.secure_fill.execute!({ fields }, caller)).toMatchObject({
+      status: 'error',
+      code: 'conflict',
     });
-    expect(JSON.stringify(media)).not.toContain('SENTINEL');
-    if (media.type !== 'content') throw new Error('Expected media');
-    expect(JSON.stringify(media.value[0])).not.toContain(filled.image);
-    commands = command.mock.calls.length;
-    const needsCode = await tools.secure_fill.execute!(
-      { fields: { code: [filled.inputs[0].ref] }, action: ['click', 'button'] },
-      caller,
-    );
-    expect(needsCode).toMatchObject({ status: 'input_required' });
-    const stale = await tools.secure_fill.execute!(
-      { fields, action: ['click', 'button'] },
-      caller,
-    );
-    expect(stale).toMatchObject({ status: 'error', code: 'conflict' });
-    expect(command).toHaveBeenCalledTimes(commands);
-    const samePage = await tool.execute!(
-      {
-        action: [
-          'eval',
-          'document.body.innerHTML="<input autocomplete=one-time-code>"',
-        ],
-      },
-      caller,
-    );
-    if (!('inputs' in samePage))
-      throw new Error('Expected same-page inspection');
-    expect(samePage.inputs[0].autocomplete).toBe('one-time-code');
-    const calls = command.mock.calls.length;
-    expect(await tool.execute!({ action: null }, caller)).toHaveProperty(
-      'inputs',
-    );
-    expect(command).toHaveBeenCalledTimes(calls);
-    const beforeFailure = stored.mock.calls.length;
-    const failed = await tool.execute!({ action: ['fail'] }, caller);
-    expect(failed).toMatchObject({ status: 'error', code: 'unavailable' });
-    expect(JSON.stringify(failed)).not.toContain('SECRET');
-    expect(stored).toHaveBeenCalledTimes(beforeFailure);
-    await current.goto('https://action.example.test/password');
-    const fresh = await tool.execute!({}, caller);
-    if (!('inputs' in fresh)) throw new Error('Expected fresh password field');
-    const freshFields = { password: fresh.inputs[0].ref };
-    commands = command.mock.calls.length;
-    items = [];
-    const missing = await tools.secure_fill.execute!(
-      { fields: freshFields, action: ['click', 'button'] },
-      caller,
-    );
-    expect(missing).toMatchObject({ status: 'error', code: 'conflict' });
-    expect(command).toHaveBeenCalledTimes(commands);
-    items = [item];
-    const failedAfterFill = await tools.secure_fill.execute!(
-      { fields: freshFields, action: ['fail'] },
-      caller,
-    );
-    expect(failedAfterFill).toMatchObject({
-      status: 'filled',
-      actionStatus: 'failed',
-    });
-    expect(JSON.stringify(failedAfterFill)).toContain('Fields were filled');
-    expect(JSON.stringify(failedAfterFill)).not.toContain('SECRET');
-    expect(stored).toHaveBeenCalledTimes(beforeFailure + 1);
-    const plain = await tools.secure_fill.execute!(
-      { fields: freshFields, action: null },
-      caller,
-    );
-    expect(plain).toMatchObject({ status: 'filled' });
-    expect(plain).not.toHaveProperty('image');
-    expect(tools.secure_fill.toModelOutput!(plain)).toMatchObject({
-      type: 'text',
-    });
+    expect(command).not.toHaveBeenCalled();
   } finally {
-    releaseStep();
-    matching.mockRestore();
-    configured.mockRestore();
-    stored.mockRestore();
     selected.mockRestore();
     command.mockRestore();
+    configured.mockRestore();
+    matching.mockRestore();
     await browser.close();
   }
 });

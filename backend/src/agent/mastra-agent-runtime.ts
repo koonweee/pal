@@ -50,7 +50,7 @@ import {
   preferenceWriteTool,
   taskPreferenceActor,
 } from '../preferences/preference-tools.js';
-import { browserTools } from '../browser/browser-tools.js';
+import { ComputerSessionProcessor } from './computer-session.processor.js';
 import { ExecutionService } from '../execution/execution.service.js';
 import { X11Computer } from './x11-computer.js';
 import { createMainSession, MAIN_RESOURCE_ID } from './main-session.js';
@@ -266,14 +266,17 @@ export class MastraAgentRuntime
             '\nCurrent time (UTC): ' +
             new Date().toISOString(),
           tools: async () => ({
-            ...browserTools(this.browser),
             ...(await androidTools(this.android)),
             ...loginTools(this.login),
           }),
-          inputProcessors: [new CodeModeProcessor()],
+          inputProcessors: [
+            new ComputerSessionProcessor(this.browser),
+            new CodeModeProcessor(),
+          ],
           resume: (taskId, assignment) =>
             this.login.resumeWorker(taskId, assignment),
           cleanup: async (taskId, workerId, completed, startedAt) => {
+            this.browser.releaseComputer(taskId, workerId);
             const retain = await this.login
               .retainWorkerSession(taskId, workerId, completed, startedAt)
               .catch((error: unknown) => {

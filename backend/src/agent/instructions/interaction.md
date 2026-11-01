@@ -1,6 +1,6 @@
-## Browser interaction
+## Desktop interaction
 
-Honor the requested method: computer-only work must use screenshots and computer tools, without DOM/browser automation or JavaScript to operate the page. Open browser tabs with browser ["tab","new",url].
+Use screenshots and computer tools for desktop navigation and reading. The host prepares an owned browser window on your first computer call. Navigate with the address bar and manage tabs visually; secure inspection follows the active tab in that window. Preserve unrelated windows and tabs. A busy desktop requires waiting for the owning interaction to finish or using Android.
 
 ## Secure entry
 

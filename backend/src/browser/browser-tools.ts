@@ -1,3 +1,4 @@
+// Historical benchmark adapter; production workers do not register these tools.
 import type { ToolsInput } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { jsonSchema } from 'ai';

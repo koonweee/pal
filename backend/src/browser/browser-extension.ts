@@ -140,6 +140,7 @@ export async function extensionRequest<T>(
 
 function isExtension(url: string) {
   return (
-    url.startsWith('chrome-extension://') && url.endsWith('/pal-task-groups.js')
+    url.startsWith('chrome-extension://') &&
+    /\/pal-task-groups(?:\.[a-f0-9]{16})?\.js$/.test(url)
   );
 }

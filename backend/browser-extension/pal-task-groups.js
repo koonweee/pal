@@ -67,19 +67,31 @@ async function group(taskId, title, targetId, sessionId) {
 async function describe(value, all, targets) {
   return {
     ...value,
+    computerSessions: Object.values(all)
+      .filter(
+        (entry) =>
+          entry.taskId === value.taskId &&
+          entry.windowId !== undefined &&
+          entry.sessionId,
+      )
+      .map((entry) => entry.sessionId),
     sessions: Object.entries(all)
       .filter(
         ([key, session]) =>
           key.startsWith('session:') && session.taskId === value.taskId,
       )
       .map(([, session]) => session.sessionId),
-    tabs: (await members(value.groupId)).map(({ id, url, title }) => ({
-      id,
-      url,
-      title,
-      targetId: targets.find((entry) => entry.tabId === id)?.id,
-      sessionId: all['tab:' + id]?.sessionId,
-    })),
+    tabs: (await members(value.groupId)).map(
+      ({ id, url, title, active, windowId }) => ({
+        id,
+        url,
+        title,
+        active,
+        windowId,
+        targetId: targets.find((entry) => entry.tabId === id)?.id,
+        sessionId: all['tab:' + id]?.sessionId,
+      }),
+    ),
   };
 }
 
@@ -90,6 +102,54 @@ globalThis.palBrowser = async function ({
   targetId,
   sessionId = taskId,
 }) {
+  if (action === 'computer_prepare') {
+    const all = await chrome.storage.session.get(null);
+    const session = all['session:' + sessionId];
+    const value = all[prefix + taskId];
+    const owned = value
+      ? (await members(value.groupId)).filter(
+          (tab) => all['tab:' + tab.id]?.sessionId === sessionId,
+        )
+      : [];
+    let tab = owned.find((tab) => tab.active) ?? owned.at(-1);
+    if (!tab) {
+      if (value && (await members(value.groupId)).length) {
+        const group = await chrome.tabGroups.get(value.groupId);
+        tab = await chrome.tabs.create({
+          windowId: group.windowId,
+          url: 'about:blank',
+        });
+      } else {
+        const window = await chrome.windows.create({
+          url: 'about:blank',
+          focused: true,
+        });
+        tab = window.tabs[0];
+      }
+      const target = (await chrome.debugger.getTargets()).find(
+        (entry) => entry.tabId === tab.id,
+      );
+      if (!target) throw new Error('Computer browser tab is unavailable');
+      await group(taskId, title, target.id, sessionId);
+      tab = await chrome.tabs.get(tab.id);
+    }
+    await chrome.storage.session.set({
+      ['computer:' + tab.windowId]: {
+        taskId,
+        sessionId,
+        windowId: tab.windowId,
+      },
+      ['session:' + sessionId]: {
+        ...session,
+        taskId,
+        sessionId,
+        windowId: tab.windowId,
+      },
+    });
+    await chrome.tabs.update(tab.id, { active: true });
+    await chrome.windows.update(tab.windowId, { focused: true });
+    return { ready: true };
+  }
   if (action === 'list' || action === 'get') {
     const all = await chrome.storage.session.get(null);
     const targets = await chrome.debugger.getTargets();
@@ -134,19 +194,24 @@ globalThis.palBrowser = async function ({
 // Popups inherit both the opener's current group and its session. Human-moved
 // tabs are preserved because cleanup always checks current group membership.
 chrome.tabs.onCreated.addListener(async (tab) => {
-  if (!tab.openerTabId) return;
   try {
-    const opener = await chrome.tabs.get(tab.openerTabId);
     const all = await chrome.storage.session.get(null);
-    const owner = all['tab:' + opener.id];
-    if (!owner || all[prefix + owner.taskId]?.groupId !== opener.groupId)
-      return;
-    const group = await chrome.tabGroups.get(opener.groupId);
+    const opener = tab.openerTabId
+      ? await chrome.tabs.get(tab.openerTabId)
+      : undefined;
+    const owner = opener
+      ? all['tab:' + opener.id]
+      : all['computer:' + tab.windowId];
+    const value = owner && all[prefix + owner.taskId];
+    if (!value || (opener && value.groupId !== opener.groupId)) return;
+    const group = await chrome.tabGroups.get(value.groupId);
     if (tab.windowId !== group.windowId)
       await chrome.tabs.move(tab.id, { windowId: group.windowId, index: -1 });
-    await chrome.tabs.group({ tabIds: [tab.id], groupId: opener.groupId });
-    await chrome.storage.session.set({ ['tab:' + tab.id]: owner });
+    await chrome.tabs.group({ tabIds: [tab.id], groupId: value.groupId });
+    await chrome.storage.session.set({
+      ['tab:' + tab.id]: { taskId: owner.taskId, sessionId: owner.sessionId },
+    });
   } catch (error) {
-    console.warn('Pal popup grouping failed', error);
+    console.warn('Pal computer tab grouping failed', error);
   }
 });
