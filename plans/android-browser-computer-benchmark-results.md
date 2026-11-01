@@ -91,3 +91,16 @@ Sanitized local benchmark artifacts occupy about **5.2 MB** and are retained for
 | Benchmark method inventory | Enforce one UI method and shared private filling per sample | Task / interaction worker | Always on during benchmarks |
 | Authentication and Android procedures | Reuse existing skills during comparison | Task / interaction worker | Discovered on demand |
 | Production method priority | Recommendations await live assisted evidence/review | Main / Task | Guidance only |
+
+
+## Signed-in Amazon Android follow-up — stopped
+
+Dataset: `.local/android-browser-comparison/amazon-products-signed-in/`, November 1, 2026, 05:10–05:32 UTC. Preflight found one matching Amazon vault account and no native setup blocker. The running backend/Android images include secure-fill simplification; screenshot masking was still deployed. The source-only mask removal was not deployed, per user instruction.
+
+Two completed native Amazon product attempts timed out at 601.3 and 601.4 seconds. Both produced partial worker findings, with no final complete comparison. The first opened a Bose charger bundle and failed to resolve the standalone variant. The second reported both models/prices but left Sony availability/link and Bose offer condition unverified; the share sheet offered Copy, but the worker could not retrieve its URL through the permitted tools. These are worker-reported observations, not independently validated product facts. Neither reported a CAPTCHA or login challenge.
+
+The user stopped collection. The third attempt had already started and was interrupted at 96.1 seconds. The harness labels aborts `timeout`; exclude this interrupted attempt from completed-run reliability counts. Two completed attempts yielded zero complete retrievals. No order cases ran. Do not combine this with a three-repetition result or infer general native-app reliability from it.
+
+Earlier Android acceptance covered Chrome navigation, native Settings lookup, and synthetic native login/draft/private-fill flows. The original live Amazon Android cells were deferred before retrieval. This follow-up exercises multi-product search, exact variant/offer selection, availability and share-link retrieval in the real signed-in Amazon app.
+
+Runtime restoration and scratch database/fixture cleanup are verified. Local evidence (~740 KB) is retained. Investigation should distinguish inaccessible/masked visual information, native share-link tooling and repeated navigation from CAPTCHA/access friction before resuming comparisons.
