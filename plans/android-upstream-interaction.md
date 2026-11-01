@@ -33,6 +33,16 @@ Exit criteria validated: backend build/lint, adapter ownership/handoff test, And
 
 Exit criteria validated: device transition checks pass. Amazon order retrieval completes in 45 seconds. Two product attempts return in about 200 seconds: one partial and one complete with a confirmed, reversed Shopping List mis-tap. Evidence and limitations are recorded; no human-dependent flow ran.
 
+### 3. Navigation friction follow-up — complete
+
+- Check upstream ref resolution and compare fresh refs with coordinate taps on the native product screen.
+- Use existing upstream coordinate targeting on dynamic content; require same-screen visual fallback for missing accessibility content.
+- Reuse batch end observations and batch predictable actions without crossing an unknown UI decision.
+- Normalize null optional arguments in batch steps; regression-test the clipboard read that otherwise fails upstream validation.
+- Rebuild dev guidance and rerun two product comparisons and one order lookup; review completion, mutations and inspection cost.
+
+Exit criteria validated: upstream target checks, two guidance-only product runs, one order lookup and one final adapter-fix product run are reviewed. All complete with no unintended mutation observed. Batch-null regression, live device acceptance, build and lint pass; cleanup is verified. No custom navigation resolver or new tool parameters.
+
 ## Tests
 
 - Adapter integration: upstream schemas/results, worker ownership, private handoff, batch device binding and no replay after lost responses.
@@ -55,4 +65,4 @@ Ordinary interaction uses upstream; private fills retain current-target and priv
 
 ## Remaining findings
 
-Reproduce the upstream Share-ref mis-target independently before choosing a fix. Treat missing accessibility content as inconclusive until visual inspection. The diagnostic sample is insufficient to change global method priority.
+The historical Share-ref race remains unproven. Coordinate targeting on dynamic content mitigates ref drift; same-panel screenshot fallback recovered seller offers in all three product reruns. Efficiency varies with model decisions and app state. The diagnostic sample is insufficient to change global method priority.

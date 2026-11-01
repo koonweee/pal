@@ -210,7 +210,16 @@ export class AndroidService implements OnApplicationShutdown {
               throw new Error('Unsupported Android batch step.');
             return {
               name: androidActions[step.name],
-              arguments: { ...step.arguments, device: this.device },
+              // Batch arguments are an untyped record, so model-produced nulls
+              // bypass the ordinary tool schema's optional-value handling.
+              arguments: {
+                ...Object.fromEntries(
+                  Object.entries(step.arguments).filter(
+                    ([, value]) => value != null,
+                  ),
+                ),
+                device: this.device,
+              },
             };
           });
         }

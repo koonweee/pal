@@ -195,17 +195,23 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
     );
     await service.call(second, 'android_batch', {
       steps: [
-        { name: 'android_tap', arguments: { ref: '@e1', device: 'wrong' } },
+        {
+          name: 'android_tap',
+          arguments: { ref: '@e1', x: null, y: null, device: 'wrong' },
+        },
+        { name: 'android_clipboard', arguments: { text: null } },
       ],
       listElementsAtEnd: true,
     });
-    expect(calls.at(-1)?.arguments).toMatchObject({
+    expect(calls.at(-1)?.arguments).toEqual({
       device: 'usb-phone',
+      listElementsAtEnd: true,
       steps: [
         {
           name: 'mobile_click_on_screen_at_coordinates',
           arguments: { ref: '@e1', device: 'usb-phone' },
         },
+        { name: 'mobile_clipboard', arguments: { device: 'usb-phone' } },
       ],
     });
     await expect(
