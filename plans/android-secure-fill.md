@@ -54,7 +54,7 @@ Implementation tasks:
 - Use the Android destination adapter with foreground package/window/node validation and the account website for vault matching.
 - Let the interaction worker assign semantic roles from sanitized metadata and preview. Code requires an editable destination, treats password metadata as a hint, and validates every selected node before writing.
 - Revalidate immediately at each native write; never fall back to coordinates or current-focus typing for secrets. Preserve code-ref order. Report a failed/uncertain or partial fill without automatically replaying secret mutations or submitting the form.
-- Apply the same phone ownership/serialization to private submissions and model-driven operations. Define bounded reservation while awaiting private entry, cancellation, expiry, worker resume and release. A late submission cannot target another worker's screen. A released or restarted helper requires fresh inspection.
+- Apply the same phone ownership/serialization to private submissions and model-driven operations. A pending or recoverable private-entry request retains its worker's bounded reservation. Cancelling the last such request releases that exact worker immediately; another active request for the worker preserves ownership. A late submission cannot target another worker's screen. A released or restarted helper requires fresh inspection.
 - Reuse browser account-picking and private-entry UI, with target-appropriate identity and copy. Keep native flow state distinct from browser flow state even when both use the same website/account.
 
 Exit criteria:

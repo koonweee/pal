@@ -40,7 +40,7 @@ Desktop setup has reauthenticated with saved credentials and verified the accoun
 Two setup friction points are confirmed:
 
 - Android vault matching used `www.apple.com`, while the successful desktop login fields matched `idmsa.apple.com`. A fresh Android inspection with the supported account-website parameter set to `https://idmsa.apple.com` found and reused the saved account. Carry the actual login/account origin into credential reuse.
-- Cancelling the superseded identifier-entry card left its worker’s retained Android reservation, blocking the next worker. After confirming cancellation and no active entry requests, the exact stale reservation was released through `AndroidService.release`. This unblocked setup; the cancellation lifecycle issue remains unfixed.
+- Cancelling a superseded identifier-entry card left its worker’s retained Android reservation, blocking the next worker. Android ownership now terminates with the last cancelled request for that worker while remaining active when another pending or recoverable request exists.
 
 ### Timing and cleanup
 

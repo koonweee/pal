@@ -107,11 +107,32 @@ export class LoginService implements OnModuleDestroy {
     return false;
   }
 
+  private async releaseCancelledAndroid(row: LoginRequest) {
+    if (
+      row.status !== 'cancelled' ||
+      row.destination.kind !== 'android' ||
+      !row.workerId
+    )
+      return;
+    const requests = await this.repository.workerRequests(
+      row.taskId,
+      row.workerId,
+    );
+    if (
+      requests.some((request) =>
+        ['pending', 'updating', 'failed'].includes(request.status),
+      )
+    )
+      return;
+    await this.android.release(row.taskId, row.workerId);
+  }
+
   async flushNotifications() {
     if (this.notifying || !this.notify) return;
     this.notifying = true;
     try {
       for (const row of await this.repository.cleanup()) {
+        await this.releaseCancelledAndroid(row);
         if (row.status === 'failed')
           await this.tasks.update(row.taskId, { status: 'needs-input' });
         this.events.publish({ event: 'login.updated', taskId: row.taskId });
@@ -119,7 +140,8 @@ export class LoginService implements OnModuleDestroy {
       for (const row of await this.repository.active()) {
         await this.publishCard(row);
         if ((await this.tasks.details(row.taskId)).status === 'completed') {
-          await this.repository.finish(row.id);
+          const cancelled = await this.repository.finish(row.id);
+          await this.releaseCancelledAndroid(cancelled);
           await this.repository.notified(row.id, 'cancelled');
           this.events.publish({ event: 'login.updated', taskId: row.taskId });
           continue;
@@ -754,6 +776,7 @@ export class LoginService implements OnModuleDestroy {
             }
           : undefined,
       );
+      if (!input) await this.releaseCancelledAndroid(row);
       this.events.publish({ event: 'login.updated', taskId: row.taskId });
       void this.flushNotifications();
       return { id: row.id, status: row.status };

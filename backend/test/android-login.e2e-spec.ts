@@ -239,18 +239,36 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       { password: fresh.inputs[0].ref },
       workerId,
     );
+    const replacementInspection = await login.inspect(
+      task.id,
+      workerId,
+      undefined,
+      undefined,
+      'android',
+      'https://replacement.example.test',
+    );
+    const replacement = await login.request(
+      task.id,
+      { password: replacementInspection.inputs[0].ref },
+      workerId,
+    );
     await login.finish(cancelled.requestId);
+    expect(android.owns(task.id, workerId)).toBe(true);
+    await login.finish(replacement.requestId);
+    expect(android.owns(task.id, workerId)).toBe(false);
+    const nextOwner = { taskId: randomUUID(), workerId: randomUUID() };
+    await android.secure(nextOwner, { action: 'inspect' });
+    await android.release(nextOwner.taskId, nextOwner.workerId);
     const count = fills.length;
     await request(fixture.url)
       .post(`/login/requests/${cancelled.requestId}/save`)
       .send({ password: secret[1] })
       .expect(201);
     expect(fills).toHaveLength(count);
-    await android.release(task.id, workerId);
     await expect(
       login.fill(
         task.id,
-        { password: fresh.inputs[0].ref },
+        { password: replacementInspection.inputs[0].ref },
         undefined,
         workerId,
       ),
