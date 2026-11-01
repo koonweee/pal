@@ -42,6 +42,8 @@ Two setup friction points are confirmed:
 - Android vault matching used `www.apple.com`, while the successful desktop login fields matched `idmsa.apple.com`. A fresh Android inspection with the supported account-website parameter set to `https://idmsa.apple.com` found and reused the saved account. Carry the actual login/account origin into credential reuse.
 - Cancelling a superseded identifier-entry card left its worker’s retained Android reservation, blocking the next worker. Android ownership now terminates with the last cancelled request for that worker while remaining active when another pending or recoverable request exists.
 
+The first authenticated follow-up (`warm-apple-authenticated`) records three Android successes and six desktop setup errors before measured execution. Independent Android observations show the account greeting and Sign out in every repetition. A diagnostic reproduced the desktop cause: the CLI reported the newly opened target before Playwright exposed its Page. The harness now waits up to ten seconds for that owned page during setup, outside timing. A full matched rerun is required; original rows remain unchanged.
+
 ### Timing and cleanup
 
 Timing includes Task planning, delegation, interaction and final answer. Browser URL opening happens before the measured stream; order setup through first model request was 1.9–2.7 seconds on desktop versus 0.02–0.04 seconds on Android. Android navigation occurs within the task. Direct URL access, native navigation, cache and initial screen differences remain confounders. Three repetitions on one phone and desktop support task-specific guidance, not a general reliability ranking.

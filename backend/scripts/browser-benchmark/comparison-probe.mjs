@@ -357,7 +357,19 @@ scope.run = async () => {
             undefined,
             seedWorker,
           );
-          const page = await r.browser.selectedPage(task.id, seedWorker);
+          // CDP can report a new target before Playwright has initialized its
+          // Page (observed during Apple account redirects). Wait outside timing.
+          const deadline = Date.now() + 10_000;
+          let page;
+          while (!page) {
+            try {
+              page = await r.browser.selectedPage(task.id, seedWorker);
+            } catch (error) {
+              if (error.message !== 'Browser tab is unavailable' || Date.now() >= deadline)
+                throw error;
+              await new Promise((resolve) => setTimeout(resolve, 250));
+            }
+          }
           await page.bringToFront();
           if (live && scenario.login) {
             const auth =
