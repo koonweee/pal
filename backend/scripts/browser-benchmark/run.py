@@ -26,10 +26,10 @@ def selected(value, choices):
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--suite', choices=['browser-worker', 'interaction'], default='browser-worker')
-parser.add_argument('--phase', choices=['smoke', 'main', 'assisted', 'diagnostic'], default='main')
+parser.add_argument('--phase', choices=['smoke', 'main', 'assisted', 'diagnostic', 'warm'], default='main')
 parser.add_argument('--validated-smoke', type=Path, help='Passing three-arm smoke on identical harness/images; required for main collection')
 parser.add_argument('--human-wait', type=int, default=900, help='Maximum wait for private input in the separate assisted phase, seconds')
-parser.add_argument('--arms', type=lambda v: selected(v, ['browser','computer','android']), help='Methods for diagnostic runs only')
+parser.add_argument('--arms', type=lambda v: selected(v, ['browser','computer','android']), help='Methods for diagnostic or warm runs')
 parser.add_argument('--parent', type=Path, help='Completed main comparison; required for separate assisted run')
 parser.add_argument('--variants', type=lambda v: selected(v, VARIANTS), default=VARIANTS[:9])
 parser.add_argument('--cases', type=lambda v: selected(v, CASES), default=None)
@@ -45,11 +45,11 @@ parser.add_argument('--preflight-only', action='store_true')
 args = parser.parse_args()
 if args.repetitions < 1 or args.timeout < 30 or args.round_offset < 0 or args.human_wait < 1:
     parser.error('repetitions must be positive, timeout must be >= 30, and round-offset must be nonnegative')
-args.cases = args.cases or (COMPARISON_CASES[1:] if args.phase == 'assisted' else COMPARISON_CASES[:1] if args.phase == 'smoke' else COMPARISON_CASES[:4]) if args.suite == 'interaction' else args.cases or CASES[:6]
+args.cases = args.cases or (COMPARISON_CASES[1:4] if args.phase == 'warm' else COMPARISON_CASES[1:] if args.phase == 'assisted' else COMPARISON_CASES[:1] if args.phase == 'smoke' else COMPARISON_CASES[:4]) if args.suite == 'interaction' else args.cases or CASES[:6]
 if args.suite != 'interaction' and any(c in COMPARISON_CASES for c in args.cases):
     parser.error('Comparison cases require --suite interaction')
 if args.suite == 'interaction':
-    if any(c not in COMPARISON_CASES or c == 'apple-store' and args.phase != 'assisted' or c == 'staged-login' and args.phase == 'assisted' for c in args.cases):
+    if any(c not in COMPARISON_CASES or c == 'apple-store' and args.phase not in ['assisted', 'warm'] or c == 'staged-login' and args.phase in ['assisted', 'warm'] for c in args.cases):
         parser.error('Apple Store belongs only to the separate assisted phase')
     if args.phase == 'smoke' and args.cases != ['staged-login']:
         parser.error('Smoke uses only the matched fixture')
@@ -58,12 +58,19 @@ if args.suite == 'interaction':
 config = {k: getattr(args, k) for k in ['variants', 'cases', 'contexts', 'repetitions', 'timeout', 'round_offset']}
 if args.suite == 'interaction':
     config.update(suite='interaction', phase=args.phase, variants=['browser','computer'] if args.phase == 'assisted' else ['browser','computer','android'], contexts=['fresh'], parent=str(args.parent.resolve()) if args.parent else None, signOutAuthorized=True, humanWaitSeconds=args.human_wait, validatedSmoke=str(args.validated_smoke.resolve()) if args.validated_smoke else None)
-if args.arms and args.phase != 'diagnostic':
-    parser.error('--arms is only for diagnostic runs')
+if args.arms and args.phase not in ['diagnostic', 'warm']:
+    parser.error('--arms is only for diagnostic or warm runs')
 if args.phase == 'diagnostic':
     if args.suite != 'interaction' or any(c not in ['amazon-products','amazon-order'] for c in args.cases):
         parser.error('Diagnostic phase supports Amazon retrieval using existing sessions')
     config['variants'] = args.arms or ['android']
+    config['signOutAuthorized'] = False
+if args.phase == 'warm':
+    if args.suite != 'interaction' or ('apple-store' in args.cases and args.cases != ['apple-store']):
+        parser.error('Warm Apple checks must run separately after Amazon/Facebook')
+    config['variants'] = args.arms or (['browser','computer'] if args.cases == ['apple-store'] else ['browser','computer','android'])
+    if 'apple-store' in args.cases and 'android' in config['variants']:
+        parser.error('Apple Store supports browser and computer only')
     config['signOutAuthorized'] = False
 source_hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(SCRIPTS.iterdir()) if p.is_file()}
 if args.resume:

@@ -641,7 +641,7 @@ scope.run = async () => {
             workingMemory: { enabled: false },
           },
         });
-        const guidance = `\nBenchmark method: ${arm}. Use only the assigned UI method and Pal private filling. No service/API/search/shell/code-mode bypass. ${arm === 'computer' ? 'Use screenshots/mouse/keyboard for navigation; private inspection/filling are allowed. Do not supply browser actions to login tools.' : ''} ${arm === 'android' ? 'Use the native app; browser handoffs require reporting a blocker.' : ''} Preserve unrelated tabs/apps. Request credentials only through private entry, then yield. Return a setup/challenge blocker immediately when user action is required. Verify the actual destination/draft before reporting success.`;
+        const guidance = `\nBenchmark method: ${arm}. Use only the assigned UI method and Pal private filling. No service/API/search/shell/code-mode bypass. ${arm === 'computer' ? 'Use screenshots/mouse/keyboard for navigation; private inspection/filling are allowed. Do not supply browser actions to login tools.' : ''} ${arm === 'android' ? 'Use the native app; browser handoffs require reporting a blocker.' : ''} Preserve unrelated tabs/apps. ${settings.phase === 'warm' ? 'Use the existing signed-in session only. Do not sign out, fill credentials, or start private entry. Report any authentication challenge as a blocker and stop.' : 'Request credentials only through private entry, then yield.'} Return a setup/challenge blocker immediately when user action is required. Verify the actual destination/draft before reporting success.`;
         const worker = new Agent({
           id: 'comparison-worker-' + sample,
           name: 'Interaction',

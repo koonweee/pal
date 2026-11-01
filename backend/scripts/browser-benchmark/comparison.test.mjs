@@ -214,3 +214,43 @@ test('diagnostic retrieval uses selected methods and existing sessions without c
     comparisonSchedule({ phase: 'diagnostic', cases: ['apple-store'] }),
   );
 });
+
+test('warm retrieval preserves sessions, matches the public event, and separates Apple checks', () => {
+  const jobs = comparisonSchedule({
+    phase: 'warm',
+    cases: ['amazon-order', 'amazon-products', 'facebook-event'],
+  });
+  assert.equal(jobs.length, 27);
+  assert(
+    jobs.every(
+      ({ scenario }) =>
+        scenario.login === false && scenario.prompt.includes('Do not sign out'),
+    ),
+  );
+  assert(
+    jobs
+      .filter(({ scenario }) => scenario.id === 'facebook-event')
+      .every(({ scenario }) => scenario.url.endsWith('/1711829129869706/')),
+  );
+  const apple = comparisonSchedule({
+    phase: 'warm',
+    cases: ['apple-store'],
+    variants: ['browser', 'computer'],
+  });
+  assert.equal(apple.length, 6);
+  assert.throws(() =>
+    comparisonSchedule({ phase: 'warm', cases: ['apple-store'] }),
+  );
+  assert.throws(() =>
+    comparisonSchedule({ phase: 'warm', cases: ['staged-login'] }),
+  );
+  const scored = comparisonScore({
+    scenario: jobs[0].scenario,
+    boundaryValid: true,
+    privacyValid: true,
+    answer: 'Retrieved',
+    status: 'completed',
+  });
+  assert.equal(scored.reviewRequired, true);
+  assert.equal(scored.checks.actualFill, undefined);
+});

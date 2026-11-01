@@ -59,7 +59,7 @@ export function comparisonSchedule({
   variants = arms,
 }) {
   if (
-    !['smoke', 'main', 'assisted', 'diagnostic'].includes(phase) ||
+    !['smoke', 'main', 'assisted', 'diagnostic', 'warm'].includes(phase) ||
     !Number.isInteger(repetitions) ||
     repetitions < 1
   )
@@ -109,18 +109,47 @@ export function comparisonSchedule({
           ),
         };
       }
+      if (phase === 'warm') {
+        if (
+          !scenario ||
+          scenario.kind !== 'live' ||
+          !variants.length ||
+          variants.some((arm) => !arms.includes(arm)) ||
+          (id === 'apple-store' &&
+            (selected.length !== 1 || variants.includes('android')))
+        )
+          throw Error('Invalid warm retrieval');
+        const prompts = {
+          'amazon-order':
+            'Find the most recent order and report only its order date, first item name and delivery/status. Do not show addresses, payment information or full order IDs. Do not place, cancel or change orders.',
+          'facebook-event':
+            'Find the public Facebook event Quarry Lakes 25th Anniversary Celebration, hosted by East Bay Regional Park District (https://www.facebook.com/events/1711829129869706/). Report its name, date/time with timezone and location. Do not post, message, RSVP or change account settings.',
+          'apple-store':
+            'Verify account access by reaching the Apple Store account destination and report only whether account access is available. Make no purchases or account changes.',
+        };
+        scenario = {
+          ...scenario,
+          login: false,
+          url:
+            id === 'facebook-event'
+              ? 'https://www.facebook.com/events/1711829129869706/'
+              : scenario.url,
+          prompt:
+            'Use the existing signed-in session. Do not sign out or attempt authentication. If sign-in or a challenge requires user action, report that blocker and stop. ' +
+            (prompts[id] ?? scenario.prompt),
+        };
+      }
       if (
         !scenario ||
-        (phase !== 'assisted' && scenario.assisted) ||
+        (!['assisted', 'warm'].includes(phase) && scenario.assisted) ||
         (phase === 'assisted' && scenario.kind !== 'live')
       )
         throw Error('Human-assisted cases require a separate assisted run');
-      const methods =
-        phase === 'diagnostic'
-          ? variants
-          : scenario.assisted
-            ? arms.slice(0, 2)
-            : arms;
+      const methods = ['diagnostic', 'warm'].includes(phase)
+        ? variants
+        : scenario.assisted
+          ? arms.slice(0, 2)
+          : arms;
       for (let index = 0; index < methods.length; index++) {
         const arm = methods[(index + round) % methods.length];
         jobs.push({
