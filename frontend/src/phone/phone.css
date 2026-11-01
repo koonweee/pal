@@ -3,11 +3,14 @@
   flex-direction: column;
   overflow: hidden;
   width: min(460px, 100%);
-  height: calc(var(--pal-viewport-height, 100dvh) * 0.96);
+  /* Keep the preview at layout-viewport size when the client keyboard opens. */
+  height: 96dvh;
+  max-height: 100dvh;
+  margin: 0;
 }
 .desktop-sheet.phone-sheet > .desktop-body.phone-body {
   height: auto !important;
-  padding: 0 6px max(4px, var(--pal-effective-safe-area-bottom));
+  padding: 0 6px max(4px, var(--pal-safe-area-bottom));
 }
 .phone-body {
   flex: 1;
@@ -58,12 +61,13 @@
 }
 .desktop-sheet.phone-sheet[data-fullscreen='true'] {
   width: 100%;
-  height: var(--pal-viewport-height, 100dvh);
+  height: 100dvh;
+  margin: 0;
 }
 
 .phone-keyboard-input {
   position: absolute;
-  bottom: 0;
+  top: 0;
   left: 50%;
   width: 1px;
   height: 1px;

@@ -25,6 +25,7 @@ Exit: Android recognizes the keyboard with the PWA closed and typing still works
 
 - Reuse Desktop's explicit toolbar toggle pattern and a client textarea for native touch keyboard input.
 - Forward text, deletion, Enter and composition without sending duplicate characters; preserve focused input when tapping the preview.
+- Size the phone drawer against the CSS layout viewport so the client keyboard overlays its lower portion without shrinking the preview. Keep the hidden input near the header to avoid focus scrolling.
 
 Exit: focused tests and real-device input checks pass; development PWA refreshed. No production deployment.
 
@@ -47,6 +48,7 @@ The sidecar keeps Android's normal keyboard suppressed, PWA users can explicitly
 - Samsung recognizes `Pal keyboard` with the viewer closed. Native input-view visibility and screenshots verified before and after upstream Mobile MCP ordinary typing into the synthetic fixture.
 - Chrome and Playwright WebKit pass explicit toggle focus/blur/reopen, text insertion, Backspace, and focus retention while tapping the Android preview. Android's IME remains hidden throughout.
 - Removing the control-only scrcpy process recreates the hardware keyboard automatically; suppression is restored (`mIsInputViewShown=false`; Samsung may keep its IME navigation strip active). Closing viewers leaves only the intended control-only session.
+- Chrome and WebKit layout regression checks verify stable normal/fullscreen phone geometry when keyboard-related visual viewport variables change.
 - Two focused client-keyboard tests cover text/deletion/Enter and composition without duplicate insertion. Frontend TypeScript and UI ownership checks pass.
 - Development sidecar and staged PWA refreshed. No production deployment.
 
