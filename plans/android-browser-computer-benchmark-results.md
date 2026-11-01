@@ -104,3 +104,60 @@ The user stopped collection. The third attempt had already started and was inter
 Earlier Android acceptance covered Chrome navigation, native Settings lookup, and synthetic native login/draft/private-fill flows. The original live Amazon Android cells were deferred before retrieval. This follow-up exercises multi-product search, exact variant/offer selection, availability and share-link retrieval in the real signed-in Amazon app.
 
 Runtime restoration and scratch database/fixture cleanup are verified. Local evidence (~740 KB) is retained. Investigation should distinguish inaccessible/masked visual information, native share-link tooling and repeated navigation from CAPTCHA/access friction before resuming comparisons.
+
+
+## Android tooling evaluation
+
+This evaluation uses the two completed Amazon timeouts, their benchmark-owned worker transcripts, the deployed Mobile MCP 1.0.15 implementation and Pal source. No benchmark was restarted and nothing was deployed. The interrupted third sample is excluded. Aggregated evidence is in `amazon-products-signed-in/tooling-evaluation.json`; it contains sizes, counts and timings, not raw device observations.
+
+| Measure | Run 1 | Run 2 |
+| --- | ---: | ---: |
+| Completed sample duration | 601.3 s | 601.4 s |
+| Inspection calls | 51 | 46 |
+| Swipes | 40 up | 34 up, 19 down |
+| Explicit screenshot calls | 1 | 2 |
+| Median inspect payload | 32,921 characters | 33,466 characters |
+| Median observed nodes | 158.5 | 159.5 |
+| Nodes without text or label, across captures | 77.7% | 76.0% |
+| Median inspection latency | 3.83 s | 3.62 s |
+| Sum of inspection latency | 218.2 s | 182.0 s |
+| Model requests | 124 | 136 |
+| Largest reported input context | 349,858 tokens | 194,089 tokens |
+| Same sanitized snapshots through upstream text formatter, median | 13,855 characters | 14,037 characters |
+
+One first-run inspection did not supply a parseable successful snapshot, so payload statistics cover 50 captures there. Input context counts include accumulated history; they are not generated tokens. Model/tool/delegation durations may overlap and should not be added to derive wall time. Formatting replay was offline using the pinned upstream formatter, without dropping nodes or changing the phone.
+
+### Findings and confidence
+
+1. **The visual fallback was disabled by our deployed masking policy.** Amazon's native app exposes product content through WebViews; the helper masked entire WebViews. The workers requested screenshots when facts were missing, but this path could not restore the missing visual evidence. Source removal exists but was deliberately undeployed. Removing it is necessary to evaluate visual fallback, but the runs do not prove it alone fixes retrieval.
+2. **Ordinary observation is verbose and loses useful semantics.** Pal returns full JSON objects for visible containers, including blank strings, false/default flags and long class names. Its helper suppresses text on every node with children, and content descriptions on non-leaf nodes. It omits selected/checked state, clickability and scrollability. Upstream's pinned model-facing formatter uses compact lines, omits empty/default fields and includes selected/checked state. Formatting alone reduces the saved payloads by about 58%. Blank-node counts do not mean all those nodes can be deleted: some are useful targets or containers. Parent text suppression is a demonstrated code behavior; whether a particular missing Amazon fact was suppressed or absent in the app cannot be established from already-sanitized transcripts.
+3. **Observation/action handoffs impose avoidable work.** Ordinary inspect calls the private helper, which captures and PNG-encodes a screenshot even when the service returns only text. Before an action Pal pauses the helper, then uses Mobile MCP. The next inspection starts instrumentation again and stops Mobile CLI's DeviceServer. This follows from the code; the trace does not isolate exact restart versus accessibility/screenshot costs. The measured inspection cost alone is 30–36% of each timeout.
+4. **The wrapper removes useful navigation affordances.** Pal's swipe accepts direction only. The active upstream MobileDevice implementation uses a centered 400-pixel default swipe; upstream already accepts x/y/distance for targeted swipes. Pal also provides no copied-link read path even though pinned upstream includes `mobile_clipboard`. The second worker reached Share/Copy but could not retrieve the URL. These are concrete gaps, not reasons to build an Amazon scraper. Clipboard support is present in installed code but still needs a synthetic device acceptance check; no personal clipboard was read during this evaluation.
+5. **Task/worker recovery keeps spending time without a new capability.** The first handoff identified a Bose bundle mismatch and missing facts; Task delegated another attempt. The second sample produced partial findings and revisited already-found details. The harness permits continued execution until the 600-second cutoff (`maxSteps: 0`, `stopWhen: false`), so partial worker findings can be lost from the final sample answer. Identical-consecutive snapshot counts were only 2 and 4: a simple repeated-screen hash alone would not catch most of this semantic lack of progress. Returning partial facts and a precise missing capability earlier would be more useful than spending ten minutes scrolling.
+6. **Some difficulty is real task/model behavior.** Search results include bundles, variants and installment offers. The worker must distinguish them, but should not require a literal “one-time purchase” label where the selected offer context establishes the fact. Seller/shipper and other auxiliary checks should not become extra completion requirements. No completed run reported CAPTCHA, login failure or provider outage. This evidence does not establish a general Android reliability disadvantage.
+
+### Upstream guidance and existing capabilities
+
+The [upstream mobile-automation skill](https://github.com/mobile-next/mobile-mcp/blob/main/skills/mobile-automation/SKILL.md) recommends accessibility-first observation, screenshots for missing/visual information, center-of-bounds targets, focused inputs, and verification after actions. Pal's Android skill already follows most of that. The [clicking-accuracy wiki](https://github.com/mobile-next/mobile-mcp/wiki/Improve-clicking-accuracy) favors accessibility identifiers over guessed image coordinates; its platform implementation descriptions predate current Mobile CLI and are not used here as current implementation evidence.
+
+The [server's own instructions](https://github.com/mobile-next/mobile-mcp/blob/main/src/server.ts) additionally recommend batching known sequences to reduce device round-trips. Its tool description says re-list after navigation/layout changes, rather than treating every call as requiring a separate dump. These instructions are also present in installed 1.0.15, but Pal connects through custom wrappers and does not pass upstream server instructions through to its worker. Port applicable guidance into existing role/skill owners; do not expose device/cloud configuration or unrelated upstream tools.
+
+Installed upstream already supplies compact text observations, selected/checked state, reference-based taps, positioned/distance-controlled swipes, clipboard read/write, and `mobile_batch_commands` with optional final inspection. Its [current source](https://github.com/mobile-next/mobile-mcp/blob/main/src/mobile-device.ts) and [formatter](https://github.com/mobile-next/mobile-mcp/blob/main/src/format-elements.ts) are useful references; installed code was inspected to avoid assuming main equals the pin. An upgrade alone is not the proposed fix: these capabilities exist in our installed version.
+
+### Recommended order of work
+
+1. **Restore a useful visual fallback and copied-link retrieval.** Validate the already-requested unmasked screenshots, including ordinary screenshot wording and private preview. Expose an on-demand read of text deliberately copied during the current UI workflow using upstream clipboard support. Keep credential submission on the existing private fill path. First verify with synthetic share text; Android clipboard access has [platform restrictions](https://developer.android.com/about/versions/10/privacy/changes#clipboard-data), so do not promise device compatibility from the tool declaration alone. A small [share receiver](https://developer.android.com/develop/ui/compose/sharing/receive) is a fallback only if the supported clipboard primitive fails; do not build one preemptively.
+2. **Use upstream ordinary observation/action together; reserve the custom helper for secure inspection/filling.** Prefer the supported compact observation format and upstream refs. Preserve structured editable-value redaction in the adapter, and test that it remains correct. Pause/switch automation only on actual transitions to/from private filling. If upstream observation cannot satisfy a concrete retained privacy requirement, keep the custom observation path but add its missing semantics, skip image capture for text-only inspect and avoid engine switching for ordinary actions. Choose one ordinary observation/action owner after a small compatibility test, not two configurable modes.
+3. **Expose the useful swipe controls and small known action sequences.** Pass through upstream x/y/distance where a scroll region or longer movement is needed; choose a useful host default. Use the existing batch primitive for known ordinary sequences such as tap-search/type/submit plus final inspection. Batch must remain sequential and preserve the existing allowlist/ownership; secrets and uncertain writes must not be replayed. Android [node actions](https://developer.android.com/reference/android/view/accessibility/AccessibilityNodeInfo) provide a possible scroll-container action if the simpler upstream controls prove insufficient; no need to implement both initially.
+4. **Improve recovery and benchmark reporting.** Worker guidance should preserve confirmed facts, make a bounded targeted attempt for each missing fact, then return a concrete blocker or partial result. Task should not re-delegate the same missing-capability problem without a new method. Put generally applicable recovery guidance in the shared owner. Keep worker partial findings as bounded evidence in the benchmark, distinguish user cancellation from timeout, and track observation size/tool latency alongside success. Do not relax required factual checks to manufacture passes.
+
+Do not start with a larger model, more retries, arbitrary DOM/network bypasses, Amazon-specific selectors, a new clipboard app, or a general-purpose planning framework. The evidence supports improving the existing adapter and recovery behavior first.
+
+### Small validation before another full comparison
+
+- Offline replay of saved sanitized observations: smaller output with all useful text/identifiers retained and selected/checked semantics represented where available. Target at least the measured upstream-format reduction, not a new heuristic pruning engine.
+- One synthetic native/WebView screen: ordinary inspect/tap/scroll retains one automation owner, text inspection avoids image generation, screenshots are readable, and private-fill transitions still work.
+- One synthetic share/copy/read case and one nested-scroll case, using the supported upstream tools. Confirm no stale clipboard result is mistaken for the current item.
+- One real Amazon product, verify model/variant, offer price/availability and link. Record facts that remain inaccessible. Then one two-product run. Only resume three repetitions after the basic complete retrieval succeeds.
+
+This is an evaluation and proposed sequence, not implementation or deployment authorization beyond the user's existing requests.
