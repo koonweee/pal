@@ -1,12 +1,15 @@
 import { createServer } from 'node:http';
 import { ConfigService } from '@nestjs/config';
 import { RequestContext } from '@mastra/core/request-context';
-import { AndroidService } from '../dist/android/android.service.js';
+import {
+  androidActions,
+  AndroidService,
+} from '../dist/android/android.service.js';
 import { androidTools } from '../dist/android/android-tools.js';
 import { PARENT_TASK_ID, WORKER_ID } from '../dist/agent/task-workers.js';
 import { CodeModeProcessor } from '../dist/agent/code-mode.processor.js';
 
-it('binds device/worker, masks observations, serializes private operations and retains ownership through cancellation', async () => {
+it('binds device/worker, preserves upstream observations and schemas, serializes private operations and retains ownership through cancellation', async () => {
   const calls: { name: string; arguments: Record<string, unknown> }[] = [];
   const native: string[] = [];
   let hold: Promise<void> | undefined;
@@ -26,31 +29,26 @@ it('binds device/worker, masks observations, serializes private operations and r
     response.setHeader('Content-Type', 'application/json');
     if (request.url === '/secure') {
       native.push(input.action);
-      if (input.action === 'observe') await hold;
+      if (input.action === 'inspect') await hold;
       if (input.action === 'pause' && pauseFail) {
         response.writeHead(503).end();
         return;
       }
       response.end(
         JSON.stringify(
-          input.action === 'observe'
+          input.action === 'inspect'
             ? {
                 status: 'ready',
                 session: 'fixture',
                 identity: { packageName: 'com.example.app' },
                 inputs: [],
-                elements: [
-                  { ref: '@a1', text: 'Public heading', type: 'TextView' },
-                ],
                 image: 'cG5n',
                 width: 1080,
                 height: 2400,
                 imageWidth: 576,
                 imageHeight: 1280,
               }
-            : input.action === 'resolve'
-              ? { x: 20, y: 30 }
-              : { status: 'stopped' },
+            : { status: 'stopped' },
         ),
       );
       return;
@@ -79,8 +77,36 @@ it('binds device/worker, masks observations, serializes private operations and r
             isError: true,
             content: [{ type: 'text', text: 'PRIVATE_UPSTREAM_DIAGNOSTIC' }],
           }
-        : { content: [{ type: 'text', text: 'ready' }] };
-    } else result = { tools: [] };
+        : {
+            content:
+              input.params.name === 'mobile_take_screenshot'
+                ? [{ type: 'image', data: 'cG5n', mimeType: 'image/png' }]
+                : [{ type: 'text', text: 'ready' }],
+          };
+    } else
+      result = {
+        tools: Object.values(androidActions).map((name) => ({
+          name,
+          description: name,
+          inputSchema: {
+            type: 'object',
+            properties: {
+              device: { type: 'string' },
+              steps: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string' },
+                    arguments: { type: 'object' },
+                  },
+                },
+              },
+            },
+            required: ['device'],
+          },
+        })),
+      };
     response.end(JSON.stringify({ jsonrpc: '2.0', id: input.id, result }));
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -97,9 +123,9 @@ it('binds device/worker, masks observations, serializes private operations and r
   const first = { taskId: 'one', workerId: 'one' },
     second = { taskId: 'two', workerId: 'two' };
   try {
-    const tools = androidTools(service);
+    const tools = await androidTools(service);
     expect(
-      Object.keys(androidTools(new AndroidService(new ConfigService()))),
+      Object.keys(await androidTools(new AndroidService(new ConfigService()))),
     ).toEqual([]);
     expect(Object.keys(tools)).not.toContain('mobile_clear_app_data');
     await service.call(first, 'android_apps', { device: 'wrong' });
@@ -107,14 +133,13 @@ it('binds device/worker, masks observations, serializes private operations and r
     const screenshot = await service.call(first, 'android_screenshot', {
       maxSize: 9000,
     });
-    expect(native).toEqual(['pause', 'observe']);
-    expect(calls).toHaveLength(1);
+    await service.call(first, 'android_inspect', {});
+    await service.call(first, 'android_inspect', {});
+    expect(native).toEqual(['pause']);
+    expect(calls).toHaveLength(4);
     expect(tools.android_screenshot!.toModelOutput!(screenshot)).toMatchObject({
       type: 'content',
-      value: [
-        { type: 'text', text: expect.stringContaining('Masked') },
-        { type: 'media', data: 'cG5n', mediaType: 'image/png' },
-      ],
+      value: [{ type: 'media', data: 'cG5n', mediaType: 'image/png' }],
     });
     await expect(
       tools.android_apps!.execute!(
@@ -141,8 +166,8 @@ it('binds device/worker, masks observations, serializes private operations and r
     const gate = Promise.withResolvers<void>();
     hold = gate.promise;
     const abort = new AbortController();
-    const pending = service.call(first, 'android_inspect', {}, abort.signal);
-    await vi.waitFor(() => expect(native).toHaveLength(3));
+    const pending = service.secure(first, { action: 'inspect' }, abort.signal);
+    await vi.waitFor(() => expect(native).toHaveLength(2));
     abort.abort();
     const release = service.release(first.taskId, first.workerId);
     await expect(service.call(second, 'android_apps', {})).rejects.toThrow(
@@ -168,10 +193,31 @@ it('binds device/worker, masks observations, serializes private operations and r
     await expect(service.call(first, 'android_apps', {})).rejects.toThrow(
       'busy',
     );
+    await service.call(second, 'android_batch', {
+      steps: [
+        { name: 'android_tap', arguments: { ref: '@e1', device: 'wrong' } },
+      ],
+      listElementsAtEnd: true,
+    });
+    expect(calls.at(-1)?.arguments).toMatchObject({
+      device: 'usb-phone',
+      steps: [
+        {
+          name: 'mobile_click_on_screen_at_coordinates',
+          arguments: { ref: '@e1', device: 'usb-phone' },
+        },
+      ],
+    });
+    await expect(
+      service.call(second, 'android_batch', {
+        steps: [{ name: 'mobile_clear_app_data', arguments: {} }],
+      }),
+    ).rejects.toThrow('Unsupported');
     fail = true;
-    await expect(service.call(second, 'android_apps', {})).rejects.toThrow(
-      'Android operation failed',
-    );
+    expect(await service.call(second, 'android_apps', {})).toMatchObject({
+      isError: true,
+      content: [{ text: 'PRIVATE_UPSTREAM_DIAGNOSTIC' }],
+    });
     fail = false;
     await service.release('two', 'two');
     const pre = new AbortController();
@@ -188,12 +234,12 @@ it('binds device/worker, masks observations, serializes private operations and r
     ).rejects.toThrow('Android connection failed');
     expect(calls).toHaveLength(dispatched + 1);
     expect(calls.at(-1)?.arguments).toEqual({
-      x: 20,
-      y: 30,
+      ref: '@a1',
       device: 'usb-phone',
     });
     await service.call(second, 'android_apps', {});
     expect(connections).toBe(2);
+    await service.secure(second, { action: 'inspect' });
     pauseFail = true;
     await expect(service.release('two', 'two')).rejects.toThrow(
       'private operation',

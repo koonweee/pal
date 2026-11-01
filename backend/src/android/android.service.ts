@@ -1,6 +1,6 @@
 import { Inject, Injectable, type OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { NativeSnapshot, NativeStatus } from './android-native.js';
+import type { NativeStatus } from './android-native.js';
 import {
   Client,
   StreamableHTTPClientTransport,
@@ -18,6 +18,8 @@ export const androidActions = {
   android_type: 'mobile_type_keys',
   android_press_button: 'mobile_press_button',
   android_open_url: 'mobile_open_url',
+  android_clipboard: 'mobile_clipboard',
+  android_batch: 'mobile_batch_commands',
 } as const;
 export type AndroidAction = keyof typeof androidActions;
 export type AndroidOwner = { taskId: string; workerId: string };
@@ -35,6 +37,8 @@ export class AndroidService implements OnApplicationShutdown {
   private owner?: Owner;
   private closing = false;
   private nativeGeneration = 0;
+  // Clear an orphaned private session once, then switch only at private boundaries.
+  private nativeActive = true;
   readonly endpoint?: string;
   private readonly token?: string;
   private readonly device?: string;
@@ -80,6 +84,10 @@ export class AndroidService implements OnApplicationShutdown {
     } finally {
       this.connecting = undefined;
     }
+  }
+
+  async toolDefinitions() {
+    return (await (await this.connection()).listTools()).tools;
   }
 
   get generation() {
@@ -157,14 +165,23 @@ export class AndroidService implements OnApplicationShutdown {
   }
 
   secure<T>(identity: AndroidOwner, input: object, signal?: AbortSignal) {
-    return this.withPhone(identity, () => this.native<T>(input), signal);
+    return this.withPhone(
+      identity,
+      () => {
+        this.nativeActive = true;
+        return this.native<T>(input);
+      },
+      signal,
+    );
   }
 
   private async pause() {
+    if (!this.nativeActive) return;
     const result = await this.native<NativeStatus>({ action: 'pause' });
     if (result.status !== 'stopped')
       throw new Error('Android helper could not release control.');
     this.nativeGeneration++;
+    this.nativeActive = false;
   }
 
   async call(
@@ -178,55 +195,24 @@ export class AndroidService implements OnApplicationShutdown {
     return this.withPhone(
       identity,
       async () => {
-        if (action === 'android_inspect' || action === 'android_screenshot') {
-          const snapshot = await this.native<NativeSnapshot | NativeStatus>({
-            action: 'observe',
-          });
-          if (snapshot.status !== 'ready')
-            throw new Error(
-              'Android observation unavailable. Inspect after the screen settles.',
-            );
-          if (action === 'android_inspect')
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: JSON.stringify({
-                    packageName: snapshot.identity.packageName,
-                    elements: snapshot.elements,
-                  }),
-                },
-              ],
-            };
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Masked Android screen. Device coordinates ${snapshot.width}x${snapshot.height}; image ${snapshot.imageWidth}x${snapshot.imageHeight}. Scale image coordinates to device coordinates for taps.`,
-              },
-              {
-                type: 'image' as const,
-                mimeType: 'image/png',
-                data: snapshot.image,
-              },
-            ],
-          };
-        }
         const arguments_ = { ...args };
-        if (
-          (action === 'android_tap' || action === 'android_long_press') &&
-          args.ref
-        ) {
-          const target = await this.native<{
-            status?: string;
-            x?: number;
-            y?: number;
-          }>({ action: 'resolve', ref: args.ref });
-          if (typeof target.x !== 'number' || typeof target.y !== 'number')
-            throw new Error('Android target changed. Inspect again.');
-          delete arguments_.ref;
-          arguments_.x = target.x;
-          arguments_.y = target.y;
+        if (action === 'android_batch') {
+          const steps = args.steps as {
+            name: AndroidAction;
+            arguments: Record<string, unknown>;
+          }[];
+          arguments_.steps = steps.map((step) => {
+            if (
+              !Object.hasOwn(androidActions, step.name) ||
+              step.name === 'android_batch' ||
+              step.name === 'android_screenshot'
+            )
+              throw new Error('Unsupported Android batch step.');
+            return {
+              name: androidActions[step.name],
+              arguments: { ...step.arguments, device: this.device },
+            };
+          });
         }
         await this.pause();
         const client = await this.connection();
@@ -239,20 +225,8 @@ export class AndroidService implements OnApplicationShutdown {
             },
             { timeout: 60000 },
           );
-          if (result.isError)
-            throw new AndroidActionError(
-              'Android operation failed. Inspect before deciding whether to retry.',
-            );
-          if (action === 'android_apps' || action === 'android_foreground_app')
-            return result;
-          // UI state must come only from the native observation path.
-          return {
-            content: [
-              { type: 'text' as const, text: '{"status":"completed"}' },
-            ],
-          };
-        } catch (error) {
-          if (error instanceof AndroidActionError) throw error;
+          return result;
+        } catch {
           this.client = undefined;
           await client.close().catch(() => {});
           throw new Error(
@@ -304,4 +278,3 @@ export class AndroidService implements OnApplicationShutdown {
     await client?.close();
   }
 }
-class AndroidActionError extends Error {}

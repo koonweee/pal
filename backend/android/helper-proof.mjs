@@ -19,6 +19,16 @@ async function inspect(action = 'inspect') {
   }
   assert.equal(result.status, 'ready', 'Native inspection must succeed: ' + JSON.stringify(result));
 }
+  const headers = { Authorization: 'Bearer ' + process.env.MOBILEMCP_AUTH, Accept: 'application/json, text/event-stream', 'Content-Type': 'application/json' };
+  let id = 1;
+  async function rpc(method, params) {
+    const response = await fetch('http://127.0.0.1:3000/mcp', { method: 'POST', headers, body: JSON.stringify({ jsonrpc: '2.0', id: id++, method, params }) });
+    const session = response.headers.get('mcp-session-id'); if (session) headers['mcp-session-id'] = session;
+    const text = await response.text();
+    const message = JSON.parse(text.startsWith('event:') || text.startsWith('data:') ? text.split('\n').find((s) => s.startsWith('data:')).slice(5) : text);
+    assert(!message.error, 'MCP protocol success'); return message.result;
+  }
+  await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'pal-secure-proof', version: '1' } });
 try {
   await helper.adb('install', '-r', directory + '/fixture.apk');
   for (const activity of ['Fixture', 'WebFixture']) {
@@ -45,41 +55,44 @@ try {
       const filled = await helper.call({ action: 'fill', ...target });
       assert.equal(filled.status, 'filled', 'Direct native field fill');
       console.log('Direct fill completed');
-      const after = await inspect('observe');
+      const after = await inspect();
       assert.equal(after.status, 'ready', 'Observation after filling');
-      for (const value of secret) assert(!JSON.stringify(after).includes(value), 'No value in structured observation');
+      for (const value of secret) assert(!JSON.stringify(after).includes(value), 'No value in private field metadata');
       const image = directory + '/preview-' + (activity === 'Fixture' ? '' : 'web-') + role + '.png';
       await writeFile(image, Buffer.from(after.image, 'base64')); images.push(image);
-      const next = after.elements.find((e) => e.text.toLowerCase() === (role === 'code' ? 'verify' : 'continue'));
-      assert(next, 'Continue control');
-      const resolved = await helper.call({ action: 'resolve', ref: next.ref });
-      assert.equal(typeof resolved.x, 'number', 'Bound ordinary target');
       await helper.stop();
-      await helper.adb('shell', 'input', 'tap', String(resolved.x), String(resolved.y));
+      const screen = await rpc('tools/call', { name: 'mobile_list_elements_on_screen', arguments: { device: devices[0], format: 'json' } });
+      assert(!screen.isError, 'Upstream inspection after private fill');
+      const payload = screen.content.find((part) => part.type === 'text').text;
+      const elements = JSON.parse(payload.slice(payload.indexOf('[')));
+      const next = elements.find((e) => (e.text || e.label || '').toLowerCase() === (role === 'code' ? 'verify' : 'continue'));
+      assert(next, 'Continue control from upstream');
+      const tapped = await rpc('tools/call', { name: 'mobile_click_on_screen_at_coordinates', arguments: { device: devices[0], ref: next.ref } });
+      assert(!tapped.isError, 'Upstream ref tap');
       await sleep(500);
       const stale = await helper.call({ action: 'validate', ...target });
       assert.equal(stale.status, 'error', 'Stopped helper invalidates secret refs');
     }
-    const final = await inspect();
-    assert(final.elements.some((e) => e.text.includes('Authenticated')));
-    assert(final.elements.some((e) => e.text === 'Verified stages: username, password, transient code'));
     await helper.stop();
+    const final = await rpc('tools/call', { name: 'mobile_list_elements_on_screen', arguments: { device: devices[0] } });
+    assert(JSON.stringify(final).includes('Authenticated'));
+    assert(JSON.stringify(final).includes('Verified stages: username, password, transient code'));
   }
   // Exercise Mobile MCP after releasing the helper's UI automation connection.
-  const headers = { Authorization: 'Bearer ' + process.env.MOBILEMCP_AUTH, Accept: 'application/json, text/event-stream', 'Content-Type': 'application/json' };
-  let id = 1;
-  async function rpc(method, params) {
-    const response = await fetch('http://127.0.0.1:3000/mcp', { method: 'POST', headers, body: JSON.stringify({ jsonrpc: '2.0', id: id++, method, params }) });
-    const session = response.headers.get('mcp-session-id'); if (session) headers['mcp-session-id'] = session;
-    const text = await response.text();
-    const message = JSON.parse(text.startsWith('event:') || text.startsWith('data:') ? text.split('\n').find((s) => s.startsWith('data:')).slice(5) : text);
-    assert(!message.error, 'MCP protocol success'); return message.result;
-  }
-  await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'pal-secure-proof', version: '1' } });
   const launched = await rpc('tools/call', { name: 'mobile_launch_app', arguments: { device: devices[0], packageName: 'com.android.settings' } });
   assert(!launched.isError, 'Mobile MCP works after private helper');
   await sleep(500);
   const settings = await inspect();
   assert.equal(settings.identity.packageName, 'com.android.settings', 'Helper reconnects after Mobile MCP');
-  console.log(JSON.stringify({ status: 'passed', directFill: ['username', 'password', 'code'], webView: true, unicode: true, roleMetadataIsHint: true, staleGate: true, mcpHandoff: true, previewImages: images }));
+  await helper.stop();
+  const clipboard = (text) => rpc('tools/call', { name: 'mobile_clipboard', arguments: { device: devices[0], ...(text === undefined ? {} : { text }) } });
+  const previous = await clipboard();
+  assert(!previous.isError, 'Upstream clipboard read is supported');
+  const original = previous.content.filter((part) => part.type === 'text').map((part) => part.text).join('');
+  try {
+    assert(!(await clipboard('https://example.com/pal-android-acceptance')).isError, 'Upstream clipboard write');
+    const copied = await clipboard();
+    assert(!copied.isError && JSON.stringify(copied.content).includes('https://example.com/pal-android-acceptance'), 'Upstream clipboard round trip');
+  } finally { assert(!(await clipboard(original)).isError, 'Restore previous clipboard'); }
+  console.log(JSON.stringify({ status: 'passed', directFill: ['username', 'password', 'code'], webView: true, unicode: true, roleMetadataIsHint: true, staleGate: true, mcpHandoff: true, clipboard: true, previewImages: images }));
 } finally { await helper.close(); }

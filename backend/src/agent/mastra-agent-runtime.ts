@@ -265,9 +265,9 @@ export class MastraAgentRuntime
             this.android.instructions +
             '\nCurrent time (UTC): ' +
             new Date().toISOString(),
-          tools: () => ({
+          tools: async () => ({
             ...browserTools(this.browser),
-            ...androidTools(this.android),
+            ...(await androidTools(this.android)),
             ...loginTools(this.login),
           }),
           inputProcessors: [new CodeModeProcessor()],

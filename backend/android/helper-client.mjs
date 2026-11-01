@@ -134,6 +134,7 @@ export class HelperClient {
     } finally {
       this.process?.kill(); this.process = undefined;
       this.key?.fill(0); this.key = undefined;
+      await this.removeForward();
     }
   }
   async close() {

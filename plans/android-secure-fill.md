@@ -4,6 +4,8 @@
 
 Done. All four milestones meet development exit criteria. The connected-phone fixture passes both new private credentials and saved-login reuse with fresh OTP. Live-app first-run setup remains a preflight requirement for the [Android/browser/computer comparison](android-browser-computer-benchmark.md).
 
+Ordinary observation ownership and masking policy are superseded by [Android upstream interaction](android-upstream-interaction.md). Original milestone evidence below describes the initial acceptance.
+
 ## Goal
 
 Support native Android username/password and verification-code filling through Pal's existing Bitwarden and private-entry workflows. Keep credential policy, account selection, staged entry, request state and notifications shared with browser login. Use a small Android adapter for observation, destination validation and direct field filling.
@@ -12,7 +14,7 @@ Scope: development acceptance on the USB phone connected to this Mac, using cont
 
 ## Current Behavior
 
-- [Android Mobile MCP](android-mobile-mcp.md) supplies worker-only navigation through the existing sidecar and container ADB. Ordinary inspection and screenshots use the private helper's masked observations. The host selects one phone and serializes ownership across ordinary and private operations.
+- [Android Mobile MCP](android-mobile-mcp.md) supplies worker-only navigation through the existing sidecar and container ADB. Ordinary inspection, refs and screenshots use Mobile MCP; images are unmasked. The host selects one phone and serializes ownership across ordinary and private operations.
 - `LoginService` and `LoginRepository` share account choice, Bitwarden lookup, private cards, staged merging, transient OTP, notifications and recovery across browser and native Android. `LoginDestinations` routes observation and filling to the browser or Android adapter.
 - `login_inspect` accepts `target: "android"` when Android is configured; existing fill/request tools infer the destination from opaque refs. Native filling binds the worker, helper session, window/node and foreground package. Android inspection takes the HTTPS account website for shared vault matching; installed apps need no registration. See [secure-fill simplification](android-secure-fill-simplification.md) for the current policy.
 - The unrooted instrumentation helper exposes native field properties and performs validated `ACTION_SET_TEXT` through an authenticated ADB channel. Mobile MCP and the helper hand off Android's single UI Automation connection.
@@ -21,7 +23,7 @@ Scope: development acceptance on the USB phone connected to this Mac, using cont
 ## Target Data Shape
 
 - Keep one owner for credential policy, private cards, staged account selection and request lifecycle. Introduce a narrow destination-adapter contract only where browser/Android behavior differs: inspect, validate/select, fill and binding lifetime.
-- Inspected native fields expose opaque refs, role-relevant metadata, verified app identity and a masked preview. Values remain private. Bind refs to task/worker, device, helper session, app/window and native node; reinspection, replacement, expiry and ownership changes invalidate them.
+- Inspected native fields expose opaque refs, role-relevant metadata, foreground app identity and an unmasked preview. Submitted values are omitted from private field metadata. Bind refs to task/worker, device, helper session, app/window and native node; reinspection, replacement, expiry and ownership changes invalidate them.
 - Durable request/inspection metadata must distinguish browser and Android targets, including the foreground package to recover safely after restart. Reuse existing records; add a small migration only if needed to encode that distinction. Never infer the target from website origin alone or persist live native handles.
 - Reuse existing HTTPS vault matching with the account website supplied during Android inspection. Installed apps are controlled by the operator.
 - Keep the model surface small: extend `login_inspect` with an Android target selector, defaulting to browser. `secure_fill` and `secure_entry_request` infer the target from opaque refs. Keep device choice in host code. Reject browser action arguments and payment roles for Android. Native session controls/preferences need explicit semantics; do not claim browser persistence controls apply to apps.

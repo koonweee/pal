@@ -18,22 +18,11 @@ export interface NativeInput {
   maxLength: number;
   rect: NativeRect;
 }
-export interface NativeElement {
-  ref: string;
-  type: string;
-  text: string;
-  label: string;
-  identifier: string;
-  focused: boolean;
-  enabled: boolean;
-  rect: NativeRect;
-}
 export interface NativeSnapshot {
   status: 'ready';
   session: string;
   identity: NativeIdentity;
   inputs: NativeInput[];
-  elements: NativeElement[];
   image: string;
   width: number;
   height: number;

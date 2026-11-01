@@ -11,7 +11,7 @@ mcp.once('error', () => process.exit(1));
 mcp.once('exit', () => { if (!closing) process.exit(1); });
 const helper = new HelperClient(process.env.PAL_ANDROID_DEVICE_ID);
 let pending = Promise.resolve();
-const allowed = new Set(['inspect', 'observe', 'validate', 'fill', 'resolve', 'pause']);
+const allowed = new Set(['inspect', 'validate', 'fill', 'pause']);
 const server = createServer(async (request, response) => {
   const actual = Buffer.from(request.headers.authorization ?? '');
   const expected = Buffer.from('Bearer ' + token);
@@ -33,7 +33,7 @@ const server = createServer(async (request, response) => {
         if (input.action === 'pause') { await helper.stop(); return { status: 'stopped' }; }
         // Read-only capture may race an animation or accessibility event.
         // A fill is dispatched once and is never replayed here.
-        const reads = input.action === 'observe' || input.action === 'inspect' ? 3 : 1;
+        const reads = input.action === 'inspect' ? 3 : 1;
         let result;
         try {
           for (let attempt = 0; attempt < reads; attempt++) {

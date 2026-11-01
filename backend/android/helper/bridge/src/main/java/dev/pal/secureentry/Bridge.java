@@ -38,7 +38,6 @@ public final class Bridge extends Instrumentation {
     private final AtomicLong events = new AtomicLong();
     private final AtomicLong windows = new AtomicLong();
     private final Map<String, Bound> inputs = new HashMap<>();
-    private final Map<String, Bound> targets = new HashMap<>();
     private final SecureRandom random = new SecureRandom();
     private boolean stopping;
     private String socketName;
@@ -116,7 +115,7 @@ public final class Bridge extends Instrumentation {
                 } catch (Throwable error) { /* Never log request or exception material. */ }
             }
         } catch (Throwable error) { /* A fixed failure is observable through the socket readiness probe. */ }
-        clear(inputs); clear(targets);
+        clear(inputs);
         java.util.Arrays.fill(authKey, (byte) 0);
         finish(0, new Bundle());
     }
@@ -141,12 +140,7 @@ public final class Bridge extends Instrumentation {
         if (action.equals("stop")) { stopping = true; return new JSONObject().put("status", "stopped"); }
         phase = "connect";
         connect();
-        if (action.equals("inspect") || action.equals("observe")) return inspect(action.equals("inspect"));
-        if (action.equals("resolve")) {
-            Bound bound = targets.get(request.getString("ref"));
-            current(bound, null);
-            return new JSONObject().put("x", bound.rect.centerX()).put("y", bound.rect.centerY());
-        }
+        if (action.equals("inspect")) return inspect();
         if (action.equals("validate") || action.equals("fill")) {
             if (!session.equals(request.getString("session"))) throw new IllegalStateException();
             JSONArray fields = request.getJSONArray("fields");
@@ -203,12 +197,12 @@ public final class Bridge extends Instrumentation {
         } finally { root.recycle(); }
     }
 
-    private JSONObject inspect(boolean bind) throws Exception {
+    private JSONObject inspect() throws Exception {
         phase = "idle";
         if (Build.VERSION.SDK_INT >= 34) automation.clearCache();
         try { automation.waitForIdle(150, 1500); } catch (java.util.concurrent.TimeoutException ignored) { }
-        if (bind) clear(inputs);
-        clear(targets);
+        clear(inputs);
+
         long version = events.get();
         long window = windows.get();
         phase = "root";
@@ -225,9 +219,8 @@ public final class Bridge extends Instrumentation {
             phase = "identity";
             JSONObject identity = identity(app);
             JSONArray fields = new JSONArray();
-            JSONArray elements = new JSONArray();
             phase = "walk";
-            walk(root, root, false, bind, window, fields, elements, 0);
+            walk(root, root, false, window, fields, 0);
             phase = "screenshot";
             bitmap = automation.takeScreenshot();
             if (bitmap == null) throw new IllegalStateException();
@@ -240,30 +233,24 @@ public final class Bridge extends Instrumentation {
                 bitmap.recycle(); bitmap = scaled;
             }
             ByteArrayOutputStream bytes = new ByteArrayOutputStream(); bitmap.compress(Bitmap.CompressFormat.PNG, 100, bytes);
-            return new JSONObject().put("status", "ready").put("session", session).put("identity", identity).put("inputs", fields).put("elements", elements).put("image", Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP)).put("width", width).put("height", height).put("imageWidth", bitmap.getWidth()).put("imageHeight", bitmap.getHeight());
+            return new JSONObject().put("status", "ready").put("session", session).put("identity", identity).put("inputs", fields).put("image", Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP)).put("width", width).put("height", height).put("imageWidth", bitmap.getWidth()).put("imageHeight", bitmap.getHeight());
         } finally { root.recycle(); if (bitmap != null) bitmap.recycle(); }
     }
 
-    private void walk(AccessibilityNodeInfo node, AccessibilityNodeInfo root, boolean inSensitive, boolean bind, long window, JSONArray fields, JSONArray elements, int depth) throws Exception {
-        if (depth > 60 || elements.length() > 3000) throw new IllegalStateException();
+    private void walk(AccessibilityNodeInfo node, AccessibilityNodeInfo root, boolean inSensitive, long window, JSONArray fields, int depth) throws Exception {
+        if (depth > 60) throw new IllegalStateException();
         boolean sensitive = node.isEditable() || node.isPassword() || node.getInputType() != 0 || string(node.getClassName()).contains("EditText");
-        boolean privateField = inSensitive || sensitive;
         Rect rect = bounds(node);
-        if (node.isVisibleToUser() && !rect.isEmpty()) {
-            String ref = "@a" + targets.size() + "-" + nonce();
-            targets.put(ref, new Bound(node, root, window));
-            String label = privateField ? string(node.getHintText()) : node.getChildCount() == 0 ? string(node.getContentDescription()) : "";
-            String text = privateField || node.getChildCount() > 0 ? "" : string(node.getText());
-            elements.put(new JSONObject().put("ref", ref).put("type", string(node.getClassName())).put("text", text).put("label", label).put("identifier", string(node.getViewIdResourceName())).put("focused", node.isFocused()).put("enabled", node.isEnabled()).put("rect", rect(rect)));
-            if (bind && !inSensitive && editable(node) && node.isEnabled() && fields.length() < 200 && string(node.getPackageName()).equals(string(root.getPackageName()))) {
-                String input = "i" + (fields.length() + 1) + "-" + nonce();
-                inputs.put(input, new Bound(node, root, window));
-                fields.put(new JSONObject().put("ref", input).put("type", node.isPassword() ? "password" : "text").put("password", node.isPassword()).put("inputType", node.getInputType()).put("label", label).put("identifier", string(node.getViewIdResourceName())).put("maxLength", node.getMaxTextLength()).put("rect", rect(rect)));
-            }
+        if (node.isVisibleToUser() && !rect.isEmpty() && !inSensitive && editable(node) && node.isEnabled() && fields.length() < 200 && string(node.getPackageName()).equals(string(root.getPackageName()))) {
+            String input = "i" + (fields.length() + 1) + "-" + nonce();
+            inputs.put(input, new Bound(node, root, window));
+            String label = string(node.getHintText());
+            if (label.isEmpty()) label = string(node.getContentDescription());
+            fields.put(new JSONObject().put("ref", input).put("type", node.isPassword() ? "password" : "text").put("password", node.isPassword()).put("inputType", node.getInputType()).put("label", label).put("identifier", string(node.getViewIdResourceName())).put("maxLength", node.getMaxTextLength()).put("rect", rect(rect)));
         }
         for (int i = 0; i < node.getChildCount(); i++) {
             AccessibilityNodeInfo child = node.getChild(i);
-            if (child != null) { try { walk(child, root, privateField, bind, window, fields, elements, depth + 1); } finally { child.recycle(); } }
+            if (child != null) { try { walk(child, root, inSensitive || sensitive, window, fields, depth + 1); } finally { child.recycle(); } }
         }
     }
 

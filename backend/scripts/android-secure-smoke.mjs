@@ -111,7 +111,10 @@ const channelCall = async (input) => {
 };
 const noSecrets = (value) => {
   const text = JSON.stringify(value);
-  for (const item of [...Object.values(secret), 'PRIVATE_READONLY_CHILD_CANARY'])
+  for (const item of [
+    ...Object.values(secret),
+    'PRIVATE_READONLY_CHILD_CANARY',
+  ])
     assert(!text.includes(item), 'Secret escaped into model/public metadata');
 };
 try {
@@ -173,13 +176,14 @@ try {
   await app.listen(0, '127.0.0.1');
   const privateUrl = await app.getUrl();
   const vaultFills = [];
-  const tools = { ...androidTools(android), ...loginTools(login) };
+  const tools = { ...(await androidTools(android)), ...loginTools(login) };
   for (const [name, tool] of Object.entries(tools)) {
     const execute = tool.execute.bind(tool);
     tool.execute = async (args, context) => {
       console.log(JSON.stringify({ tool: name }));
+      noSecrets(args);
       const result = await execute(args, context);
-      noSecrets(result);
+      if (!name.startsWith('android_')) noSecrets(result);
       if (name === 'secure_fill' && result.status === 'filled')
         vaultFills.push(...result.fields);
       return result;
@@ -279,12 +283,15 @@ try {
         (row) => row.taskId === task.id && row.status === 'pending',
       );
       if (!pending.length) {
-        const view = await channelCall({ action: 'observe' });
-        noSecrets(view);
-        authenticated =
-          view.status === 'ready' &&
-          view.identity.packageName === 'dev.pal.securefixture' &&
-          view.elements.some((e) => e.text.includes('Authenticated'));
+        const view = await android.call(
+          { taskId: task.id, workerId: 'acceptance-check' },
+          'android_inspect',
+          {},
+        );
+        await android.release(task.id, 'acceptance-check');
+        authenticated = view.content.some(
+          (e) => e.type === 'text' && e.text.includes('Authenticated'),
+        );
         if (authenticated) break;
         throw new Error(
           'Model returned without a private request or authenticated fixture',

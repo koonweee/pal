@@ -8,99 +8,64 @@ import {
   type AndroidService,
 } from './android.service.js';
 
-const string = { type: 'string' } as const;
-const number = { type: 'number', minimum: 0 } as const;
-const definitions = {
-  android_apps: {
-    description: 'List installed apps on the configured Android phone.',
-    properties: {},
-  },
-  android_foreground_app: {
-    description: 'Read the foreground Android app.',
-    properties: {},
-  },
-  android_launch_app: {
-    description: 'Launch an installed Android app by package name.',
-    properties: { packageName: string },
-    required: ['packageName'],
-  },
-  android_inspect: {
-    description:
-      'Read Android screen elements and current @refs. Refresh after navigation or layout changes.',
-    properties: {},
-  },
-  android_screenshot: {
-    description:
-      'View the Android screen as an image. Use screen elements for targets when available; honor screenshot-to-device coordinate scaling.',
-    properties: {},
-  },
-  android_tap: {
-    description:
-      'Tap a current Android element ref, or x/y device coordinates. Supply ref or both x and y.',
-    properties: { ref: string, x: number, y: number },
-  },
-  android_long_press: {
-    description: 'Long-press an Android element ref or x/y device coordinates.',
-    properties: { ref: string, x: number, y: number },
-  },
-  android_swipe: {
-    description: 'Swipe the Android screen in a direction.',
-    properties: {
-      direction: { type: 'string', enum: ['up', 'down', 'left', 'right'] },
-    },
-    required: ['direction'],
-  },
-  android_type: {
-    description:
-      'Type ordinary text into the focused Android field. Never enter credentials, card details, or verification codes.',
-    properties: { text: string, submit: { type: 'boolean' } },
-    required: ['text'],
-  },
-  android_press_button: {
-    description: 'Press an Android navigation or editing button.',
-    properties: {
-      button: {
-        type: 'string',
-        enum: ['HOME', 'BACK', 'ENTER', 'BACKSPACE', 'APP_SWITCH'],
-      },
-    },
-    required: ['button'],
-  },
-  android_open_url: {
-    description: 'Open an HTTP(S) URL in the Android browser.',
-    properties: { url: string },
-    required: ['url'],
-  },
-} satisfies Record<
-  AndroidAction,
-  {
-    description: string;
-    properties: NonNullable<JSONSchema7['properties']>;
-    required?: string[];
-  }
->;
-
-export function androidTools(android: AndroidService): ToolsInput {
+// Keep Pal aliases while using the dependency's schemas, semantics and results.
+export async function androidTools(
+  android: AndroidService,
+  actions = Object.keys(androidActions) as AndroidAction[],
+): Promise<ToolsInput> {
   if (!android.enabled) return {};
+  const upstream = await android.toolDefinitions();
+  const names = Object.entries(androidActions);
+  const describe = (text: string) =>
+    names.reduce(
+      (result, [alias, name]) => result.replaceAll(name, alias),
+      text,
+    );
   return Object.fromEntries(
-    (Object.keys(androidActions) as AndroidAction[]).map((action) => {
-      const definition = definitions[action];
+    actions.map((action) => {
+      const definition = upstream.find(
+        (tool) => tool.name === androidActions[action],
+      );
+      if (!definition)
+        throw new Error(`Android MCP is missing ${androidActions[action]}`);
+      const schema = structuredClone(definition.inputSchema) as JSONSchema7;
+      delete schema.properties?.device;
+      schema.required = schema.required?.filter((name) => name !== 'device');
+      let description = describe(definition.description ?? definition.name);
+      if (action === 'android_inspect') {
+        delete schema.properties?.format; // Upstream compact text is the host default.
+      }
+      if (action === 'android_batch') {
+        const steps = schema.properties!.steps as JSONSchema7;
+        const item = steps.items as JSONSchema7;
+        item.properties!.name = {
+          type: 'string',
+          enum: actions.filter(
+            (name) => name !== 'android_batch' && name !== 'android_screenshot',
+          ),
+        };
+        delete schema.properties?.stopOnError; // Use upstream's stop-on-error default.
+        description =
+          'Run known ordinary Android actions sequentially, optionally inspecting at the end. Step names and arguments match the Android tools. Stops on the first error. Use private fill tools for credentials.';
+      }
       return [
         action,
         createTool({
           id: action,
-          description: definition.description,
-          inputSchema: jsonSchema<Record<string, unknown>>({
-            type: 'object',
-            properties: definition.properties,
-            required: 'required' in definition ? [...definition.required] : [],
-            additionalProperties: false,
-          }),
+          description,
+          inputSchema: jsonSchema<Record<string, unknown>>(schema),
           execute: async (args, context) => {
             const taskId = context?.requestContext?.get(PARENT_TASK_ID);
             const workerId = context?.requestContext?.get(WORKER_ID);
             if (typeof taskId !== 'string' || typeof workerId !== 'string')
               throw new Error('Android tools require an interaction worker.');
+            if (action === 'android_batch') {
+              const steps = args.steps as { name: AndroidAction }[];
+              if (steps.some((step) => !actions.includes(step.name)))
+                throw new Error(
+                  'Android batch step is unavailable in this workflow.',
+                );
+            }
             return android.call(
               { taskId, workerId },
               action,
