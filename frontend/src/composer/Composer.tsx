@@ -5,10 +5,12 @@ import { PendingFiles } from '../attachments/PendingFiles';
 import type { ChatController } from '../chat/use-chat';
 import { QuotePreview } from '../chat/QuotePreview';
 import { useInstanceSettings } from '../instance-settings/InstanceSettingsProvider';
+import { useInputCapabilities } from '../layout/use-responsive';
 import { IconAction } from '../ui/IconAction';
 
 export function Composer({ chat }: { chat: ChatController }) {
   const { settings } = useInstanceSettings();
+  const { coarsePointer } = useInputCapabilities();
   const draft = useRef<HTMLTextAreaElement>(null);
   const footer = useRef<HTMLElement>(null);
   const cancelReplyPointer = useRef('');
@@ -131,6 +133,7 @@ export function Composer({ chat }: { chat: ChatController }) {
           }}
           onKeyDown={(event) => {
             if (
+              !coarsePointer &&
               event.key === 'Enter' &&
               !event.shiftKey &&
               !event.nativeEvent.isComposing

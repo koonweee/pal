@@ -990,7 +990,7 @@ test('keeps the composer focused when touch jumps to the latest message', async 
   await context.close();
 });
 
-test('keeps touch sends focused and preserves later keyboard navigation', async ({
+test('keeps touch sends focused, uses Return for newlines, and preserves later keyboard navigation', async ({
   browser,
 }) => {
   const context = await browser.newContext({
@@ -1038,8 +1038,12 @@ test('keeps touch sends focused and preserves later keyboard navigation', async 
       backend.releasePersistence = undefined;
       backend.releaseAcceptance = undefined;
     }
-    await composer.fill('Send with Enter');
+    await composer.fill('First line');
     await composer.press('Enter');
+    await composer.press('x');
+    await expect(composer).toHaveValue('First line\nx');
+    expect(backend.submissions).toHaveLength(2);
+    await send.tap();
     await expect(composer).toHaveValue('');
     await expect(composer).toBeFocused();
     expect(backend.submissions).toHaveLength(3);
