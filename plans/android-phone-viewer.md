@@ -50,6 +50,7 @@ Verified on 2026-11-01 against the Mac-connected Samsung phone:
 
 - Chrome and Playwright WebKit 26.6 rendered real video. Chrome acceptance also passed through `https://jtkwmini.tail445f8.ts.net:8444`.
 - Synthetic fixture: touchscreen tap and hardware-keyboard text confirmed from device UI; long press visibly selected text. Drag opened the notification shade. Home, Back, fullscreen, reconnect and reopen passed.
+- Touch-toolbar Paste reads the client clipboard and injects text into the focused fixture field; empty clipboard and permission-denied feedback verified. Android clipboard synchronization remains disabled.
 - Closing the drawer left no scrcpy server process. An injected unavailable WebSocket showed retry status and allowed opening Desktop.
 - Portrait layout at 390×844 keeps the header, screen and navigation inside the drawer. The inherited desktop body height was corrected after screenshot review.
 - Backend build/lint and focused gateway test passed. Frontend TypeScript, UI ownership and reload-safety test passed; staged production frontend build passed.

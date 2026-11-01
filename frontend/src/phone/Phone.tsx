@@ -2,6 +2,7 @@ import { Drawer } from '@mantine/core';
 import {
   ArrowLeft,
   Circle,
+  ClipboardPaste,
   Square,
   Maximize,
   Minimize,
@@ -27,6 +28,8 @@ import './phone.css';
 export function Phone({ onClose }: { onClose(): void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const controller = useRef<ScrcpyControlMessageWriter | undefined>(undefined);
+  const [pasting, setPasting] = useState(false);
+  const [pasteError, setPasteError] = useState('');
   const [retry, setRetry] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   const [status, setStatus] = useState('Connecting to phone…');
@@ -39,6 +42,7 @@ export function Phone({ onClose }: { onClose(): void }) {
   }, [update]);
   useEffect(() => {
     setReady(false);
+    setPasteError('');
     setStatus('Connecting to phone…');
     if (!WebCodecsVideoDecoder.isSupported) {
       setStatus('This browser does not support live phone video.');
@@ -124,6 +128,34 @@ export function Phone({ onClose }: { onClose(): void }) {
       decoder?.dispose();
     };
   }, [retry]);
+  async function pasteClipboard() {
+    const target = controller.current;
+    if (!target || pasting) return;
+    setPasting(true);
+    setPasteError('');
+    try {
+      let text: string;
+      try {
+        text = await navigator.clipboard.readText();
+      } catch {
+        throw new Error(
+          'Could not read clipboard. Allow clipboard access and try again.',
+        );
+      }
+      if (controller.current !== target) return;
+      if (!text) throw new Error('Your clipboard contains no text.');
+      await target.injectText(text);
+    } catch (error) {
+      if (controller.current === target)
+        setPasteError(
+          error instanceof Error
+            ? error.message
+            : 'Could not paste into phone.',
+        );
+    } finally {
+      setPasting(false);
+    }
+  }
   function key(keyCode: AndroidKeyCode) {
     const c = controller.current;
     if (c)
@@ -196,6 +228,13 @@ export function Phone({ onClose }: { onClose(): void }) {
           <Drawer.Title>Phone</Drawer.Title>
           <div className="desktop-actions">
             <IconAction
+              label="Paste clipboard into phone"
+              disabled={!ready || pasting || !navigator.clipboard?.readText}
+              onClick={() => void pasteClipboard()}
+            >
+              <ClipboardPaste aria-hidden="true" size={19} />
+            </IconAction>
+            <IconAction
               label="Reconnect phone"
               onClick={() => setRetry((r) => r + 1)}
             >
@@ -213,6 +252,7 @@ export function Phone({ onClose }: { onClose(): void }) {
           </div>
         </Drawer.Header>
         <Drawer.Body>
+          {pasteError && <div role="alert">{pasteError}</div>}
           {status && (
             <div className="phone-status" role="status">
               {status}
