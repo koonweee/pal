@@ -13,6 +13,7 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
   const calls: { name: string; arguments: Record<string, unknown> }[] = [];
   const native: string[] = [];
   let hold: Promise<void> | undefined;
+  let discoveryFailure: 'initialize' | 'tools/list' | undefined;
   let fail = false,
     loseResponse = false,
     pauseFail = false,
@@ -55,6 +56,11 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
     }
     if (input.id === undefined) {
       response.writeHead(202).end();
+      return;
+    }
+    if (input.method === discoveryFailure) {
+      if (discoveryFailure === 'initialize') response.writeHead(503).end();
+      // Leave discovery unanswered to exercise the real SDK timeout.
       return;
     }
     let result: unknown;
@@ -123,7 +129,20 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
   const first = { taskId: 'one', workerId: 'one' },
     second = { taskId: 'two', workerId: 'two' };
   try {
+    discoveryFailure = 'initialize';
+    expect(await androidTools(service)).toEqual({});
+    discoveryFailure = undefined;
     const tools = await androidTools(service);
+    expect(connections).toBe(1);
+    discoveryFailure = 'tools/list';
+    const discoveryStarted = Date.now();
+    expect(await androidTools(service)).toEqual({});
+    expect(Date.now() - discoveryStarted).toBeLessThan(6000);
+    discoveryFailure = undefined;
+    expect(Object.keys(await androidTools(service))).toEqual(
+      Object.keys(tools),
+    );
+    expect(connections).toBe(2);
     expect(
       Object.keys(await androidTools(new AndroidService(new ConfigService()))),
     ).toEqual([]);
@@ -244,7 +263,7 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
       device: 'usb-phone',
     });
     await service.call(second, 'android_apps', {});
-    expect(connections).toBe(2);
+    expect(connections).toBe(3);
     await service.secure(second, { action: 'inspect' });
     pauseFail = true;
     await expect(service.release('two', 'two')).rejects.toThrow(

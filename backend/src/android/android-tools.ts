@@ -15,6 +15,7 @@ export async function androidTools(
 ): Promise<ToolsInput> {
   if (!android.enabled) return {};
   const upstream = await android.toolDefinitions();
+  if (!upstream) return {};
   const names = Object.entries(androidActions);
   const describe = (text: string) =>
     names.reduce(

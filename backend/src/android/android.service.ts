@@ -1,4 +1,9 @@
-import { Inject, Injectable, type OnApplicationShutdown } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  type OnApplicationShutdown,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { NativeStatus } from './android-native.js';
 import {
@@ -32,6 +37,7 @@ type Owner = AndroidOwner & {
 
 @Injectable()
 export class AndroidService implements OnApplicationShutdown {
+  private readonly logger = new Logger(AndroidService.name);
   private client?: Client;
   private connecting?: Promise<Client>;
   private owner?: Owner;
@@ -68,7 +74,7 @@ export class AndroidService implements OnApplicationShutdown {
           new StreamableHTTPClientTransport(new URL(this.endpoint!), {
             requestInit: { headers: { Authorization: `Bearer ${this.token}` } },
           }),
-          { timeout: 10000 },
+          { timeout: 3000 },
         );
         this.client = client;
         return client;
@@ -87,7 +93,18 @@ export class AndroidService implements OnApplicationShutdown {
   }
 
   async toolDefinitions() {
-    return (await (await this.connection()).listTools()).tools;
+    let client: Client | undefined;
+    try {
+      client = await this.connection();
+      return (await client.listTools(undefined, { timeout: 3000 })).tools;
+    } catch {
+      if (this.client === client) this.client = undefined;
+      await client?.close().catch(() => {});
+      this.logger.warn(
+        'Android discovery unavailable; continuing without Android tools. A later worker run will retry.',
+      );
+      return undefined;
+    }
   }
 
   get generation() {

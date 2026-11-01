@@ -113,7 +113,7 @@ Unused optional tool arguments accept null or omission. Invalid argument shapes 
 
 ### Android interaction
 
-`AndroidModule` owns the configured phone integration. `AndroidService` injects one USB serial into a fixed Mobile MCP action set. Workers receive app discovery/launch, screen inspection/screenshot, taps, ordinary typing, swipes and navigation. Task receives availability guidance and delegates complete workflows. Service-specific MCP discovery remains Task-owned.
+`AndroidModule` owns the configured phone integration. Android connection and tool-list requests each have a three-second timeout. Failed discovery logs a warning and omits Android tools for that worker run; computer and secure-entry tools remain available. Failed discovery connections are discarded and a later worker run retries. `AndroidService` injects one USB serial into a fixed Mobile MCP action set. Workers receive app discovery/launch, screen inspection/screenshot, taps, ordinary typing, swipes and navigation. Task receives availability guidance and delegates complete workflows. Service-specific MCP discovery remains Task-owned.
 
 Calls reserve the phone for the trusted task/worker identity and execute serially, including private submissions. Other workers receive a busy error. Cleanup settles dispatched requests before releasing the helper. Successful private-entry yields retain the reservation for ten minutes of inactivity; cancellation, expiry and release invalidate native refs. Duplicate cleanup shares one release operation. An uncertain mutation is never automatically replayed. App sessions remain on the phone.
 
