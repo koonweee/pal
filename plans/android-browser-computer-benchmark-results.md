@@ -35,6 +35,13 @@ The desktop Apple session was verified during setup at 07:38 UTC; checks at 08:2
 
 Separate dev PWA setup is running in task `fd8eb1d0-bb59-492f-8a54-af3b769a4052`, reusing saved credentials where available and yielding for user verification. After both destinations are authenticated, use a new `warm-apple-authenticated` dataset; retain `warm-apple` as setup/access evidence. The end-of-run queue is recorded in `warm-apple/human-follow-up.json`.
 
+Desktop setup has reauthenticated with saved credentials and verified the account greeting and Sign out control. Android Chrome has reused the saved identifier and password and is waiting for Apple two-factor verification in the dev PWA. This human wait is outside benchmark timing; authenticated collection has not started.
+
+Two setup friction points are confirmed:
+
+- Android vault matching used `www.apple.com`, while the successful desktop login fields matched `idmsa.apple.com`. A fresh Android inspection with the supported account-website parameter set to `https://idmsa.apple.com` found and reused the saved account. Carry the actual login/account origin into credential reuse.
+- Cancelling the superseded identifier-entry card left its worker’s retained Android reservation, blocking the next worker. After confirming cancellation and no active entry requests, the exact stale reservation was released through `AndroidService.release`. This unblocked setup; the cancellation lifecycle issue remains unfixed.
+
 ### Timing and cleanup
 
 Timing includes Task planning, delegation, interaction and final answer. Browser URL opening happens before the measured stream; order setup through first model request was 1.9–2.7 seconds on desktop versus 0.02–0.04 seconds on Android. Android navigation occurs within the task. Direct URL access, native navigation, cache and initial screen differences remain confounders. Three repetitions on one phone and desktop support task-specific guidance, not a general reliability ranking.

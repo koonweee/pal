@@ -42,7 +42,7 @@ Gitignored datasets under `.local/android-browser-comparison/` contain frozen co
 - `main-reset-verified`: historical fixture and anonymous-web baseline, 36 scheduled cells, 15 executed and 21 setup deferrals.
 - `warm-retrieval`: current 27-cell Amazon/Facebook matrix; 23 passes and four incomplete results, all reviewed.
 - `warm-apple`: initial nine Apple checks; eight authentication dependencies and one error before measured execution. No eligible authenticated retrieval ranking.
-- `warm-apple-authenticated`: planned separate collection after Apple setup. Preserve the initial outcomes rather than overwriting them.
+- `warm-apple-authenticated`: planned separate collection after Apple setup. Preserve the initial outcomes rather than overwriting them. Desktop is reauthenticated; Android Chrome has reused saved credentials and awaits Apple two-factor verification in the dev PWA.
 
 ## Milestones
 
