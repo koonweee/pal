@@ -26,9 +26,10 @@ def selected(value, choices):
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--suite', choices=['browser-worker', 'interaction'], default='browser-worker')
-parser.add_argument('--phase', choices=['smoke', 'main', 'assisted'], default='main')
+parser.add_argument('--phase', choices=['smoke', 'main', 'assisted', 'diagnostic'], default='main')
 parser.add_argument('--validated-smoke', type=Path, help='Passing three-arm smoke on identical harness/images; required for main collection')
 parser.add_argument('--human-wait', type=int, default=900, help='Maximum wait for private input in the separate assisted phase, seconds')
+parser.add_argument('--arms', type=lambda v: selected(v, ['browser','computer','android']), help='Methods for diagnostic runs only')
 parser.add_argument('--parent', type=Path, help='Completed main comparison; required for separate assisted run')
 parser.add_argument('--variants', type=lambda v: selected(v, VARIANTS), default=VARIANTS[:9])
 parser.add_argument('--cases', type=lambda v: selected(v, CASES), default=None)
@@ -57,6 +58,13 @@ if args.suite == 'interaction':
 config = {k: getattr(args, k) for k in ['variants', 'cases', 'contexts', 'repetitions', 'timeout', 'round_offset']}
 if args.suite == 'interaction':
     config.update(suite='interaction', phase=args.phase, variants=['browser','computer'] if args.phase == 'assisted' else ['browser','computer','android'], contexts=['fresh'], parent=str(args.parent.resolve()) if args.parent else None, signOutAuthorized=True, humanWaitSeconds=args.human_wait, validatedSmoke=str(args.validated_smoke.resolve()) if args.validated_smoke else None)
+if args.arms and args.phase != 'diagnostic':
+    parser.error('--arms is only for diagnostic runs')
+if args.phase == 'diagnostic':
+    if args.suite != 'interaction' or any(c not in ['amazon-products','amazon-order'] for c in args.cases):
+        parser.error('Diagnostic phase supports Amazon retrieval using existing sessions')
+    config['variants'] = args.arms or ['android']
+    config['signOutAuthorized'] = False
 source_hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(SCRIPTS.iterdir()) if p.is_file()}
 if args.resume:
     output = args.resume.resolve()

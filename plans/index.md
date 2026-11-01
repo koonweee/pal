@@ -15,7 +15,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Android upstream interaction](android-upstream-interaction.md) | In Progress | Dependency-owned navigation, private-fill handoff and Amazon acceptance. |
+| [Android upstream interaction](android-upstream-interaction.md) | Done | Upstream navigation and private-fill handoff verified; Amazon order passes, products complete 1/2 with a recovered mis-tap. |
 | [Android Secure Fill Simplification](android-secure-fill-simplification.md) | Done | Remove app trust registration and audit native fill restrictions under controlled app installation. |
 | [Android Secure Fill](android-secure-fill.md) | Done | Shared browser/Android private entry, native field binding and direct filling. |
 | [Android, Browser and Computer Comparison](android-browser-computer-benchmark.md) | In Progress | Independent benchmark complete: 15 executed, 21 deferred; assisted live comparisons and Apple Store remain. |

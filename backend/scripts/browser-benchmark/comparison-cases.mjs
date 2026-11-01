@@ -56,9 +56,10 @@ export function comparisonSchedule({
   cases,
   repetitions = 3,
   assistedJobs,
+  variants = arms,
 }) {
   if (
-    !['smoke', 'main', 'assisted'].includes(phase) ||
+    !['smoke', 'main', 'assisted', 'diagnostic'].includes(phase) ||
     !Number.isInteger(repetitions) ||
     repetitions < 1
   )
@@ -91,14 +92,35 @@ export function comparisonSchedule({
   const jobs = [];
   for (let round = 0; round < repetitions; round++)
     for (const id of selected) {
-      const scenario = comparisonCases.find((c) => c.id === id);
+      let scenario = comparisonCases.find((c) => c.id === id);
+      if (phase === 'diagnostic') {
+        if (
+          !['amazon-products', 'amazon-order'].includes(id) ||
+          !variants.length ||
+          variants.some((arm) => !arms.includes(arm))
+        )
+          throw Error('Invalid diagnostic retrieval');
+        scenario = {
+          ...scenario,
+          login: false,
+          prompt: scenario.prompt.replace(
+            'Sign in with the matching saved Amazon account using Pal secure filling. ',
+            'Use the existing signed-in session. If sign-in is required, report that blocker and stop. ',
+          ),
+        };
+      }
       if (
         !scenario ||
         (phase !== 'assisted' && scenario.assisted) ||
         (phase === 'assisted' && scenario.kind !== 'live')
       )
         throw Error('Human-assisted cases require a separate assisted run');
-      const methods = scenario.assisted ? arms.slice(0, 2) : arms;
+      const methods =
+        phase === 'diagnostic'
+          ? variants
+          : scenario.assisted
+            ? arms.slice(0, 2)
+            : arms;
       for (let index = 0; index < methods.length; index++) {
         const arm = methods[(index + round) % methods.length];
         jobs.push({

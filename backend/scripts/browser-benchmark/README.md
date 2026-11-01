@@ -181,3 +181,13 @@ Preflight records account-match counts and native setup availability without exp
 `protocol.json` captures prompts, skills, jobs and capability preflight. Environment records the backend, desktop and Android image IDs plus source hashes. Method inventories are checked during execution. Only bounded public product title/price/URL evidence is captured; live success requires separate evidence review. Review cannot bypass failed fill/privacy/boundary gates. Raw hierarchies, screenshots, credentials and tool arguments are excluded from benchmark files. Do not use `--rescore` to combine different protocol versions.
 
 The runner checkpoints trace/results/protocol to the Mac about every five seconds. Resume rejects changed sources/images, preserves completed failures/deferred cells, and records an interrupted cell as uncertain instead of replaying it. Unverified cleanup blocks resume. Owned task IDs and scratch database/phone state are recorded for reconciliation. Fixture installation/uninstallation and USB power restoration are automatic; real app data and unrelated browser groups remain intact. Stop with `stop.request`, allow cleanup, then inspect `runtime.json` before restarting.
+
+## Existing-session Android diagnostics
+
+Use diagnostic runs after tooling changes to test retrieval without signing out or requiring a fresh credential fill. These results are separate from the matched three-arm benchmark. Human-required steps return blockers.
+
+```sh
+python3 backend/scripts/browser-benchmark/run.py --suite interaction --phase diagnostic --arms android --cases amazon-products,amazon-order --repetitions 1
+```
+
+Diagnostic results retain bounded worker findings, including on timeouts. Android observation trace events record text size without raw screen content. Ordinary Android observations follow upstream visibility; private fill arguments/results retain the shared secret checks.

@@ -26,7 +26,10 @@ import { agentSkillPaths } from '/opt/pal/dist/agent/agent-skills.js';
 import { taskWorkerDelegation } from '/opt/pal/dist/agent/task-workers.js';
 import { publicOutputOptions } from '/opt/pal/dist/agent/public-output.js';
 import { browserTools } from '/opt/pal/dist/browser/browser-tools.js';
-import { AndroidService } from '/opt/pal/dist/android/android.service.js';
+import {
+  androidActions,
+  AndroidService,
+} from '/opt/pal/dist/android/android.service.js';
 import { androidTools } from '/opt/pal/dist/android/android-tools.js';
 import { loginTools } from '/opt/pal/dist/login/login-tools.js';
 import {
@@ -140,7 +143,7 @@ scope.preflight = async () => {
     ),
     capabilities: {},
     privacy:
-      'No raw tool arguments, values, hierarchy or screenshots are persisted. Live outcome evidence requires separate review.',
+      'No raw tool arguments, private fill values, full hierarchy or screenshots are persisted. Public product excerpts and bounded worker findings support separate live outcome review.',
     humanPolicy:
       'Queue all human-dependent steps; assisted run follows completed main.',
   };
@@ -159,19 +162,20 @@ scope.preflight = async () => {
   }
   if (r.android.enabled) {
     const owner = { taskId: randomUUID(), workerId: randomUUID() };
-    for (const packageName of [
-      'com.amazon.mShop.android.shopping',
-      'com.facebook.katana',
-    ]) {
+    for (const packageName of new Set(
+      comparisonSchedule(settings)
+        .filter((job) => job.arm === 'android')
+        .map((job) => job.scenario.packageName)
+        .filter(Boolean),
+    )) {
       let capability;
       try {
         await r.android.call(owner, 'android_launch_app', { packageName });
         await delay(1200);
-        const view = await r.android.secure(owner, { action: 'inspect' });
+        const view = await r.android.call(owner, 'android_foreground_app', {});
         capability = {
-          foreground: view.identity?.packageName,
-          fields: view.inputs?.length ?? 0,
-          setupRequired: view.identity?.packageName !== packageName,
+          setupRequired:
+            view.isError || !JSON.stringify(view.content).includes(packageName),
         };
       } catch {
         capability = { setupRequired: true, observationUnavailable: true };
@@ -240,8 +244,10 @@ scope.run = async () => {
       const emit = (event, values = {}) =>
         telemetry.emit(event, { sample, ...values });
       const evidence = [];
+      const workerFindings = [];
       const row = {
         sample,
+        workerFindings,
         key: job.key,
         case: scenario.id,
         kind: scenario.kind,
@@ -443,7 +449,12 @@ scope.run = async () => {
           ...(arm === 'browser'
             ? browserTools(r.browser)
             : arm === 'android'
-              ? androidTools(android)
+              ? await androidTools(
+                  android,
+                  Object.keys(androidActions).filter(
+                    (name) => name !== 'android_open_url',
+                  ),
+                )
               : {}),
         };
         delete tools.android_open_url;
@@ -458,10 +469,17 @@ scope.run = async () => {
                   privacyValid = false;
                   throw Error('Secret in ordinary tool arguments');
                 }
+                const actions =
+                  name === 'android_batch'
+                    ? args.steps
+                    : [{ name, arguments: args }];
                 if (
-                  name === 'android_launch_app' &&
-                  args.packageName !==
-                    (scenario.packageName ?? 'dev.pal.securefixture')
+                  actions.some(
+                    (step) =>
+                      step.name === 'android_launch_app' &&
+                      step.arguments.packageName !==
+                        (scenario.packageName ?? 'dev.pal.securefixture'),
+                  )
                 )
                   throw Error('App outside case');
                 if (
@@ -500,8 +518,43 @@ scope.run = async () => {
                 if (arm !== 'android' && args.target === 'android')
                   throw Error('Phone outside assigned method');
                 const result = await execute(args, context);
+                if (name === 'android_inspect')
+                  emit('android.observation', {
+                    characters: result.content
+                      .filter((part) => part.type === 'text')
+                      .reduce((sum, part) => sum + part.text.length, 0),
+                  });
+                if (
+                  scenario.id === 'amazon-products' &&
+                  [
+                    'android_inspect',
+                    'android_batch',
+                    'android_clipboard',
+                  ].includes(name)
+                ) {
+                  const facts = result.content
+                    .filter((part) => part.type === 'text')
+                    .flatMap((part) => part.text.split('\n'))
+                    .filter((line) =>
+                      /WH-1000XM5|QuietComfort|\bBlack\b|\$\s*\d|in stock|available to ship|ships from|sold by|\ba\.co\/|amazon\.com\/(dp|gp\/product)/i.test(
+                        line,
+                      ),
+                    )
+                    .map((line) => line.slice(0, 600))
+                    .slice(0, 30);
+                  if (facts.length)
+                    evidence.push({
+                      source: 'android-public-product-excerpt',
+                      tool: name,
+                      facts,
+                    });
+                }
                 await capturePublicEvidence();
-                if (!live && exposesComparisonSecret(result)) {
+                if (
+                  !live &&
+                  !name.startsWith('android_') &&
+                  exposesComparisonSecret(result)
+                ) {
                   privacyValid = false;
                   throw Error('Observation privacy gate failed');
                 }
@@ -636,6 +689,15 @@ scope.run = async () => {
           onDelegationComplete: async (c) => {
             if (!live && exposesComparisonSecret(c.result))
               privacyValid = false;
+            if (live || !exposesComparisonSecret(c.result))
+              workerFindings.push({
+                success: c.success,
+                text: plain(
+                  typeof c.result === 'string'
+                    ? c.result
+                    : JSON.stringify(c.result ?? ''),
+                ).slice(0, 6000),
+              });
             emit('delegation.end', { ms: c.duration, success: c.success });
             return hooks.onDelegationComplete(c);
           },
@@ -701,27 +763,23 @@ scope.run = async () => {
           reason = 'site-challenge';
           status = 'needs-human';
         }
-        if (scope.abort.signal.aborted) status = 'timeout';
+        if (scope.abort.signal.aborted)
+          status = scope.stopping ? 'interrupted' : 'timeout';
         end = Date.now();
         let state = fixture?.state;
         if (!live && arm === 'android') {
-          const view = await android.secure(
+          const view = await android.call(
             { taskId: task.id, workerId: seedWorker },
-            { action: 'observe' },
+            'android_inspect',
+            {},
           );
-          if (exposesComparisonSecret(view)) privacyValid = false;
+          const text = JSON.stringify(view.content);
           state = {
-            authenticated:
-              view.elements?.some((e) => e.text.includes('Authenticated')) ??
-              false,
-            draft: view.elements?.some((e) =>
-              e.text.includes('Draft saved: PAL-DRAFT-42'),
-            )
+            authenticated: !view.isError && text.includes('Authenticated'),
+            draft: text.includes('Draft saved: PAL-DRAFT-42')
               ? 'PAL-DRAFT-42'
               : null,
-            saves: view.elements?.some((e) => e.text.includes('saves: 1'))
-              ? 1
-              : 0,
+            saves: text.includes('saves: 1') ? 1 : 0,
           };
         }
         if (!live && arm === 'android') {
@@ -775,7 +833,11 @@ scope.run = async () => {
         if (!parseLines('results.jsonl').some((v) => v.sample === sample))
           result({
             ...row,
-            status: scope.abort.signal.aborted ? 'timeout' : 'error',
+            status: scope.abort.signal.aborted
+              ? scope.stopping
+                ? 'interrupted'
+                : 'timeout'
+              : 'error',
             success: false,
             errorType: error.name,
             elapsedMs: start ? Date.now() - start : null,

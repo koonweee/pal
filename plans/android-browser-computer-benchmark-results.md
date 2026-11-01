@@ -161,3 +161,37 @@ Do not start with a larger model, more retries, arbitrary DOM/network bypasses, 
 - One real Amazon product, verify model/variant, offer price/availability and link. Record facts that remain inaccessible. Then one two-product run. Only resume three repetitions after the basic complete retrieval succeeds.
 
 This is an evaluation and proposed sequence, not implementation or deployment authorization beyond the user's existing requests.
+
+
+## Upstream-owned Android rerun
+
+Development now uses Mobile MCP 1.0.15 for ordinary inspection, refs, screenshots, clipboard, swipes and batching. The helper supplies private field inspection/fill only. Task remains Sol medium and the interaction worker Terra medium. These are existing-session diagnostics, separate from fresh-login and human-assisted comparisons. No browser/computer cells were rerun.
+
+| Native Amazon case | Elapsed | Reviewed retrieval outcome | Execution notes |
+| --- | ---: | --- | --- |
+| Products, first attempt | 199.9 s | Partial: Bose facts and both links; Sony new offer unresolved | Returned a concrete limitation after one targeted alternative; no timeout |
+| Most recent order | 45.0 s | Complete: date, first item and delivery status match stored UI observations | No unintended mutation observed |
+| Products, repeat | 201.0 s | Complete: both exact Black variants, new-offer prices, availability and copied links | Accidental Shopping List save was reversed; removal confirmed in UI |
+
+Product retrieval is complete in 1/2 attempts. The complete attempt is **not a clean read-only execution**: the actual screen reported both “Item saved to Shopping List” and “Item removed from Shopping List.” No cart/checkout action was observed. The report review records retrieval success and the recovered mutation separately. Order details remain in local benchmark evidence, not this document. Reviews were performed by Codex against recorded tool observations, not by the user.
+
+| Product-run measure | Previous helper path (two timeouts) | Upstream path (two completed answers) |
+| --- | --- | --- |
+| Whole sample | 601.3 / 601.4 s | 199.9 / 201.0 s |
+| Direct inspection calls | 51 / 46 | 21 / 24 |
+| Median direct inspection text | 32,921 / 33,466 characters | 12,626 / 12,100 characters |
+| Median direct inspection latency | 3.83 / 3.62 s | 2.07 / 1.40 s |
+| Sum of direct inspection latency | 218.2 / 182.0 s | 49.1 / 53.5 s |
+| Largest reported model input | 349,858 / 194,089 tokens | 70,493 / 88,333 tokens |
+| Clipboard reads | 0 / 0 | 2 / 2 |
+| Batch calls | 0 / 0 | 3 / 2 |
+
+Batch-contained inspections are not included in direct inspection counts/latencies. All three diagnostics completed without a reported tool transport/result error or CAPTCHA/login challenge. Correct transport does not guarantee the intended UI effect, as the recovered save demonstrates. Live offers and initial app state vary; these samples establish capability and failure modes, not a controlled reliability ranking.
+
+The unresolved first-run Sony offer was described as a blank buying-options panel by the worker. Its only screenshot showed the search condition filters, so the run does not prove that the offers panel was visually blank. The repeat retrieved a clearly labelled New offer successfully. This supports checking the visual fallback before concluding an accessibility-empty panel is unavailable.
+
+The accidental save used `@e112`, which the preceding inspection explicitly labelled **Share**. Upstream forwards ref taps to Mobile CLI; its implementation comment states that ref taps dump the UI again. This points to a possible reference freshness/re-identification problem on changing app content. Screenshot scaling metadata was present and correct. The exact cause needs isolated reproduction against upstream before adding custom target logic to Pal.
+
+Device acceptance also passes native and WebView Unicode username/password/OTP filling, stale private refs, ordinary ref taps after private fill, clipboard read/write/restoration, positioned swipes, batching and unmasked screenshots. The real Task/worker private HTTP flow and saved-vault reuse both reach the authenticated fixture. Backend build/lint and focused adapter, private-entry, helper transport and benchmark protocol tests pass.
+
+Local evidence: `upstream-products-first` and `upstream-amazon-followup` under `.local/android-browser-comparison`, plus acceptance logs under `.local/android-upstream`. Each diagnostic directory has raw results, trace, explicit evidence reviews and tooling metrics. Both runners verified cleanup. Disposable databases, fixture APK installation, copied scripts and temporary screenshots were removed; original phone power policy and persistent app sessions were preserved. About 900 KB of local benchmark/acceptance evidence is retained. Current dev images/volumes and the shared 14.1 GB build cache remain intact; replaced image IDs were already absent, so no unrelated images or caches were pruned.

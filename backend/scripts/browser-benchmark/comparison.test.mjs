@@ -157,6 +157,17 @@ test('native fixture reset accepts Android uppercase buttons and verifies the ne
   const android = {
     secure: async () => view,
     call: async (_, action, args) => {
+      if (action === 'android_inspect')
+        return {
+          content: [
+            {
+              type: 'text',
+              text:
+                'Found these elements on screen: ' +
+                JSON.stringify(view.elements),
+            },
+          ],
+        };
       if (action === 'android_tap') {
         assert.equal(args.ref, '@reset');
         taps++;
@@ -168,9 +179,38 @@ test('native fixture reset accepts Android uppercase buttons and verifies the ne
   await prepareNativeFixture(android, {});
   assert.equal(taps, 1);
   view = saved;
-  android.call = async () => {};
+  android.call = async () => ({
+    content: [
+      {
+        type: 'text',
+        text:
+          'Found these elements on screen: ' + JSON.stringify(view.elements),
+      },
+    ],
+  });
   await assert.rejects(
     prepareNativeFixture(android, {}),
     /fresh username stage/,
+  );
+});
+
+test('diagnostic retrieval uses selected methods and existing sessions without changing comparison login cases', () => {
+  const jobs = comparisonSchedule({
+    phase: 'diagnostic',
+    variants: ['android'],
+    cases: ['amazon-products', 'amazon-order'],
+    repetitions: 1,
+  });
+  assert.equal(jobs.length, 2);
+  assert(
+    jobs.every((job) => job.arm === 'android' && job.scenario.login === false),
+  );
+  assert.match(jobs[1].scenario.prompt, /existing signed-in session/);
+  assert.equal(
+    comparisonCases.find((c) => c.id === 'amazon-order').login,
+    true,
+  );
+  assert.throws(() =>
+    comparisonSchedule({ phase: 'diagnostic', cases: ['apple-store'] }),
   );
 });
