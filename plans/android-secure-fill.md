@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned. All milestones remain open. Implement before the [Android/browser/computer comparison](android-browser-computer-benchmark.md).
+Done. All four milestones meet development exit criteria. The connected-phone fixture passes both new private credentials and saved-login reuse with fresh OTP. Live-app first-run setup remains a preflight requirement for the [Android/browser/computer comparison](android-browser-computer-benchmark.md).
 
 ## Goal
 
@@ -12,11 +12,11 @@ Scope: development acceptance on the USB phone connected to this Mac, using cont
 
 ## Current Behavior
 
-- [Android Mobile MCP](android-mobile-mcp.md) provides worker-only phone control through `backend/src/android/`, the `backend/android/` sidecar and `scripts/dev-local`. The host selects one device, serializes operations and reserves it for an interaction worker.
-- `android_type` enters ordinary text into current focus. Android guidance currently requires manual credential/code entry. Android secure filling is unimplemented.
-- `LoginService`, `LoginRepository`, `BitwardenService`, `LoginBrowser` and `login-tools.ts` own browser secure entry. Private cards, staged entry, account choice, notification/recovery and transient OTP handling already exist. See [staged login](staged-login-entry.md) and [architecture](../architecture/backend.md#browser-secure-entry).
-- Browser refs bind caller, page, document and elements. Android needs equivalent ownership and freshness checks appropriate to native fields. Android app identity also needs an explicit trusted relationship to the website used for vault lookup.
-- Mobile MCP's model-facing element output omits richer native field properties. Direct native-node filling and coexistence with its automation connection must be proven on the actual phone.
+- [Android Mobile MCP](android-mobile-mcp.md) supplies worker-only navigation through the existing sidecar and container ADB. Ordinary inspection and screenshots use the private helper's masked observations. The host selects one phone and serializes ownership across ordinary and private operations.
+- `LoginService` and `LoginRepository` share account choice, Bitwarden lookup, private cards, staged merging, transient OTP, notifications and recovery across browser and native Android. `LoginDestinations` routes observation and filling to the browser or Android adapter.
+- `login_inspect` accepts `target: "android"` when Android is configured; existing fill/request tools infer the destination from opaque refs. Native filling binds the worker, helper session, window/node, package and installed signer. Operator-controlled `PAL_ANDROID_LOGIN_APPS` supplies the HTTPS vault origin.
+- The unrooted instrumentation helper exposes native field properties and performs validated `ACTION_SET_TEXT` through an authenticated ADB channel. Mobile MCP and the helper hand off Android's single UI Automation connection.
+- Native username/password and OTP are supported. WebView private filling, payments, unlock, biometrics and passkeys require manual or separately supported workflows. No personal live-app trust mapping is configured in dev.
 
 ## Target Data Shape
 
@@ -28,7 +28,7 @@ Scope: development acceptance on the USB phone connected to this Mac, using cont
 
 ## Milestones
 
-### 1. Prove native inspection and direct filling
+### 1. Prove native inspection and direct filling — complete
 
 Implementation tasks:
 
@@ -44,7 +44,7 @@ Exit criteria:
 - The unrooted phone exposes useful field metadata and accepts a synthetic secret on the selected native node. The following observation is masked.
 - Mobile MCP navigation still works before and after helper operations. No target-app modification is needed. Any unsupported live login paths and automation conflicts are documented before expanding integration.
 
-### 2. Share the secure-entry workflow
+### 2. Share the secure-entry workflow — complete
 
 Implementation tasks:
 
@@ -61,7 +61,7 @@ Exit criteria:
 - Account choice and credential persistence have one shared policy. Existing browser private-entry and staged-login journeys still pass.
 - Wrong app/signer/owner, stale node/window, missing password metadata, cancellation and late submissions fail without misdirected filling.
 
-### 3. Protect observations and align guidance
+### 3. Protect observations and align guidance — complete
 
 Implementation tasks:
 
@@ -76,7 +76,7 @@ Exit criteria:
 - Synthetic canaries stay out of model observations, tool text, traces, errors, chat and persisted previews, including after fill failure, reconnect and worker resume. Image-level redaction is checked independently.
 - Main remains the router, Task coordinates and the interaction worker alone operates the phone. Detailed Android/authentication procedures remain discoverable on demand.
 
-### 4. Development acceptance and handoff to benchmark
+### 4. Development acceptance and handoff to benchmark — complete
 
 Implementation tasks:
 
@@ -99,22 +99,25 @@ Exit criteria:
 
 ## Validation Commands
 
-Existing commands, run only as relevant to implementation:
-
 ```sh
-./scripts/dev-local android-status
-cd backend
-npm run build
-npm run lint
-npm test -- test/android.spec.ts test/login.spec.ts test/task-workers.spec.ts test/agent-skills.spec.ts
-npm run test:e2e -- test/login.e2e-spec.ts
-cd ..
+./scripts/dev-local android-up
 ./scripts/dev-local rebuild
+./scripts/dev-local android-secure-smoke
 ./scripts/dev-local android-smoke
-./scripts/dev-local status
+cd backend
+node --test android/helper-client.test.mjs
+npm run lint
+npm run openapi:check
+TEST_DATABASE_URL=postgresql://pal:pal@localhost:15433/pal_android_secure_test npm test -- test/android.spec.ts test/login.spec.ts test/task-workers.spec.ts test/agent-skills.spec.ts
+TEST_DATABASE_URL=postgresql://pal:pal@localhost:15433/pal_android_secure_test npm run test:e2e -- test/android-login.e2e-spec.ts test/login.e2e-spec.ts
+cd ../frontend
+npm run check
+npm run api:check
+npm run check:ui
+npx playwright test test/secure-entry.spec.ts
 ```
 
-Implementation must add and document a reproducible containerized helper build and synthetic secure-fill device acceptance command. The existing read-only `android-smoke` is insufficient secure-fill acceptance. If first-party API/UI changes, run API generation, frontend type checks and the focused secure-entry browser test using existing scripts.
+Create the named scratch database before database-backed local checks and remove it afterward. `android-up` builds both APKs in Docker. `android-secure-smoke` installs its owned fixture, runs direct helper proof and real Task/worker/private-HTTP journeys against an isolated database and synthetic vault API, then uninstalls the fixture and removes scratch resources. It preserves three masked proof images under `.local/android-secure-fill/last-proof/`.
 
 ## Overall Exit Criteria
 
@@ -122,3 +125,19 @@ Implementation must add and document a reproducible containerized helper build a
 - Root and a full autofill provider are unnecessary. The helper has a reproducible container build and validated coexistence with Mobile MCP.
 - Validated direct-node filling, trusted target matching, bounded ownership and masked ordinary observations are enforced in code. Semantic field-role assignment and authentication-result interpretation remain model judgment.
 - Browser regressions pass; development acceptance and cleanup are recorded; the dependent benchmark can exercise actual filling. Production deployment and deferred features remain outside this plan.
+
+## Validation Evidence
+
+Acceptance: 2026-10-31, connected unrooted Samsung SM-A376U, Android 17, container ADB and Mobile MCP 1.0.15. Helper and fixture are built from this repository using SDK 35, Build Tools 35.0.0, AGP 8.9.2 and Gradle 8.11.1. The helper's development signing key persists in the Docker signing cache. The active Android image is `pal-android-local` (manifest `31f338d2e71fa49349e9c7440af239fefa1df5b4d06536a7f4e0816cad2e4693`).
+
+- Direct helper proof passes exact Unicode username/password and OTP values, password-role rejection, stale helper refs and post-fill masking. The fixture includes an editable subtree with a text canary; descendants are masked and omitted from text observations. Username/password masked images were visually checked independently.
+- Android permits one UI Automation connection. The pinned Mobile CLI has no public Android stop command; helper startup releases its exact `com.mobilenext.mobilecli.DeviceServer` process. The proof passes helper → Mobile MCP Settings launch → helper inspection. Read-only captures may retry consistency races; secret writes are dispatched once.
+- The actual Sol Task → Terra interaction worker passes fresh staged private entry and a second sign-in using the saved synthetic account with a fresh private OTP. Actual private HTTP submissions fill username/password/code/code; saved-vault filling supplies the second username/password. Independent fixture state confirms both authenticated outcomes and the vault contains one merged login with no OTP. The acceptance runner preloads the production skill bodies; focused skill tests cover on-demand discovery. No real vault or account is used.
+- Focused backend checks pass: 13 service/worker/skill tests, nine browser/native secure-entry E2E tests, authenticated-helper transport test, build, lint/boundaries and OpenAPI consistency. Coverage includes owner/app/signer/role checks, stale refs, cancellation/late submissions, retained-worker resume, and an applied fill whose response is lost without a duplicate replay. Frontend type/API/ownership checks and all three secure-entry Playwright cases pass, including browser layouts and native private entry.
+- Ordinary Task/worker Android smoke passes Chrome navigation to IANA and native Settings model/version lookup. Chrome navigation uses sanitized element text. Its WebView screenshot is fully masked, so visual verification of web content is unavailable through this path; native screen screenshots remain usable. This capability limit must stay visible in the comparison.
+- Amazon inspection stops at Android permission-controller setup; Facebook stops at Meta app-manager setup. Neither exposes a native login field at that point. No permission decisions, sign-outs or personal-account fills were performed, and these setup-component signers were not trusted as app identities. Benchmark preflight must complete setup, verify real destination identity and explicitly configure eligible app signers/origins. Live account-fill capability remains unverified.
+- Dev backend and Android sidecar are rebuilt; the user-approved dev PWA refresh is available at `http://localhost:14173`. Production deployment and benchmark collection remain outside this plan.
+
+Cleanup retains the installed production helper, current development images, persistent development volumes, Android SDK/Gradle/signing build caches and the three masked proof images. The owned fixture, synthetic vault/database records, copied acceptance scripts, temporary APKs/probes and test-only forwards are removed; the phone's original USB power setting is restored. Resource sizes are recorded in the completion report.
+
+Retained development artifacts (approximate reported sizes; layers may be shared): Android image 520 MB, backend image 2.17 GB, refreshed web image 87 MB, Android SDK layer 448 MB, Gradle dependency cache 344 MB, signing cache 3.7 MB and Gradle/JDK base layers about 1.14 GB. They support the active stack and reproducible helper rebuilds. Disposable intermediate image IDs are absent; no shared images, build caches or persistent volumes were pruned. Final Docker inventory is about 9.15 GB of images and 13.94 GB of shared build cache. Scratch Android databases are absent.

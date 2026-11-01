@@ -5,14 +5,13 @@ import { BrowserService } from '../browser/browser.service.js';
 import { EventsService } from '../events/events.service.js';
 import { ApplicationError } from '../application/contracts/errors.js';
 import { BitwardenService, type CredentialInput } from './bitwarden.service.js';
-import {
-  LoginRepository,
-  loginOwner,
-  type LoginRequest,
-} from './login.repository.js';
-import { LoginBrowser } from './login-browser.js';
+import { LoginRepository, type LoginRequest } from './login.repository.js';
+import type { LoginBrowser } from './login-browser.js';
+import { LoginDestinations } from './login-destinations.js';
+import { AndroidService } from '../android/android.service.js';
 import { cardValues, type CardSubmission } from './payment-card.js';
 import {
+  sameDestination,
   credentialFieldLabels,
   credentialRoles,
   fieldKind,
@@ -22,7 +21,7 @@ import {
 
 @Injectable()
 export class LoginService implements OnModuleDestroy {
-  private readonly inspector = new LoginBrowser();
+  private readonly inspector: LoginDestinations;
   private notify?: (taskId: string, text: string) => Promise<void>;
   private timer?: ReturnType<typeof setInterval>;
   private notifying = false;
@@ -33,7 +32,13 @@ export class LoginService implements OnModuleDestroy {
     @Inject(EventsService) private readonly events: EventsService,
     @Inject(TasksService) private readonly tasks: TasksService,
     @Inject(ChatService) private readonly chat: ChatService,
-  ) {}
+    @Inject(AndroidService) private readonly android: AndroidService,
+  ) {
+    this.inspector = new LoginDestinations(browser, android);
+  }
+  get androidEnabled() {
+    return this.android.enabled;
+  }
   bindNotifier(notify: (taskId: string, text: string) => Promise<void>) {
     this.notify = notify;
     if (this.timer) clearInterval(this.timer);
@@ -64,6 +69,8 @@ export class LoginService implements OnModuleDestroy {
       Date.now() - row.createdAt.getTime() >= 24 * 3600_000
     )
       return;
+    if (row.destination.kind === 'android')
+      return this.android.owns(taskId, row.workerId) ? row.workerId : undefined;
     const group = (await this.browser.groups()).find(
       (group) => group.taskId === taskId,
     );
@@ -121,7 +128,8 @@ export class LoginService implements OnModuleDestroy {
           row.status === 'pending' &&
           row.kind !== 'credentials' &&
           !this.inspector.live(
-            loginOwner(row.taskId, row.workerId ?? undefined),
+            row.taskId,
+            row.workerId ?? undefined,
             row.fields,
           )
         ) {
@@ -134,25 +142,27 @@ export class LoginService implements OnModuleDestroy {
             await this.repository.notified(row.id, row.status);
             continue;
           }
+          const surface =
+            row.destination.kind === 'android' ? 'Android app' : 'browser';
           const next =
             row.status === 'updating'
-              ? `Automatic recovery ${row.recoveryAttempts}/2: browser input references are stale. Inspect the browser again, choose fresh fields and call secure_entry_request to replace the inline form. Never ask the user to refresh. If login already completed, verify it and complete the task.`
+              ? `Automatic recovery ${row.recoveryAttempts}/2: secure input references are stale. Inspect the destination again, choose fresh fields and call secure_entry_request to replace the inline form. Never ask the user to refresh. If login already completed, verify it and complete the task.`
               : row.status === 'failed'
                 ? 'Automatic recovery stopped. Yield; the inline card lets the user retry. Do not create more requests until the user retries.'
                 : row.status === 'saved'
-                  ? 'The requested credential fields are stored. Inspect again and use secure_fill with the saved account for subsequent login stages.'
+                  ? 'The requested credential fields are stored. Filling could not be confirmed. Inspect current state and verify any advancement; fill fresh fields only when still needed.'
                   : row.status === 'selected'
                     ? 'The user selected a saved account. Inspect again and use secure_fill without accountId to continue this selected flow.'
                     : row.status === 'filled'
                       ? row.kind === 'card'
                         ? 'The payment fields were filled directly in the browser. Filling does not submit a purchase.'
                         : row.kind === 'code'
-                          ? 'The verification code was filled directly in the browser.'
-                          : `The requested credential fields are stored. The selected ${Object.keys(row.fields ?? {}).join('/')} fields were filled directly in the browser.`
+                          ? `The verification code was filled directly in the ${surface}.`
+                          : `The requested credential fields are stored. The selected ${Object.keys(row.fields ?? {}).join('/')} fields were filled directly in the ${surface}.`
                       : 'The request was cancelled.';
           await this.notify(
             row.taskId,
-            `Secure entry request ${row.id} for ${row.origin} is ${row.status}. ${next}${row.kind === 'credentials' && ['saved', 'selected', 'filled'].includes(row.status) ? ` Keep me signed in preference: ${row.keepMeSignedIn ? 'on' : 'off'}.` : ''} This notification can be delivered more than once.`,
+            `Secure entry request ${row.id} for ${row.origin} is ${row.status}. ${next}${row.destination.kind === 'browser' && row.kind === 'credentials' && ['saved', 'selected', 'filled'].includes(row.status) ? ` Keep me signed in preference: ${row.keepMeSignedIn ? 'on' : 'off'}.` : ''} This notification can be delivered more than once.`,
           );
           await this.repository.notified(row.id, row.status);
         } catch {
@@ -170,9 +180,15 @@ export class LoginService implements OnModuleDestroy {
     workerId?: string,
     action?: string[],
     signal?: AbortSignal,
+    surface: 'browser' | 'android' = 'browser',
   ) {
     try {
       signal?.throwIfAborted();
+      if (surface === 'android' && action)
+        throw new ApplicationError(
+          'invalid_input',
+          'Browser actions are unavailable for Android private inspection',
+        );
       if (action) {
         if (!action.length)
           throw new ApplicationError(
@@ -203,15 +219,13 @@ export class LoginService implements OnModuleDestroy {
         if (frame)
           await frame.waitForLoadState('domcontentloaded', { timeout: 5000 });
       }
-      const page = await this.browser.selectedPage(taskId, workerId);
       if (action)
-        await page.waitForLoadState('domcontentloaded', { timeout: 5000 });
+        await (
+          await this.browser.selectedPage(taskId, workerId)
+        ).waitForLoadState('domcontentloaded', { timeout: 5000 });
       signal?.throwIfAborted();
-      const result = await this.inspector.inspect(
-        page,
-        loginOwner(taskId, workerId),
-      );
-      const origin = new URL(page.url()).origin;
+      const result = await this.inspector.inspect(taskId, workerId, surface);
+      const origin = result.origin;
       const accounts = new Map<
         string,
         { id: string; label: string; origin: string }
@@ -221,7 +235,7 @@ export class LoginService implements OnModuleDestroy {
         try {
           const urls = new Map(
             result.inputs.map((input) => [
-              this.inspector.url(loginOwner(taskId, workerId), input.ref),
+              this.inspector.url(taskId, workerId, input.ref),
               input.origin,
             ]),
           );
@@ -242,11 +256,16 @@ export class LoginService implements OnModuleDestroy {
         result.inputs,
         result.image,
         result.inspectionId,
+        result.destination,
       );
       this.events.publish({ event: 'login.updated', taskId });
       return {
         origin,
+        ...(result.destination.kind === 'android'
+          ? { app: result.destination.packageName }
+          : {}),
         inputs: result.inputs,
+        ...('screen' in result ? { screen: result.screen } : {}),
         accounts: [...accounts.values()],
         vaultStatus,
         inspectionId,
@@ -267,11 +286,12 @@ export class LoginService implements OnModuleDestroy {
     keepMeSignedIn?: boolean,
     chooseAccount = false,
   ) {
-    const target = await this.inspector.select(
-      await this.browser.selectedPage(taskId, workerId),
-      loginOwner(taskId, workerId),
-      fields,
-    );
+    const target = await this.inspector.select(taskId, workerId, fields);
+    if (target.destination.kind === 'android' && keepMeSignedIn !== undefined)
+      throw new ApplicationError(
+        'invalid_input',
+        'Session preferences apply to browser logins',
+      );
     const kind = fieldKind(fields);
     if (kind === 'card' && keepMeSignedIn !== undefined)
       throw new ApplicationError(
@@ -299,6 +319,7 @@ export class LoginService implements OnModuleDestroy {
       target.inspectionId,
       keepMeSignedIn,
       picker,
+      target.destination,
     );
     await this.publishCard(row);
     await this.tasks.update(taskId, { status: 'needs-input' });
@@ -309,7 +330,9 @@ export class LoginService implements OnModuleDestroy {
       origin: row.origin,
       kind,
       chooseAccount: row.chooseAccount,
-      keepMeSignedIn: row.keepMeSignedIn,
+      ...(row.destination.kind === 'browser'
+        ? { keepMeSignedIn: row.keepMeSignedIn }
+        : {}),
     };
   }
 
@@ -325,12 +348,15 @@ export class LoginService implements OnModuleDestroy {
     signal?.throwIfAborted();
     if (action && !action.length)
       throw new ApplicationError('invalid_input', 'Supply a browser action');
-    const page = await this.browser.selectedPage(taskId, workerId);
-    const target = await this.inspector.select(
-      page,
-      loginOwner(taskId, workerId),
-      fields,
-    );
+    const target = await this.inspector.select(taskId, workerId, fields);
+    if (
+      target.destination.kind === 'android' &&
+      (action || keepMeSignedIn !== undefined)
+    )
+      throw new ApplicationError(
+        'invalid_input',
+        'Android filling accepts no browser action or session preference',
+      );
     if (fieldKind(fields) === 'card') {
       if (action || accountId || keepMeSignedIn !== undefined)
         throw new ApplicationError(
@@ -349,7 +375,11 @@ export class LoginService implements OnModuleDestroy {
     const flow = await this.repository.selection(taskId, workerId);
     const site = await this.repository.site(target.origin);
     const activeFlow =
-      flow?.origin === target.origin && !flow.confirmedAt ? flow : undefined;
+      flow?.origin === target.origin &&
+      sameDestination(flow.destination, target.destination) &&
+      !flow.confirmedAt
+        ? flow
+        : undefined;
     const preferredId =
       accountId ?? activeFlow?.accountId ?? site?.lastAccountId;
     const account = accountId
@@ -380,21 +410,23 @@ export class LoginService implements OnModuleDestroy {
       );
     let filled: Awaited<ReturnType<LoginBrowser['fill']>> & {
       accountId: string;
-      keepMeSignedIn: boolean;
+      keepMeSignedIn?: boolean;
     };
     try {
       signal?.throwIfAborted();
       const result = await this.inspector.fill(
-        page,
-        loginOwner(taskId, workerId),
+        taskId,
+        workerId,
         fields,
         account.login!,
       );
       const keep =
-        keepMeSignedIn ??
-        activeFlow?.keepMeSignedIn ??
-        site?.keepMeSignedIn ??
-        false;
+        target.destination.kind === 'android'
+          ? false
+          : (keepMeSignedIn ??
+            activeFlow?.keepMeSignedIn ??
+            site?.keepMeSignedIn ??
+            false);
       if (keepMeSignedIn !== undefined)
         await this.repository.keep(target.origin, keepMeSignedIn);
       await this.repository.select(
@@ -403,8 +435,15 @@ export class LoginService implements OnModuleDestroy {
         target.origin,
         account.id,
         keep,
+        target.destination,
       );
-      filled = { ...result, accountId: account.id, keepMeSignedIn: keep };
+      filled = {
+        ...result,
+        accountId: account.id,
+        ...(target.destination.kind === 'browser'
+          ? { keepMeSignedIn: keep }
+          : {}),
+      };
     } finally {
       if (account.login) {
         account.login.password = undefined;
@@ -484,12 +523,17 @@ export class LoginService implements OnModuleDestroy {
       ? await this.repository.selection(row.taskId, row.workerId ?? undefined)
       : undefined;
     const accountId =
-      flow?.origin === row.origin && !flow.confirmedAt
+      flow?.origin === row.origin &&
+      sameDestination(flow.destination, row.destination) &&
+      !flow.confirmedAt
         ? flow.accountId
         : undefined;
     return {
       id: row.id,
       origin: row.origin,
+      ...(row.destination.kind === 'android'
+        ? { app: row.destination.packageName }
+        : {}),
       kind: row.kind,
       chooseAccount: row.chooseAccount,
       status: row.status,
@@ -572,14 +616,9 @@ export class LoginService implements OnModuleDestroy {
               );
             }
             // Validate the live destination before persisting or filling anything.
-            const page = await this.browser
-              .selectedPage(row.taskId, row.workerId ?? undefined)
-              .catch(() => {
-                throw new StaleSecureFieldsError();
-              });
             const target = await this.inspector.select(
-              page,
-              loginOwner(row.taskId, row.workerId ?? undefined),
+              row.taskId,
+              row.workerId ?? undefined,
               row.fields,
             );
             if (target.origin !== row.origin)
@@ -647,6 +686,14 @@ export class LoginService implements OnModuleDestroy {
   ) {
     try {
       const current = input ? await this.repository.current(id) : undefined;
+      if (
+        current?.destination.kind === 'android' &&
+        input?.keepMeSignedIn !== undefined
+      )
+        throw new ApplicationError(
+          'invalid_input',
+          'Session preferences apply to browser logins',
+        );
       const flow = current
         ? await this.repository.selection(
             current.taskId,
@@ -654,7 +701,10 @@ export class LoginService implements OnModuleDestroy {
           )
         : undefined;
       const activeAccountId =
-        current && flow?.origin === current.origin && !flow.confirmedAt
+        current &&
+        flow?.origin === current.origin &&
+        sameDestination(flow.destination, current.destination) &&
+        !flow.confirmedAt
           ? flow.accountId
           : undefined;
       const row = await this.repository.finish(
@@ -714,6 +764,11 @@ export class LoginService implements OnModuleDestroy {
       status: 'selected',
       keepMeSignedIn,
       submit: async (row) => {
+        if (row.destination.kind === 'android' && keepMeSignedIn !== undefined)
+          throw new ApplicationError(
+            'invalid_input',
+            'Session preferences apply to browser logins',
+          );
         const account = (await this.vault.matching(row.origin)).find(
           (item) => item.id === accountId,
         );
@@ -750,14 +805,16 @@ export class LoginService implements OnModuleDestroy {
     accountId?: string,
   ) {
     if (!row.fields) throw new StaleSecureFieldsError();
-    const owner = loginOwner(row.taskId, row.workerId ?? undefined);
-    const page = await this.browser
-      .selectedPage(row.taskId, row.workerId ?? undefined)
-      .catch(() => {
-        throw new StaleSecureFieldsError();
-      });
-    const target = await this.inspector.select(page, owner, row.fields);
-    if (target.origin !== row.origin) throw new StaleSecureFieldsError();
+    const target = await this.inspector.select(
+      row.taskId,
+      row.workerId ?? undefined,
+      row.fields,
+    );
+    if (
+      target.origin !== row.origin ||
+      !sameDestination(target.destination, row.destination)
+    )
+      throw new StaleSecureFieldsError();
     if (
       accountId &&
       !(await this.vault.matching(target.url)).some(
@@ -765,7 +822,12 @@ export class LoginService implements OnModuleDestroy {
       )
     )
       throw new StaleSecureFieldsError();
-    await this.inspector.fill(page, owner, row.fields, values);
+    await this.inspector.fill(
+      row.taskId,
+      row.workerId ?? undefined,
+      row.fields,
+      values,
+    );
   }
   async submitCode(id: string, code: string) {
     try {
@@ -808,6 +870,11 @@ export class LoginService implements OnModuleDestroy {
       );
     if (keepMeSignedIn !== undefined) {
       const flow = await this.repository.selection(taskId, workerId);
+      if (flow?.destination.kind === 'android')
+        throw new ApplicationError(
+          'invalid_input',
+          'Session preferences apply to browser logins',
+        );
       const origin =
         flow?.origin ??
         new URL((await this.browser.selectedPage(taskId, workerId)).url())
@@ -832,7 +899,13 @@ export class LoginService implements OnModuleDestroy {
         'conflict',
         'No selected login is available to confirm',
       );
-    return { status: 'recorded' as const, ...flow };
+    return {
+      status: 'recorded' as const,
+      origin: flow.origin,
+      ...(flow.destination.kind === 'browser'
+        ? { keepMeSignedIn: flow.keepMeSignedIn }
+        : {}),
+    };
   }
   onModuleDestroy() {
     if (this.timer) clearInterval(this.timer);

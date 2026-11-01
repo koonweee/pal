@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned. Collection depends on completion of [Android Secure Fill](android-secure-fill.md). All milestones remain open. This plan authorizes planning only; implementation and benchmark collection are subsequent work.
+Planned. [Android Secure Fill](android-secure-fill.md) meets development acceptance. All comparison milestones remain open. This plan authorizes planning only; implementation and benchmark collection are subsequent work.
 
 ## Goal
 
@@ -13,7 +13,7 @@ Measure when Pal should prefer Android apps, browser automation or desktop compu
 - Task owns coordination and delegates UI work to an interaction worker. Current shared guidance prefers service tools/APIs, then suitable Android apps for UI workflows, with browser/computer available as appropriate. See `backend/src/agent/instructions/interaction-methods.md`.
 - The interaction worker uses `gpt-6.1-terra` at medium effort; Task uses `gpt-6.1-sol` at medium effort. Android controls are configured through the development sidecar; detailed procedures load on demand.
 - [Existing benchmark infrastructure](../backend/scripts/browser-benchmark/README.md) already measures Task/Worker timing, usage, boundaries and fixture results. [Cua comparison findings](cua-driver-comparison.md) identify evidence-loss and interpretation limits to avoid repeating.
-- Android private filling is pending the prerequisite plan. Browser secure-entry and Bitwarden workflows exist. Existing authenticated-session Android smoke tests do not benchmark filling.
+- Android private filling passes new private-entry and saved-login fixture journeys with OTP. Ordinary observations are masked; WebView screenshots are fully masked, so Android Chrome visual verification is unavailable through that path. Amazon and Facebook remain blocked by first-run setup; benchmark preflight must verify their actual login surfaces and configure trusted package/signing identities. Existing acceptance evidence does not establish live-app fill capability or benchmark results.
 
 ## Comparison Protocol
 

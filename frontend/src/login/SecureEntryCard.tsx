@@ -127,6 +127,7 @@ export function SecureEntryCard({ requestId }: { requestId: string }) {
         <SecureEntryHeading
           title={title}
           origin={current?.origin}
+          app={current?.app}
           complete={complete}
           cancelled={cancelled}
         />
@@ -204,11 +205,13 @@ export function SecureEntryCard({ requestId }: { requestId: string }) {
 function SecureEntryHeading({
   title,
   origin,
+  app,
   complete = false,
   cancelled = false,
 }: {
   title: string;
   origin?: string;
+  app?: string;
   complete?: boolean;
   cancelled?: boolean;
 }) {
@@ -229,7 +232,9 @@ function SecureEntryHeading({
         </Text>
         {origin && (
           <Text size="xs" c="dimmed">
-            {new URL(origin).hostname}
+            {app
+              ? `${app} · ${new URL(origin).hostname}`
+              : new URL(origin).hostname}
           </Text>
         )}
       </div>
@@ -321,7 +326,7 @@ function SecureEntryForm({
           : choosing
             ? await selectLoginAccount(request.id, {
                 accountId: accountId!,
-                keepMeSignedIn,
+                ...(!request.app ? { keepMeSignedIn } : {}),
               })
             : codeEntry
               ? await submitLoginCode(request.id, code)
@@ -329,7 +334,7 @@ function SecureEntryForm({
                   ...(needsUsername ? { username } : {}),
                   ...(needsPassword ? { password } : {}),
                   ...(!accountId ? { label } : {}),
-                  keepMeSignedIn,
+                  ...(!request.app ? { keepMeSignedIn } : {}),
                   ...(accountId ? { accountId } : {}),
                 });
       setUsername('');
@@ -378,6 +383,7 @@ function SecureEntryForm({
                 : credentialTitle(request)
         }
         origin={request.origin}
+        app={request.app}
       />
       {!choosing && request.inspectionId && (
         <div className="secure-entry-preview">
@@ -590,7 +596,7 @@ function SecureEntryForm({
               )}
             </>
           )}
-          {!codeEntry && !cardEntry && (
+          {!codeEntry && !cardEntry && !request.app && (
             <Checkbox
               className={choosing ? undefined : 'secure-entry-remember'}
               label="Keep me signed in"

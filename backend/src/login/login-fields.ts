@@ -34,6 +34,16 @@ export class StaleSecureFieldsError extends ApplicationError {
   }
 }
 
+export type SecureDestination =
+  | { kind: 'browser' }
+  | { kind: 'android'; packageName: string; signers: string[] };
+export const sameDestination = (a: SecureDestination, b: SecureDestination) =>
+  a.kind === b.kind &&
+  (a.kind === 'browser' ||
+    (b.kind === 'android' &&
+      a.packageName === b.packageName &&
+      [...a.signers].sort().join(',') === [...b.signers].sort().join(',')));
+
 export interface LoginInput {
   ref: string;
   origin: string;
@@ -42,6 +52,7 @@ export interface LoginInput {
   label: string;
   group: string;
   maxLength?: number;
+  inputType?: number;
 }
 
 export function credentialRoles(fields?: SecureFields | null) {

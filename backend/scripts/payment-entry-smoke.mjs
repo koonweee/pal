@@ -15,6 +15,7 @@ const { EventsService } = await import('./dist/events/events.service.js');
 const { DatabaseService } = await import('./dist/database/database.service.js');
 const { LoginRepository } = await import('./dist/login/login.repository.js');
 const { LoginService } = await import('./dist/login/login.service.js');
+const { AndroidService } = await import('./dist/android/android.service.js');
 const { BitwardenService } = await import('./dist/login/bitwarden.service.js');
 const testUrl = new URL(process.env.DATABASE_URL);
 testUrl.pathname = '/pal_payment_smoke_test';
@@ -82,7 +83,7 @@ const browser = new BrowserService(config, tasks, events, execution);
 const repository = new LoginRepository(db);
 const service = new LoginService(browser, vault, repository, events, tasks, {
   publish: async (value) => outputs.push(value),
-});
+}, new AndroidService(config));
 try {
   assert.equal(
     new URL(config.get('DATABASE_URL')).pathname,

@@ -1,3 +1,4 @@
+import { AndroidService } from '../dist/android/android.service.js';
 import {
   RequestContext,
   MASTRA_THREAD_ID_KEY,
@@ -709,6 +710,7 @@ it('remembers verified accounts and session intent across callers and restarts w
       fixture.app.get(EventsService),
       tasks,
       fixture.app.get(ChatService),
+      fixture.app.get(AndroidService),
     );
   const fields = (
     inspection: Awaited<ReturnType<LoginService['inspect']>>,
@@ -982,6 +984,7 @@ it('recovers code requests after restart, bounds attempts, times out, and resume
       fixture.app.get(EventsService),
       fixture.app.get(TasksService),
       fixture.app.get(ChatService),
+      fixture.app.get(AndroidService),
     );
     restarted.bindNotifier(async (_id, text) => {
       notifications.push(text);

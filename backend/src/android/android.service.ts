@@ -1,5 +1,6 @@
 import { Inject, Injectable, type OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { NativeSnapshot, NativeStatus } from './android-native.js';
 import {
   Client,
   StreamableHTTPClientTransport,
@@ -20,7 +21,12 @@ export const androidActions = {
 } as const;
 export type AndroidAction = keyof typeof androidActions;
 export type AndroidOwner = { taskId: string; workerId: string };
-type Owner = AndroidOwner & { pending: Promise<void>; closing: boolean };
+type Owner = AndroidOwner & {
+  pending: Promise<void>;
+  closing: boolean;
+  expiry?: ReturnType<typeof setTimeout>;
+  releasing?: Promise<void>;
+};
 
 @Injectable()
 export class AndroidService implements OnApplicationShutdown {
@@ -28,11 +34,55 @@ export class AndroidService implements OnApplicationShutdown {
   private connecting?: Promise<Client>;
   private owner?: Owner;
   private closing = false;
+  private nativeGeneration = 0;
+  readonly loginApps: Record<string, { origin: string; signers: string[] }>;
   readonly endpoint?: string;
   private readonly token?: string;
   private readonly device?: string;
 
   constructor(@Inject(ConfigService) config: ConfigService) {
+    try {
+      const apps: unknown = JSON.parse(
+        config.get<string>('PAL_ANDROID_LOGIN_APPS') || '{}',
+      );
+      if (!apps || typeof apps !== 'object' || Array.isArray(apps))
+        throw new Error();
+      this.loginApps = {};
+      for (const [packageName, raw] of Object.entries(apps)) {
+        const entry = raw as { origin?: unknown; signers?: unknown };
+        if (
+          !/^[A-Za-z]\w*(?:\.[A-Za-z]\w*)+$/.test(packageName) ||
+          typeof entry.origin !== 'string' ||
+          !Array.isArray(entry.signers) ||
+          !entry.signers.length ||
+          entry.signers.some(
+            (value: unknown) =>
+              typeof value !== 'string' || !/^[0-9a-f]{64}$/.test(value),
+          )
+        )
+          throw new Error();
+        const url = new URL(entry.origin);
+        if (
+          url.protocol !== 'https:' ||
+          url.username ||
+          url.password ||
+          url.pathname !== '/' ||
+          url.search ||
+          url.hash
+        )
+          throw new Error();
+        this.loginApps[packageName] = {
+          origin: url.origin,
+          signers: (entry.signers as string[]).toSorted((a, b) =>
+            a.localeCompare(b),
+          ),
+        };
+      }
+    } catch {
+      throw new Error(
+        'PAL_ANDROID_LOGIN_APPS must map Android package names to HTTPS origins and SHA-256 signer arrays',
+      );
+    }
     this.endpoint = config.get<string>('PAL_ANDROID_MCP_URL') || undefined;
     this.token = config.get<string>('PAL_ANDROID_MCP_TOKEN');
     this.device = config.get<string>('PAL_ANDROID_DEVICE_ID');
@@ -75,18 +125,28 @@ export class AndroidService implements OnApplicationShutdown {
     }
   }
 
-  async call(
+  get generation() {
+    return this.nativeGeneration;
+  }
+
+  owns(taskId: string, workerId: string) {
+    return (
+      !!this.owner &&
+      !this.owner.closing &&
+      this.owner.taskId === taskId &&
+      this.owner.workerId === workerId
+    );
+  }
+
+  private async withPhone<T>(
     identity: AndroidOwner,
-    action: AndroidAction,
-    args: Record<string, unknown>,
+    work: () => Promise<T>,
     signal?: AbortSignal,
-  ) {
+  ): Promise<T> {
     if (!this.enabled || this.closing)
       throw new Error('Android control is unavailable.');
     if (!identity.taskId || !identity.workerId)
       throw new Error('Android tools require an interaction worker.');
-    if (!Object.hasOwn(androidActions, action))
-      throw new Error('Unsupported Android action.');
     signal?.throwIfAborted();
     if (
       this.owner &&
@@ -102,40 +162,11 @@ export class AndroidService implements OnApplicationShutdown {
       pending: Promise.resolve(),
       closing: false,
     });
+    if (owner.expiry) this.retain(owner);
     const operation = owner.pending.then(async () => {
       signal?.throwIfAborted();
-      const client = await this.connection();
-      signal?.throwIfAborted();
-      try {
-        // Once dispatched, await the response even if the worker is cancelled.
-        // Cleanup retains ownership until this request settles; actions are never retried.
-        const result = await client.callTool(
-          {
-            name: androidActions[action],
-            arguments: {
-              ...args,
-              ...(action === 'android_screenshot' ? { maxSize: 1280 } : {}),
-              device: this.device,
-            },
-          },
-          { timeout: 60000 },
-        );
-        if (result.isError)
-          throw new AndroidActionError(
-            result.content
-              .filter((c) => c.type === 'text')
-              .map((c) => c.text)
-              .join('\n') || 'Android operation failed.',
-          );
-        return result;
-      } catch (error) {
-        if (error instanceof AndroidActionError) throw error;
-        this.client = undefined;
-        await client.close().catch(() => {});
-        throw new Error(
-          'Android connection failed. Reconnect and inspect the screen before retrying an action.',
-        );
-      }
+      // Once dispatched, settle before cleanup; mutations are never retried.
+      return work();
     });
     owner.pending = operation.then(
       () => {},
@@ -144,13 +175,168 @@ export class AndroidService implements OnApplicationShutdown {
     return operation;
   }
 
-  async release(taskId: string, workerId: string) {
+  private async native<T>(input: object): Promise<T> {
+    try {
+      const endpoint = new URL(this.endpoint!);
+      endpoint.pathname = '/secure';
+      endpoint.search = '';
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ...input, device: this.device }),
+        signal: AbortSignal.timeout(60000),
+      });
+      if (!response.ok) throw new Error();
+      return (await response.json()) as T;
+    } catch {
+      this.nativeGeneration++;
+      throw new Error(
+        'Android private operation unavailable or uncertain. Inspect again; do not replay a fill.',
+      );
+    }
+  }
+
+  secure<T>(identity: AndroidOwner, input: object, signal?: AbortSignal) {
+    return this.withPhone(identity, () => this.native<T>(input), signal);
+  }
+
+  private async pause() {
+    const result = await this.native<NativeStatus>({ action: 'pause' });
+    if (result.status !== 'stopped')
+      throw new Error('Android helper could not release control.');
+    this.nativeGeneration++;
+  }
+
+  async call(
+    identity: AndroidOwner,
+    action: AndroidAction,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ) {
+    if (!Object.hasOwn(androidActions, action))
+      throw new Error('Unsupported Android action.');
+    return this.withPhone(
+      identity,
+      async () => {
+        if (action === 'android_inspect' || action === 'android_screenshot') {
+          const snapshot = await this.native<NativeSnapshot | NativeStatus>({
+            action: 'observe',
+          });
+          if (snapshot.status !== 'ready')
+            throw new Error(
+              'Android masked observation unavailable. Inspect after the screen settles.',
+            );
+          if (action === 'android_inspect')
+            return {
+              content: [
+                {
+                  type: 'text' as const,
+                  text: JSON.stringify({
+                    packageName: snapshot.identity.packageName,
+                    elements: snapshot.elements,
+                  }),
+                },
+              ],
+            };
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Masked Android screen. Device coordinates ${snapshot.width}x${snapshot.height}; image ${snapshot.imageWidth}x${snapshot.imageHeight}. Scale image coordinates to device coordinates for taps.`,
+              },
+              {
+                type: 'image' as const,
+                mimeType: 'image/png',
+                data: snapshot.image,
+              },
+            ],
+          };
+        }
+        const arguments_ = { ...args };
+        if (
+          (action === 'android_tap' || action === 'android_long_press') &&
+          args.ref
+        ) {
+          const target = await this.native<{
+            status?: string;
+            x?: number;
+            y?: number;
+          }>({ action: 'resolve', ref: args.ref });
+          if (typeof target.x !== 'number' || typeof target.y !== 'number')
+            throw new Error('Android target changed. Inspect again.');
+          delete arguments_.ref;
+          arguments_.x = target.x;
+          arguments_.y = target.y;
+        }
+        await this.pause();
+        const client = await this.connection();
+        signal?.throwIfAborted();
+        try {
+          const result = await client.callTool(
+            {
+              name: androidActions[action],
+              arguments: { ...arguments_, device: this.device },
+            },
+            { timeout: 60000 },
+          );
+          if (result.isError)
+            throw new AndroidActionError(
+              'Android operation failed. Inspect before deciding whether to retry.',
+            );
+          if (action === 'android_apps' || action === 'android_foreground_app')
+            return result;
+          // UI state must come only from the native masked observation path.
+          return {
+            content: [
+              { type: 'text' as const, text: '{"status":"completed"}' },
+            ],
+          };
+        } catch (error) {
+          if (error instanceof AndroidActionError) throw error;
+          this.client = undefined;
+          await client.close().catch(() => {});
+          throw new Error(
+            'Android connection failed. Reconnect and inspect the screen before retrying an action.',
+          );
+        }
+      },
+      signal,
+    );
+  }
+
+  private retain(owner: Owner) {
+    if (owner.expiry) clearTimeout(owner.expiry);
+    owner.expiry = setTimeout(() => {
+      void this.release(owner.taskId, owner.workerId).catch(() => {});
+    }, 10 * 60_000);
+    owner.expiry.unref();
+  }
+
+  async release(taskId: string, workerId: string, retain = false) {
     const owner = this.owner;
     if (!owner || owner.taskId !== taskId || owner.workerId !== workerId)
       return;
+    if (owner.releasing) return owner.releasing;
+    if (retain && !owner.closing) {
+      await owner.pending;
+      this.retain(owner);
+      return;
+    }
+    if (owner.expiry) clearTimeout(owner.expiry);
     owner.closing = true;
-    await owner.pending;
-    if (this.owner === owner) this.owner = undefined;
+    const releasing = owner.pending.then(async () => {
+      await this.pause();
+      if (this.owner === owner) this.owner = undefined;
+    });
+    owner.releasing = releasing;
+    try {
+      await releasing;
+    } finally {
+      owner.releasing = undefined;
+    }
   }
 
   async onApplicationShutdown() {

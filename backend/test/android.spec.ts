@@ -6,12 +6,14 @@ import { androidTools } from '../dist/android/android-tools.js';
 import { PARENT_TASK_ID, WORKER_ID } from '../dist/agent/task-workers.js';
 import { CodeModeProcessor } from '../dist/agent/code-mode.processor.js';
 
-it('binds the phone, scopes tools/media, serializes ownership, and releases after cancelled in-flight work', async () => {
+it('binds device/worker, masks observations, serializes private operations and retains ownership through cancellation', async () => {
   const calls: { name: string; arguments: Record<string, unknown> }[] = [];
+  const native: string[] = [];
   let hold: Promise<void> | undefined;
-  let fail = false;
-  let loseResponse = false;
-  let connections = 0;
+  let fail = false,
+    loseResponse = false,
+    pauseFail = false,
+    connections = 0;
   const server = createServer(async (request, response) => {
     if (request.method !== 'POST') {
       response.writeHead(405).end();
@@ -21,6 +23,38 @@ it('binds the phone, scopes tools/media, serializes ownership, and releases afte
     let body = '';
     for await (const chunk of request) body += chunk;
     const input = JSON.parse(body);
+    response.setHeader('Content-Type', 'application/json');
+    if (request.url === '/secure') {
+      native.push(input.action);
+      if (input.action === 'observe') await hold;
+      if (input.action === 'pause' && pauseFail) {
+        response.writeHead(503).end();
+        return;
+      }
+      response.end(
+        JSON.stringify(
+          input.action === 'observe'
+            ? {
+                status: 'ready',
+                session: 'fixture',
+                identity: { packageName: 'com.example.app', signers: [] },
+                inputs: [],
+                elements: [
+                  { ref: '@a1', text: 'Public heading', type: 'TextView' },
+                ],
+                image: 'cG5n',
+                width: 1080,
+                height: 2400,
+                imageWidth: 576,
+                imageHeight: 1280,
+              }
+            : input.action === 'resolve'
+              ? { x: 20, y: 30 }
+              : { status: 'stopped' },
+        ),
+      );
+      return;
+    }
     if (input.id === undefined) {
       response.writeHead(202).end();
       return;
@@ -40,29 +74,19 @@ it('binds the phone, scopes tools/media, serializes ownership, and releases afte
         request.socket.destroy();
         return;
       }
-      await hold;
       result = fail
         ? {
             isError: true,
-            content: [{ type: 'text', text: 'Phone disconnected' }],
+            content: [{ type: 'text', text: 'PRIVATE_UPSTREAM_DIAGNOSTIC' }],
           }
-        : input.params.name === 'mobile_take_screenshot'
-          ? {
-              content: [
-                { type: 'text', text: 'screen coordinates' },
-                { type: 'image', data: 'cG5n', mimeType: 'image/png' },
-              ],
-            }
-          : { content: [{ type: 'text', text: 'ready' }] };
+        : { content: [{ type: 'text', text: 'ready' }] };
     } else result = { tools: [] };
-    response
-      .writeHead(200, { 'Content-Type': 'application/json' })
-      .end(JSON.stringify({ jsonrpc: '2.0', id: input.id, result }));
+    response.end(JSON.stringify({ jsonrpc: '2.0', id: input.id, result }));
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   if (!address || typeof address === 'string')
-    throw Error('Missing fixture address');
+    throw new Error('Missing fixture address');
   const service = new AndroidService(
     new ConfigService({
       PAL_ANDROID_MCP_URL: `http://127.0.0.1:${address.port}/mcp`,
@@ -78,17 +102,17 @@ it('binds the phone, scopes tools/media, serializes ownership, and releases afte
       Object.keys(androidTools(new AndroidService(new ConfigService()))),
     ).toEqual([]);
     expect(Object.keys(tools)).not.toContain('mobile_clear_app_data');
-    expect(Object.keys(tools)).not.toContain('mobile_allocate_remote_device');
+    await service.call(first, 'android_apps', { device: 'wrong' });
+    expect(calls[0].arguments).toEqual({ device: 'usb-phone' });
     const screenshot = await service.call(first, 'android_screenshot', {
-      device: 'wrong',
       maxSize: 9000,
     });
-    expect(calls[0]?.arguments).toEqual({ device: 'usb-phone', maxSize: 1280 });
-    const media = tools.android_screenshot!.toModelOutput!(screenshot);
-    expect(media).toEqual({
+    expect(native).toEqual(['pause', 'observe']);
+    expect(calls).toHaveLength(1);
+    expect(tools.android_screenshot!.toModelOutput!(screenshot)).toMatchObject({
       type: 'content',
       value: [
-        { type: 'text', text: 'screen coordinates' },
+        { type: 'text', text: expect.stringContaining('Masked') },
         { type: 'media', data: 'cG5n', mediaType: 'image/png' },
       ],
     });
@@ -98,42 +122,38 @@ it('binds the phone, scopes tools/media, serializes ownership, and releases afte
         { requestContext: new RequestContext() },
       ),
     ).rejects.toThrow('interaction worker');
-    const processor = new CodeModeProcessor();
-    let runnerInstructions = '';
-    const processed = processor.processInputStep({
+    let instructions = '';
+    const processed = new CodeModeProcessor().processInputStep({
       tools,
       messageList: {
-        clearSystemMessages: () => {},
-        addSystem: (text: string) => {
-          runnerInstructions = text;
+        clearSystemMessages() {},
+        addSystem(text: string) {
+          instructions = text;
         },
       },
     } as unknown as Parameters<CodeModeProcessor['processInputStep']>[0]);
     expect(processed.tools.android_screenshot).toBeDefined();
-    expect(runnerInstructions).toContain('android_inspect');
-    expect(runnerInstructions).not.toContain('android_screenshot');
+    expect(instructions).toContain('android_inspect');
+    expect(instructions).not.toContain('android_screenshot');
     await expect(service.call(second, 'android_apps', {})).rejects.toThrow(
       'busy',
     );
     const gate = Promise.withResolvers<void>();
     hold = gate.promise;
-    const cancelled = new AbortController();
-    const pending = service.call(
-      first,
-      'android_inspect',
-      {},
-      cancelled.signal,
-    );
-    await vi.waitFor(() => expect(calls).toHaveLength(2));
-    cancelled.abort();
+    const abort = new AbortController();
+    const pending = service.call(first, 'android_inspect', {}, abort.signal);
+    await vi.waitFor(() => expect(native).toHaveLength(3));
+    abort.abort();
     const release = service.release(first.taskId, first.workerId);
     await expect(service.call(second, 'android_apps', {})).rejects.toThrow(
       'busy',
     );
+    expect(native.filter((action) => action === 'pause')).toHaveLength(1);
     gate.resolve();
     await pending;
     await release;
     hold = undefined;
+    expect(native.at(-1)).toBe('pause');
     await tools.android_apps!.execute!(
       {},
       {
@@ -143,36 +163,78 @@ it('binds the phone, scopes tools/media, serializes ownership, and releases afte
         ]),
       },
     );
-    fail = true;
-    await expect(service.call(second, 'android_inspect', {})).rejects.toThrow(
-      'Phone disconnected',
+    await service.release('two', 'two', true);
+    expect(service.owns('two', 'two')).toBe(true);
+    await expect(service.call(first, 'android_apps', {})).rejects.toThrow(
+      'busy',
     );
-    await service.release(second.taskId, second.workerId);
+    fail = true;
+    await expect(service.call(second, 'android_apps', {})).rejects.toThrow(
+      'Android operation failed',
+    );
     fail = false;
-    await service.call(first, 'android_apps', {});
-    await service.release(first.taskId, first.workerId);
-    const abort = new AbortController();
-    abort.abort();
-    const count = calls.length;
+    await service.release('two', 'two');
+    const pre = new AbortController();
+    pre.abort();
     await expect(
-      service.call(first, 'android_apps', {}, abort.signal),
+      service.call(first, 'android_apps', {}, pre.signal),
     ).rejects.toThrow();
-    expect(calls).toHaveLength(count);
-    // An aborted-before-dispatch operation did not acquire the phone.
+    expect(service.owns('one', 'one')).toBe(false);
     await service.call(second, 'android_apps', {});
     const dispatched = calls.length;
     loseResponse = true;
     await expect(
-      service.call(second, 'android_tap', { ref: '@e1' }),
+      service.call(second, 'android_tap', { ref: '@a1' }),
     ).rejects.toThrow('Android connection failed');
     expect(calls).toHaveLength(dispatched + 1);
-    await service.call(second, 'android_inspect', {});
+    expect(calls.at(-1)?.arguments).toEqual({
+      x: 20,
+      y: 30,
+      device: 'usb-phone',
+    });
+    await service.call(second, 'android_apps', {});
     expect(connections).toBe(2);
+    pauseFail = true;
+    await expect(service.release('two', 'two')).rejects.toThrow(
+      'private operation',
+    );
+    await expect(service.call(first, 'android_apps', {})).rejects.toThrow(
+      'busy',
+    );
+    pauseFail = false;
+    await service.release('two', 'two');
   } finally {
+    pauseFail = false;
     await service.onApplicationShutdown();
     server.closeAllConnections();
-    await new Promise<void>((resolve, reject) =>
-      server.close((error) => (error ? reject(error) : resolve())),
-    );
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   }
+});
+
+it('requires explicit HTTPS app mappings with complete pinned signer hashes', () => {
+  for (const mapping of [
+    '[]',
+    '{"com.app":{"origin":"http://example.com","signers":[]}}',
+    '{"com.app":{"origin":"https://example.com","signers":["bad"]}}',
+  ]) {
+    expect(
+      () =>
+        new AndroidService(
+          new ConfigService({ PAL_ANDROID_LOGIN_APPS: mapping }),
+        ),
+    ).toThrow('PAL_ANDROID_LOGIN_APPS');
+  }
+  const service = new AndroidService(
+    new ConfigService({
+      PAL_ANDROID_LOGIN_APPS: JSON.stringify({
+        'com.example.app': {
+          origin: 'https://example.com',
+          signers: ['a'.repeat(64)],
+        },
+      }),
+    }),
+  );
+  expect(service.loginApps['com.example.app'].origin).toBe(
+    'https://example.com',
+  );
 });

@@ -274,13 +274,13 @@ export class MastraAgentRuntime
           resume: (taskId, assignment) =>
             this.login.resumeWorker(taskId, assignment),
           cleanup: async (taskId, workerId, completed, startedAt) => {
-            await this.android.release(taskId, workerId);
             const retain = await this.login
               .retainWorkerSession(taskId, workerId, completed, startedAt)
               .catch((error: unknown) => {
                 this.logger.warn(error);
                 return false;
               });
+            await this.android.release(taskId, workerId, retain);
             if (retain) return;
             await this.browser
               .closeSession(taskId, workerId)

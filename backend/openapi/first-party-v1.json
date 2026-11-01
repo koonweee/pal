@@ -425,6 +425,9 @@
             },
             "type": "array"
           },
+          "app": {
+            "type": "string"
+          },
           "cards": {
             "items": {
               "$ref": "#/components/schemas/PaymentCardDto"

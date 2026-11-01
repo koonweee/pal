@@ -63,6 +63,7 @@ export async function privateFixture(runtime, task, fixture, scenario) {
       update: async () => {},
     },
     { publish: async () => {} },
+    runtime.android,
   );
   const tools = loginTools(service);
   const pending = [];

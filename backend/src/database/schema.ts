@@ -1,4 +1,8 @@
-import type { LoginInput, SecureFields } from '../login/login-fields.js';
+import type {
+  LoginInput,
+  SecureFields,
+  SecureDestination,
+} from '../login/login-fields.js';
 import { DEFAULT_INSTANCE_SETTINGS } from '../instance-settings/instance-settings.types.js';
 import type { DestinationRole } from '../delivery/destination.types.js';
 import { sql } from 'drizzle-orm';
@@ -263,12 +267,7 @@ export const messageAttachments = pgTable(
   ],
 );
 export type DeliveryJobState =
-  | 'pending'
-  | 'sending'
-  | 'accepted'
-  | 'failed'
-  | 'uncertain'
-  | 'cancelled';
+  'pending' | 'sending' | 'accepted' | 'failed' | 'uncertain' | 'cancelled';
 
 export const deliveryJobs = pgTable(
   'delivery_jobs',
@@ -413,6 +412,10 @@ export const loginRequests = pgTable(
       .$type<'credentials' | 'code' | 'card'>()
       .notNull()
       .default('credentials'),
+    destination: jsonb('destination')
+      .$type<SecureDestination>()
+      .notNull()
+      .default({ kind: 'browser' }),
     chooseAccount: boolean('choose_account').notNull().default(false),
     fields: jsonb('fields').$type<SecureFields>(),
     inspectionId: uuid('inspection_id').references(
@@ -430,7 +433,7 @@ export const loginRequests = pgTable(
   (t) => [
     index('login_request_card_idx').on(t.cardId, t.createdAt.desc()),
     uniqueIndex('login_request_pending_idx')
-      .on(t.taskId, t.origin, t.kind)
+      .on(t.taskId, t.origin, t.kind, t.destination)
       .where(sql`${t.status} in ('pending','updating','failed')`),
     check(
       'login_request_kind',
@@ -450,7 +453,10 @@ export const loginInspections = pgTable('login_inspections', {
     .references(() => tasks.id, { onDelete: 'cascade' }),
   origin: text('origin').notNull(),
   metadata: jsonb('metadata')
-    .$type<{ inputs: LoginInput[] } | { targets: unknown[] }>()
+    .$type<
+      | { inputs: LoginInput[]; destination?: SecureDestination }
+      | { targets: unknown[] }
+    >()
     .notNull(),
   image: text('image').notNull(),
 });
@@ -467,6 +473,10 @@ export const loginFlows = pgTable('login_flows', {
     .notNull()
     .references(() => tasks.id, { onDelete: 'cascade' }),
   origin: text('origin').notNull(),
+  destination: jsonb('destination')
+    .$type<SecureDestination>()
+    .notNull()
+    .default({ kind: 'browser' }),
   accountId: text('account_id').notNull(),
   keepMeSignedIn: boolean('keep_me_signed_in').notNull().default(false),
   confirmedAt: timestamp('confirmed_at', { withTimezone: true }),

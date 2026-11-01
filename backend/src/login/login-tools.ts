@@ -128,15 +128,28 @@ export function loginTools(service: LoginService) {
     login_inspect: createTool({
       id: 'login_inspect',
       description:
-        'Inspect editable inputs in your selected tab. Optional action runs agent-browser arguments before inspection. Returns opaque input refs, HTML metadata, matching account IDs/labels and a masked numbered screenshot. Assign username/password, ordered code refs, or cardholderName/number/expiry/expMonth/expYear/securityCode refs to secure_fill or secure_entry_request. Never read existing values. Reinspect after navigation or stale refs; after a loading page or action failure inspect without repeating action.',
-      inputSchema: jsonSchema<{ action?: string[] | null }>({
+        'Inspect editable inputs in your selected browser tab or target Android phone. Optional action runs agent-browser arguments before inspection. Returns opaque input refs, field metadata, matching account IDs/labels and a masked screenshot. Android requires a configured trusted app and accepts no browser action. Assign username/password, ordered code refs, or cardholderName/number/expiry/expMonth/expYear/securityCode refs to secure_fill or secure_entry_request. Never read existing values. Reinspect after navigation or stale refs; after a loading page or action failure inspect without repeating action.',
+      inputSchema: jsonSchema<{
+        action?: string[] | null;
+        target?: 'browser' | 'android' | null;
+      }>({
         type: 'object',
         properties: {
           action: actionSchema,
+          ...(service.androidEnabled
+            ? {
+                target: {
+                  type: ['string', 'null'],
+                  enum: ['browser', 'android', null],
+                  description:
+                    'Browser by default; Android inspects the configured phone.',
+                },
+              }
+            : {}),
         },
         additionalProperties: false,
       }),
-      execute: ({ action }, context) => {
+      execute: ({ action, target }, context) => {
         const { taskId, workerId } = identity(context);
         return safe(() =>
           service.inspect(
@@ -144,6 +157,7 @@ export function loginTools(service: LoginService) {
             workerId,
             action ?? undefined,
             context?.abortSignal,
+            target ?? 'browser',
           ),
         );
       },
@@ -191,7 +205,7 @@ export function loginTools(service: LoginService) {
     secure_fill: createTool({
       id: 'secure_fill',
       description:
-        'Fill inspected username/password refs from a matching vault account without exposing values. Pass only opaque refs from the latest login_inspect; never pass labels or values. Password and reusable PIN roles require password inputs. Omit accountId for automatic reuse or an ambiguity picker. Code refs return input_required. Card refs open the private card picker; omit accountId, action and keepMeSignedIn for cards. Card filling never submits a purchase. Optional action runs only after successful filling. actionStatus failed means filling succeeded: inspect without action and do not refill. Without action only fills. Returns session-persistence intent; filling does not prove authentication.',
+        'Fill inspected username/password refs from a matching vault account without exposing values. Pass only opaque refs from the latest login_inspect; never pass labels or values. Password and reusable PIN roles require password inputs. Omit accountId for automatic reuse or an ambiguity picker. Code refs return input_required. Card refs open the private card picker; omit accountId, action and keepMeSignedIn for cards. Card filling never submits a purchase. Optional action runs only after successful filling. actionStatus failed means filling succeeded: inspect without action and do not refill. Without action only fills. Android accepts login/code fields; omit browser action and keepMeSignedIn. Returns session-persistence intent; filling does not prove authentication.',
       inputSchema: jsonSchema<{
         fields: FieldInput;
         accountId?: string | null;

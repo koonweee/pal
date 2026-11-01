@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+  <application android:label="Pal secure entry" android:allowBackup="false" android:usesCleartextTraffic="false" />
+  <instrumentation android:name=".Bridge" android:targetPackage="dev.pal.secureentry" android:functionalTest="true" />
+</manifest>

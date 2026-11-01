@@ -86,11 +86,17 @@ The backend needs outbound HTTPS to FCM and Apple Web Push services. Browser pus
 
 ## Android sidecar
 
-The optional Android image in `backend/android` packages Mobile MCP 1.0.15 and Debian ADB. `backend/compose.android.yaml` attaches one selected USB device and a dedicated `android_state` volume to `android-mcp`. Mobile MCP requires a bearer token and listens only on the Compose service network. Agent-service receives `PAL_ANDROID_MCP_URL`, `PAL_ANDROID_MCP_TOKEN`, and `PAL_ANDROID_DEVICE_ID`. The execution desktop has no USB mount or direct route to the sidecar.
+The optional Android image in `backend/android` packages Mobile MCP 1.0.15 and Debian ADB. `backend/compose.android.yaml` attaches one selected USB device and a dedicated `android_state` volume to `android-mcp`. An authenticated Node bridge exposes `/mcp` and private `/secure` on the Compose service network; Mobile MCP itself listens on sidecar loopback. Agent-service receives `PAL_ANDROID_MCP_URL`, `PAL_ANDROID_MCP_TOKEN`, and `PAL_ANDROID_DEVICE_ID`. The execution desktop has no USB mount or direct route to the sidecar.
 
 ADB authorization keys and Mobile MCP device state live under `/state`. Preserve this volume across image replacement. Device app data and account sessions live on the phone. Service health checks MCP initialization independently of USB availability or authorization. Pal startup does not depend on the sidecar being reachable.
 
 On macOS, `scripts/dev-local android-up` forwards the selected USB phone through OrbStack and resolves its Linux device node. The phone must be released by competing Mac ADB clients. The container creates its own ADB identity; accept its debugging prompt on the phone. `android-reconnect` resolves USB renumbering and recreates only the sidecar. `android-down` releases the helper-owned attachment and preserves its volume. Production USB passthrough, image publication, and Stack v2 Compose wiring belong to the deployment repository.
+
+The image builds the Java helper and synthetic fixture APKs with pinned Gradle/Android tooling in an AMD64 build stage. Runtime contains Node, ADB and APKs. Authorized ADB installs/starts the helper as needed; root, Android Studio and a phone network listener are unnecessary. The BuildKit `pal-android-signing` cache preserves the development APK signing key between local builds. Preserve that cache for upgrades; if the key is lost, remove/reinstall only the Pal-owned helper APK before retrying. The helper stores no account data.
+
+Configure `PAL_ANDROID_LOGIN_APPS` in the private agent-service environment as `{"com.example.app":{"origin":"https://example.com","signers":["<64 lowercase SHA-256 hex characters>"]}}`. Trust the installed app/certificate through the operator's normal setup and pin every current signer. Native private entry is unavailable for unmapped apps or changed signers. The model cannot establish these mappings. Navigate to the app, then an operator can inspect `HelperClient`'s private `inspect` response for package/signers without reading field values. App updates with a new signer require operator review.
+
+Use `./scripts/dev-local android-secure-smoke` with an idle dev phone/agent to verify native filling and the real Task/Worker private-entry path. It installs an owned synthetic fixture, exercises exact Unicode credentials and OTP through private HTTP and an isolated vault API, retains only masked proof images under `.local/android-secure-fill/last-proof`, and removes its fixture, scratch database and copied scripts. Temporary USB stay-awake is restored. It leaves real vault accounts and phone logins intact. `android-smoke` covers ordinary read-only navigation separately.
 
 ## Password Vault
 

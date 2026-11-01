@@ -16,6 +16,7 @@ import {
   StaleSecureFieldsError,
   type LoginInput,
   type SecureFields,
+  type SecureDestination,
 } from './login-fields.js';
 
 export const loginOwner = (taskId: string, workerId?: string) =>
@@ -38,12 +39,15 @@ export class LoginRepository {
     inspectionId?: string,
     keepMeSignedIn?: boolean,
     chooseAccount = false,
+    destination: SecureDestination = { kind: 'browser' },
   ): Promise<LoginRequest> {
     return this.database.transaction(async (tx) => {
       const keep =
-        keepMeSignedIn ??
-        (await this.site(origin, tx))?.keepMeSignedIn ??
-        false;
+        destination.kind === 'android'
+          ? false
+          : (keepMeSignedIn ??
+            (await this.site(origin, tx))?.keepMeSignedIn ??
+            false);
       if (keepMeSignedIn !== undefined) {
         await this.keep(origin, keepMeSignedIn, tx);
         await tx
@@ -64,6 +68,7 @@ export class LoginRepository {
           cardId: id,
           taskId,
           origin,
+          destination,
           kind,
           chooseAccount,
           fields,
@@ -82,6 +87,7 @@ export class LoginRepository {
             eq(loginRequests.taskId, taskId),
             eq(loginRequests.origin, origin),
             eq(loginRequests.kind, kind),
+            eq(loginRequests.destination, destination),
             inArray(loginRequests.status, active),
           ),
         )
@@ -123,6 +129,7 @@ export class LoginRepository {
         .values({
           taskId,
           origin,
+          destination,
           kind,
           chooseAccount,
           fields,
@@ -145,12 +152,13 @@ export class LoginRepository {
     inputs: LoginInput[],
     image: Buffer,
     id = randomUUID(),
+    destination: SecureDestination = { kind: 'browser' },
   ) {
     await this.database.db.insert(loginInspections).values({
       id,
       taskId,
       origin,
-      metadata: { inputs },
+      metadata: { inputs, destination },
       image: image.toString('base64'),
     });
     return id;
@@ -275,9 +283,11 @@ export class LoginRepository {
           row.origin,
           accountId,
           updated.keepMeSignedIn,
+          row.destination,
           tx,
         );
-        await this.keep(row.origin, updated.keepMeSignedIn, tx);
+        if (row.destination.kind === 'browser')
+          await this.keep(row.origin, updated.keepMeSignedIn, tx);
       }
       return updated;
     });
@@ -354,12 +364,14 @@ export class LoginRepository {
     origin: string,
     accountId: string,
     keepMeSignedIn: boolean,
+    destination: SecureDestination = { kind: 'browser' },
     db: Executor = this.database.db,
   ) {
     const row = {
       owner: loginOwner(taskId, workerId),
       taskId,
       origin,
+      destination,
       accountId,
       keepMeSignedIn,
       updatedAt: new Date(),
@@ -420,7 +432,11 @@ export class LoginRepository {
           .set({ confirmedAt: new Date(), keepMeSignedIn: keep })
           .where(eq(loginFlows.owner, flow.owner));
       }
-      return { origin: flow.origin, keepMeSignedIn: keep };
+      return {
+        origin: flow.origin,
+        keepMeSignedIn: keep,
+        destination: flow.destination,
+      };
     });
   }
   async notifications() {

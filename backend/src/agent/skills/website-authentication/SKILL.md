@@ -1,15 +1,17 @@
 ---
 name: website-authentication
-description: Sign in to websites, switch accounts, enter verification codes and payment cards, recover rejected credentials, and honor website session-persistence preferences using Pal's secure-entry tools.
+description: Sign in to websites and supported native Android apps, switch accounts, enter verification codes and payment cards, recover rejected credentials, and honor website session-persistence preferences using Pal's secure-entry tools.
 ---
 
-# Website authentication
+# Secure authentication
 
 ## Inspect and choose fields
 
-Continue an existing signed-in session unless the user asks for another account. Use `login_inspect` for input refs, HTML metadata and a masked numbered preview. You choose username/password or verification-code roles from page evidence. Treat email, phone number, account number and other reusable identifiers as `username`. Treat a reusable password, account PIN or passcode as `password`; password roles require password inputs. Treat a one-time verification code as `code`. Code fields are an ordered ref array; use one ref for a single input. Pass only the opaque `i…` refs returned by the latest inspection—never labels, selectors or credential values. Inspect new pages before assigning new roles. While fields are populated, use masked inspection instead of ordinary DOM snapshots or screenshots.
+Continue an existing signed-in session unless the user asks for another account. Use `login_inspect` for input refs, field metadata and a masked preview. You choose username/password or verification-code roles from page evidence. Treat email, phone number, account number and other reusable identifiers as `username`. Treat a reusable password, account PIN or passcode as `password`; password roles require password inputs. Treat a one-time verification code as `code`. Code fields are an ordered ref array; use one ref for a single input. Pass only the opaque `i…` refs returned by the latest inspection—never labels, selectors or credential values. Inspect new pages before assigning new roles. While fields are populated, use masked inspection instead of ordinary DOM snapshots or screenshots.
 
 Open a login tab with `login_inspect({action:["tab","new",url]})`. For known Next/Sign in/Trust controls, use inspection's action to act and observe in one call. Identify the next control before requesting private entry when possible. If already-inspected fields and the next control are known, call `secure_fill` directly with action to fill, act and inspect together. These media-returning tools stay outside code mode. Without action, filling does not click submit. A loading page or action/inspection failure needs inspection without repeating the action.
+
+For Android, call `login_inspect({target:"android"})` after navigating to the native login screen. Use the same field roles, account choice and private-entry tools below. Omit browser action and keepMeSignedIn arguments. Native passwords/PINs require password metadata; card entry, device unlock, biometrics and unsupported app/browser-hosted destinations need a manual phone handoff. Act with Android tools only after filling or private submission completes; navigation invalidates inspected refs. Ordinary Android inspection/screenshots are masked by the host. A partial/uncertain fill needs fresh observation and verification of current stage before choosing any further fill.
 
 ## Accounts and private entry
 
@@ -17,7 +19,7 @@ Use `secure_fill` without accountId by default; the host reuses the current flow
 
 The inline form appears in Main and Task chat and collects only the credential roles you select. Request the current page's missing roles: a phone-only page requests `username`, and a later PIN-only page requests `password`. The host merges staged credential values into the active saved account. For verification codes, request code-only entry using the inspected refs; codes are transient and never merged into the account. Never ask the user to choose account labels or enter secrets in chat.
 
-Private credential submission, account selection and code entry fill bound fields directly. Yield on awaiting_user: the host already marks the owning Task needs-input. Workers report to their parent. On a filled notification, continue with the known next action and inspection; if the page advanced automatically, inspect without action. Do not refill or inspect solely to confirm filling. Saved/selected fallback notifications mean filling could not finish: inspect fresh fields and use `secure_fill`.
+Private credential submission, account selection and code entry fill bound fields directly. Yield on awaiting_user: the host already marks the owning Task needs-input. Workers report to their parent. On a filled notification, continue with the known next action and inspection; if the page advanced automatically, inspect without action. Do not refill or inspect solely to confirm filling. Saved/selected fallback notifications mean filling could not be confirmed: inspect current state and any advancement, then fill fresh fields only when still needed.
 
 ## Website session preferences
 
@@ -27,7 +29,7 @@ On an already authenticated page, honor an explicit persistence instruction wher
 
 ## Results and recovery
 
-Verify website acceptance, including verification challenges, before `login_session({action:"complete"})`. Saving/filling alone is not login success. Explicit credential rejection calls for fresh inspection and corrected private entry immediately; yield instead of resubmitting rejected credentials. A password stage, verification challenge, CAPTCHA or network error alone is not rejection.
+Verify website/app acceptance, including verification challenges, before `login_session({action:"complete"})`. Saving/filling alone is not login success. Explicit credential rejection calls for fresh inspection and corrected private entry immediately; yield instead of resubmitting rejected credentials. A password stage, verification challenge, CAPTCHA or network error alone is not rejection.
 
 Fix invalid_input arguments directly. Reinspect stale fields or navigation changes. If `secure_fill` returns `status: filled` with `actionStatus: failed`, the values are already in the fields: inspect without action and never refill or request entry solely because the action failed. For an automatic recovery notification, inspect and replace the entry selection; stop when recovery reports failure and let the user retry through the card. Handle input_required before continuing.
 

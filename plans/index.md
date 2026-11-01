@@ -15,7 +15,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Android Secure Fill](android-secure-fill.md) | Planned | Shared browser/Android private entry, native field binding, direct filling and masked observations. |
+| [Android Secure Fill](android-secure-fill.md) | Done | Shared browser/Android private entry, native field binding, direct filling and masked observations. |
 | [Android, Browser and Computer Comparison](android-browser-computer-benchmark.md) | Planned | After Android secure fill: same-model UI comparison with actual login/OTP filling and user-assisted Apple Store browser login. |
 | [Android Mobile MCP](android-mobile-mcp.md) | Done | USB phone sidecar, exclusive worker control, and development app flows. |
 | [Cua Driver comparison](cua-driver-comparison.md) | Complete | Partial current/Cua evaluation; findings and interrupted-run gaps. |

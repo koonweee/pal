@@ -435,3 +435,54 @@ for (const width of [900, 390]) {
     }
   });
 }
+
+test('native private entry identifies the app and omits browser session preferences', async ({
+  page,
+}) => {
+  const native: LoginRequest = {
+    id: 'native-entry',
+    origin: 'https://native.example.test',
+    app: 'dev.pal.fixture',
+    kind: 'credentials',
+    status: 'pending',
+    inspectionId: null,
+    configured: true,
+    fields: ['password'],
+    fieldLabels: { password: 'Password' },
+    chooseAccount: false,
+    keepMeSignedIn: false,
+    accounts: [],
+  };
+  backend.rows.push({
+    ...backend.message('Enter securely.'),
+    mainVisible: true,
+    phase: 'commentary',
+    metadata: { secureEntryRequestId: native.id },
+  });
+  let submitted: Record<string, unknown> | undefined;
+  await page.route('**/api/login/**', async (route) => {
+    if (route.request().method() === 'GET')
+      return route.fulfill({ json: native });
+    submitted = route.request().postDataJSON();
+    native.status = 'filled';
+    return route.fulfill({
+      status: 201,
+      json: { id: native.id, status: 'filled' },
+    });
+  });
+  await page.route('**/vnc.html', (route) => route.fulfill({ status: 503, body: 'Unavailable' }));
+  await page.goto('/');
+  await expect(
+    page.getByText('dev.pal.fixture · native.example.test'),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('checkbox', { name: 'Keep me signed in' }),
+  ).toHaveCount(0);
+  await page
+    .getByLabel(/^Password/)
+    .fill('NATIVE_PRIVATE_TEST');
+  await page.getByRole('button', { name: 'Save login', exact: true }).click();
+  await expect(page.getByText('Login filled', { exact: true })).toBeVisible();
+  expect(submitted).toMatchObject({ password: 'NATIVE_PRIVATE_TEST' });
+  expect(submitted).not.toHaveProperty('keepMeSignedIn');
+});

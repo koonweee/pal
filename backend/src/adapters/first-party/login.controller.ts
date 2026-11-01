@@ -77,6 +77,7 @@ class SubmitCardDto {
 class LoginRequestDto {
   @ApiProperty() id!: string;
   @ApiProperty() origin!: string;
+  @ApiPropertyOptional() app?: string;
   @ApiProperty({ enum: ['credentials', 'code', 'card'] }) kind!:
     'credentials' | 'code' | 'card';
   @ApiProperty({

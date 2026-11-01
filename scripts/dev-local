@@ -207,6 +207,44 @@ case "$command_name" in
     docker cp "$backend_dir/scripts/android-smoke.mjs" "$smoke_container:/opt/pal/scripts/android-smoke.mjs"
     compose exec -T -e "TEST_DATABASE_URL=postgresql://pal:pal@postgres:5432/$smoke_database" agent-service node scripts/android-smoke.mjs
     ;;
+  android-secure-smoke)
+    prepare
+    smoke_database="pal_android_private_$(date +%s)_test"
+    smoke_container="$(compose ps -q agent-service)"
+    android_container="$(compose ps -q android-mcp)"
+    if [[ -z "$smoke_container" || -z "$android_container" ]]; then
+      echo "Start the development backend and Android sidecar first." >&2
+      exit 1
+    fi
+    smoke_stay_on="$(compose exec -T android-mcp adb shell settings get global stay_on_while_plugged_in | tr -d '\r\n')"
+    cleanup_android_private_smoke() {
+      compose exec -T android-mcp adb shell am force-stop dev.pal.securefixture || true
+      compose exec -T android-mcp adb uninstall dev.pal.securefixture >/dev/null || true
+      if [[ "$smoke_stay_on" == null ]]; then
+        compose exec -T android-mcp adb shell settings delete global stay_on_while_plugged_in >/dev/null || true
+      else
+        compose exec -T android-mcp adb shell settings put global stay_on_while_plugged_in "$smoke_stay_on" || true
+      fi
+      compose exec -T postgres dropdb --if-exists -U pal "$smoke_database"
+      compose exec -T --user root agent-service sh -c 'rm -f /opt/pal/scripts/android-secure-smoke.mjs; rmdir /opt/pal/scripts 2>/dev/null || true'
+      compose exec -T android-mcp rm -f /opt/android/helper-proof.mjs /opt/android/masked-username.png /opt/android/masked-password.png /opt/android/masked-code.png
+    }
+    trap cleanup_android_private_smoke EXIT
+    compose exec -T android-mcp adb shell svc power stayon usb
+    compose exec -T android-mcp adb shell input keyevent KEYCODE_WAKEUP
+    docker cp "$backend_dir/android/helper-proof.mjs" "$android_container:/opt/android/helper-proof.mjs"
+    compose exec -T android-mcp node /opt/android/helper-proof.mjs
+    mkdir -p "$repo_root/.local/android-secure-fill/last-proof"
+    for role in username password code; do
+      docker cp "$android_container:/opt/android/masked-$role.png" "$repo_root/.local/android-secure-fill/last-proof/$role.png"
+    done
+    compose exec -T android-mcp adb shell am force-stop dev.pal.securefixture
+    compose exec -T android-mcp adb shell am start -W -n dev.pal.securefixture/.Fixture >/dev/null
+    compose exec -T postgres createdb -U pal "$smoke_database"
+    compose exec -T --user root agent-service mkdir -p /opt/pal/scripts
+    docker cp "$backend_dir/scripts/android-secure-smoke.mjs" "$smoke_container:/opt/pal/scripts/android-secure-smoke.mjs"
+    compose exec -T -e "TEST_DATABASE_URL=postgresql://pal:pal@postgres:5432/$smoke_database" agent-service node scripts/android-secure-smoke.mjs
+    ;;
   android-status)
     prepare
     if [[ ! -f "$android_env" ]]; then echo "Android is not configured. Run android-up."; exit 0; fi
@@ -334,7 +372,7 @@ case "$command_name" in
     compose down
     ;;
   *)
-    echo "Usage: ./scripts/dev-local {config|login|up|rebuild|execution-rebuild|frontend-restart|logs|status|serve|unserve|pwa-up|android-up|android-status|android-reconnect|android-smoke|android-down|down}" >&2
+    echo "Usage: ./scripts/dev-local {config|login|up|rebuild|execution-rebuild|frontend-restart|logs|status|serve|unserve|pwa-up|android-up|android-status|android-reconnect|android-smoke|android-secure-smoke|android-down|down}" >&2
     exit 2
     ;;
 esac

@@ -84,6 +84,14 @@ The optional `compose.android.yaml` overlay builds the image from `android/`, ma
 
 Run `./scripts/dev-local android-smoke` for isolated model-driven acceptance. It temporarily copies the runner into the existing development service and creates a disposable test database; both are removed on exit. The runner delegates Chrome and Settings flows to interaction workers, verifies native screenshots, and drops its scratch schema. It publishes no application chat messages.
 
+### Native private entry
+
+`PAL_ANDROID_LOGIN_APPS` in the private agent-service environment maps a trusted installed package to its HTTPS vault origin and all current signing certificate SHA-256 hashes. See [sidecar setup](../architecture/deployment.md#android-sidecar). Unmapped apps, WebView credentials and unsupported native controls require manual phone entry. Native payments, unlock and biometrics remain manual.
+
+The interaction worker uses `login_inspect({target:"android"})` and the existing private-entry/vault tools. Ordinary observations are masked; private fields are filled through a rootless helper on authenticated ADB. Browser and native flows share account selection, private cards, staged credential storage and transient OTP handling. Native entry omits browser persistence controls.
+
+Run `./scripts/dev-local android-secure-smoke` while the dev phone/agent are idle. It proves direct native filling and masking, then runs real Task/Worker journeys for new staged credentials and saved-vault reuse, including actual private HTTP OTP submission. It uses synthetic accounts, removes its fixture/test database/scripts, restores USB stay-awake, and keeps masked proof images under `.local/android-secure-fill/last-proof`.
+
 ## Configuration
 
 .env.example documents settings. Compose supplies the private database address, private authentication/upload paths, shared /home/pal/workspace, remote browser endpoint, and execution ID. PAL_DOCKER_GID selects Docker socket access on Linux. PAL_WEB_PORT selects the loopback gateway port.

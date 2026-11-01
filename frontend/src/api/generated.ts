@@ -629,6 +629,7 @@ export interface components {
     LoginRequestDto: {
       accountId?: string;
       accounts: components['schemas']['LoginAccountDto'][];
+      app?: string;
       cards?: components['schemas']['PaymentCardDto'][];
       chooseAccount: boolean;
       configured: boolean;
