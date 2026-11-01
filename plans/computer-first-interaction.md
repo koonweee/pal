@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation verified; production rollout pending (tracked in Stack v2).
+Complete (2026-11-01).
 
 ## Goal
 
@@ -64,6 +64,11 @@ npm run test:e2e
 - Normal Pal task `fd9ba6e6-0732-4682-b451-9c86d3f92d3c` exercised native computer navigation and screenshots without general browser tools. It reported page content/tab titles; exact page headings were not verified.
 - Extension upgrade required content-versioned worker filenames; manifest version alone retained stale worker code in the persistent profile. Rebuilt-image acceptance passes.
 
-## Remaining release work
+## Production verification
 
-Build and deploy the single cleanup revision through Stack v2, verify production, and complete release-artifact cleanup there. Android fallback requires a configured production sidecar/device; this source change does not provision hardware.
+- Cleanup and guidance shipped together in `650fbb0`; all three production images and the API/PWA release match that revision.
+- Backup succeeded; migration 0028 exited 0; all services are healthy and normal Stack arguments are restored.
+- Production computer navigation and secure inspection of the same page passed; the trace contains no general browser tools. The smoke task and browser group were cleaned up.
+- Temporary release plans, smoke artifacts and the 11 MB test database were removed; 6.87 GB of unreferenced prior production images were removed. Persistent state, current images and shared build caches remain.
+- [Deployment evidence](https://github.com/koonweee/stack-v2/blob/main/plans/pal-computer-first-release-plan.md) records the image pins, backup and rollout.
+- Android fallback requires a configured production sidecar/device; this release does not provision hardware.
