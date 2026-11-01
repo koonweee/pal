@@ -2,7 +2,7 @@
 
 ## Current warm-session results
 
-The 27 Amazon/Facebook samples are complete and independently reviewed: **23 passes, four incomplete results**. Apple has nine recorded outcomes: **eight authentication blockers and one error before measured execution**. Eligible Apple account-access comparison remains pending separate login setup. Original outcomes are retained.
+The requested 36 warm-session comparisons are complete and independently reviewed: **32 passes, four incomplete retrievals**. Amazon/Facebook contribute 23/27; the final authenticated Apple matrix passes 9/9. Earlier Apple authentication and harness setup outcomes remain separate evidence. No live login or human wait is included in measured samples.
 
 | Flow | Method | Pass / executed | Median elapsed | Range |
 | --- | --- | --- | ---: | ---: |
@@ -15,10 +15,24 @@ The 27 Amazon/Facebook samples are complete and independently reviewed: **23 pas
 | Facebook public event | Browser | 3/3 | 19.1 s | 17.7–19.4 s |
 | Facebook public event | Computer | 3/3 | 16.4 s | 15.3–24.2 s |
 | Facebook public event | Android | 3/3 | 30.8 s | 29.8–51.1 s |
+| Apple Store account access | Browser | 3/3 | 13.0 s | 11.7–13.5 s |
+| Apple Store account access | Computer | 3/3 | 11.3 s | 11.1–15.5 s |
+| Apple Store account access | Android Chrome | 3/3 | 19.5 s | 17.4–19.9 s |
 
-Medians include failed attempts. Browser products have no successful-run median; the browser order successful-run median is 13.3 seconds. All measured human waits and credential-fill counts are zero. Task uses Sol medium and the interaction worker Terra medium. All 35 measured samples pass method/privacy gates; the remaining Apple cell failed before a model call and has no measured elapsed time. Recorded model usage is complete.
+Medians include failed attempts. Browser products have no successful-run median; the browser order successful-run median is 13.3 seconds. All measured human waits and credential-fill counts are zero. Task uses Sol medium and the interaction worker Terra medium. All 36 primary samples pass method/privacy gates and have complete recorded model usage.
 
-Datasets: `.local/android-browser-comparison/warm-retrieval/` (revision `f3e1e52`) and `warm-apple/` (revision `785a7ae`). Each contains frozen manifests, original rows, explicit independent reviews, reports and a passing cleanup/source audit. Native Amazon uses the same US marketplace and delivery context as desktop; order facts and the identical public Facebook event were checked against each sample’s saved observations.
+Primary datasets: `.local/android-browser-comparison/warm-retrieval/` (revision `f3e1e52`) and `warm-apple-final/` (`c840201`). Each contains frozen manifests, original rows, independent reviews, reports and a passing cleanup/source audit. Native Amazon uses the same US marketplace and delivery context as desktop; order facts and the identical public Facebook event were checked against saved observations.
+
+Median input tokens, summed across Task and worker calls:
+
+| Flow | Browser | Computer | Android |
+| --- | ---: | ---: | ---: |
+| Amazon order | 37,833 | 19,626 | 295,637 |
+| Amazon products | 4,518,677 | 771,097 | 2,069,264 |
+| Facebook event | 30,769 | 28,016 | 74,895 |
+| Apple account | 30,110 | 19,504 | 44,056 |
+
+These count repeated/cached context; they are not unique prompt sizes or monetary costs. Full input/output/cache usage is retained in the reports.
 
 ### Findings and recommendation
 
@@ -29,26 +43,23 @@ Datasets: `.local/android-browser-comparison/warm-retrieval/` (revision `f3e1e52
 - Native share/clipboard handling remains variable. One product attempt recovered by constructing links from observed ASINs; a Facebook attempt unnecessarily copied a link already supplied in the task and read stale Amazon clipboard content. Reuse known canonical URLs and verify newly copied content.
 - Existing shared recovery guidance already says not to re-delegate a blocked method without changed state. The second browser product attempt nevertheless repeated the failure across three workers. This is an adherence/evidence-continuity issue, not evidence that another general instruction is missing.
 
-### Apple follow-up
+### Apple setup and rerun evidence
 
-The desktop Apple session was verified during setup at 07:38 UTC; checks at 08:25–08:28 UTC required sign-in again. The reason is unproven. Android Chrome also reaches the Apple sign-in form. Browser has two authentication-blocked measured checks plus one unclassified setup error; computer and Android each have three authentication-blocked checks. Do not use these times to rank authenticated retrieval.
-
-Separate dev PWA setup is running in task `fd8eb1d0-bb59-492f-8a54-af3b769a4052`, reusing saved credentials where available and yielding for user verification. After both destinations are authenticated, use a new `warm-apple-authenticated` dataset; retain `warm-apple` as setup/access evidence. The end-of-run queue is recorded in `warm-apple/human-follow-up.json`.
-
-Desktop setup has reauthenticated with saved credentials and verified the account greeting and Sign out control. Android Chrome has reused the saved identifier and password and is waiting for Apple two-factor verification in the dev PWA. This human wait is outside benchmark timing; authenticated collection has not started.
-
-Two setup friction points are confirmed:
-
-- Android vault matching used `www.apple.com`, while the successful desktop login fields matched `idmsa.apple.com`. A fresh Android inspection with the supported account-website parameter set to `https://idmsa.apple.com` found and reused the saved account. Carry the actual login/account origin into credential reuse.
-- Cancelling a superseded identifier-entry card left its worker’s retained Android reservation, blocking the next worker. Android ownership now terminates with the last cancelled request for that worker while remaining active when another pending or recoverable request exists.
-
-The first authenticated follow-up (`warm-apple-authenticated`) records three Android successes and six desktop setup errors before measured execution. Independent Android observations show the account greeting and Sign out in every repetition. A diagnostic reproduced the desktop cause: the CLI reported the newly opened target before Playwright exposed its Page. The harness now waits up to ten seconds for that owned page during setup, outside timing. A full matched rerun is required; original rows remain unchanged.
+- `warm-apple`: eight authentication blockers and one error before measured execution. Desktop had previously been verified, but required sign-in again; the cause is unproven.
+- Separate dev PWA setup reused desktop credentials and verified the account destination. Android credential reuse needed `https://idmsa.apple.com` as the matching account website rather than `www.apple.com`. The user completed Android login manually. Both platforms were verified before final collection; all setup and human wait stayed outside timing.
+- Cancelling earlier cards left retained Android ownership. Exact stale reservations were released during setup. Commit `f60e3de` adds cancellation ownership release; its validation is recorded in the secure-fill plan. A later submitted code reached Apple and was rejected there; that is distinct from the card lifecycle failures.
+- `warm-apple-authenticated`: three independently verified Android passes and six desktop errors before timing. An owned-tab diagnostic found that the CLI reported a new target before Playwright exposed its Page. The harness waits up to ten seconds for that owned page during setup. The full corrected run, `warm-apple-final`, completes and passes all nine cells. Earlier rows are unchanged and excluded from the primary retrieval aggregate.
+- Final browser snapshots, Android accessibility observations and all three computer screenshots show the authenticated account destination, greeting and Sign out. No follow-up human input remains outstanding.
 
 ### Timing and cleanup
 
 Timing includes Task planning, delegation, interaction and final answer. Browser URL opening happens before the measured stream; order setup through first model request was 1.9–2.7 seconds on desktop versus 0.02–0.04 seconds on Android. Android navigation occurs within the task. Direct URL access, native navigation, cache and initial screen differences remain confounders. Three repetitions on one phone and desktop support task-specific guidance, not a general reliability ranking.
 
-Both original runners completed cleanup: 36 owned tasks archived, scratch databases and copied runner directories absent, locks released, fixture APK uninstalled and phone power policy restored to 15. Temporary review screenshots are removed after inspection. Profiles, app data and protected dev resources are retained. The separate login setup task remains active and is not a benchmark-owned cleanup target.
+The final Apple run uses the same models, base guidance hash, desktop/Mobile MCP images, device and APKs as the main matrix. The backend image changed for the cancellation fix between collections. All three arms within each matrix share their frozen environment. Compare methods within a case; do not attribute cross-case differences solely to platform.
+
+All four warm datasets pass source, outcome and cleanup audits: 54 owned sample tasks archived/completed, four scratch databases and copied runner directories absent (the original container has since been removed), locks released, fixture APK absent and phone power policy restored to 15. Both diagnostic tasks are archived/completed. Temporary review screenshots and helper scripts are removed after review; reports, raw traces and sanitized reviews remain locally for audit. No active Apple private-entry request remains. Personal sessions and protected dev resources are retained.
+
+Focused harness tests pass 22/22; the final live rerun validates the setup wait. No new container images were built for this benchmark completion. Shared storage is retained: Docker reports about 7.49 GB images, 2.79 GB volumes and 14.19 GB build cache. No shared resources were pruned.
 
 ## Historical fixture and anonymous-web baseline
 
@@ -109,25 +120,7 @@ The historical dataset supports keeping service/API preference and current produ
 
 Native Android is viable for supported private-fill flows, but current evidence does not justify a universal Android-first rule. Use the warm-session collection before ranking app access against browser/computer access. Unsupported native login destinations, WebViews, an occupied phone or a device challenge require another supported method or a human handoff. Structured or bulk web work was not measured here.
 
-## Current warm-session collection
-
-Amazon and Facebook native apps, Amazon web, Facebook web and Apple Store web have verified logins. Browser automation and computer use share the persistent execution Chromium profile. Android Chrome has a separate cookie store; any Apple authentication challenge is queued after independent work.
-
-The current matrix contains 27 Amazon order/product and Facebook event samples, followed by nine Apple account-access checks across browser, computer and Android Chrome. Each method has three repetitions. Facebook uses the identical public event [Quarry Lakes 25th Anniversary Celebration](https://www.facebook.com/events/1711829129869706/); no RSVP or other account mutation is requested.
-
-Datasets are `.local/android-browser-comparison/warm-retrieval/` and `.local/android-browser-comparison/warm-apple/`. Original outcomes and timing remain unchanged; independent reviews record incomplete retrieval as failure even when the model honestly reports missing facts. A reported authentication blocker alone does not prove a missing login: the first browser order sample read authenticated order details, then a follow-up worker inspected a remaining sign-in tab and withheld the result.
-
-Timing covers the Task stream, delegation, UI interaction and final answer. Setup and human wait are excluded. Browser pages are opened before timing, while Android app/URL navigation occurs inside the measured task. Native/web layout, delivery context, caches and this starting-navigation difference limit causal speed comparisons. These are operational retrieval trials, not a navigation-normalized microbenchmark.
-
-```sh
-python3 backend/scripts/browser-benchmark/run.py --suite interaction --phase warm \
-  --output .local/android-browser-comparison/warm-retrieval
-# After all 27 samples and verified cleanup:
-python3 backend/scripts/browser-benchmark/run.py --suite interaction --phase warm \
-  --cases apple-store --output .local/android-browser-comparison/warm-apple
-```
-
-## Validation and cleanup
+## Historical validation and cleanup
 
 Twenty focused harness tests pass, including the uppercase-reset and failed-reset regressions. The real browser fixture checks cover exact Unicode credentials, OTP, one draft save and persisted receipt. Existing secure-fill acceptance supplies owner/app/signer binding, stale reference, cancellation/late submission, retained-worker resume and lost-response/no-duplicate-fill evidence for the unchanged helper/runtime. No redundant fault-injection matrix was added. Completed-run checkpoint resume was verified before collection; primary source hashes were checked again after collection.
 
@@ -139,7 +132,7 @@ Sanitized local benchmark artifacts occupy about **5.2 MB** and are retained for
 | --- | --- | --- | --- |
 | Benchmark method inventory | Enforce one UI method and shared private filling per sample | Task / interaction worker | Always on during benchmarks |
 | Authentication and Android procedures | Reuse existing skills during comparison | Task / interaction worker | Discovered on demand |
-| Production method priority | Recommendations await live assisted evidence/review | Main / Task | Guidance only |
+| Production method priority | Recommendations are summarized in the current warm-session findings | Main / Task | Guidance only |
 
 
 ## Signed-in Amazon Android follow-up — stopped

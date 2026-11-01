@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress. The 27 warm Amazon/Facebook samples are complete and reviewed; all nine initial Apple checks have recorded outcomes, but authenticated Apple comparison needs login setup. Both benchmark runners passed cleanup audit. See [results and evidence](android-browser-computer-benchmark-results.md).
+Done. All 36 primary warm-session samples are independently reviewed: 32 passes and four incomplete retrievals. The final authenticated Apple comparison passes 9/9. Earlier Apple setup outcomes are retained separately; all four datasets pass cleanup/source audit. See [results and evidence](android-browser-computer-benchmark-results.md).
 
 ## Goal
 
@@ -42,7 +42,8 @@ Gitignored datasets under `.local/android-browser-comparison/` contain frozen co
 - `main-reset-verified`: historical fixture and anonymous-web baseline, 36 scheduled cells, 15 executed and 21 setup deferrals.
 - `warm-retrieval`: current 27-cell Amazon/Facebook matrix; 23 passes and four incomplete results, all reviewed.
 - `warm-apple`: initial nine Apple checks; eight authentication dependencies and one error before measured execution. No eligible authenticated retrieval ranking.
-- `warm-apple-authenticated`: planned separate collection after Apple setup. Preserve the initial outcomes rather than overwriting them. Desktop is reauthenticated; Android Chrome has reused saved credentials and awaits Apple two-factor verification in the dev PWA.
+- `warm-apple-authenticated`: three Android passes and six desktop setup errors; preserved separately.
+- `warm-apple-final`: corrected full authenticated matrix, nine independently verified passes. Setup waits for the owned desktop Page before measured execution.
 
 ## Milestones
 
@@ -73,7 +74,7 @@ Exit criteria:
 
 - Three-arm real fixture acceptance passes. The warm dry run contains 27 main cells and nine separate Apple cells. Focused harness tests pass; original results remain immutable.
 
-### 3. Collect and review live outcomes — main complete; Apple setup pending
+### 3. Collect and review live outcomes — complete
 
 Implementation tasks:
 
@@ -84,9 +85,9 @@ Implementation tasks:
 
 Exit criteria:
 
-- Every scheduled cell has a reviewed outcome or explicit setup/unavailable reason. Eligible live successes are supported by actual UI observations. Apple authenticated access is either measured after setup or clearly remains pending user action.
+- Every scheduled cell has a reviewed outcome or explicit setup/unavailable reason. Eligible live successes are supported by actual UI observations. Apple authenticated access is measured after setup for all three methods.
 
-### 4. Report recommendations and clean up — in progress
+### 4. Report recommendations and clean up — complete
 
 Implementation tasks:
 
@@ -128,6 +129,6 @@ Use a new output directory after material protocol/source changes. Do not resume
 - Every live success has independent evidence. Correctness, assistance, elapsed time and model usage are reported without treating setup blockers as an authenticated retrieval ranking.
 - Reports/plans are current, commits are local, and benchmark-owned cleanup is verified while personal sessions and the dev stack are preserved.
 
-## Current Follow-up
+## Completion evidence
 
-Apple setup reuses dev PWA task `fd8eb1d0-bb59-492f-8a54-af3b769a4052`. Desktop account access was verified at 07:38 UTC, but later checks required sign-in; cause is unproven. Android Chrome also requires sign-in. Setup is outside scored timing, follows all independent work, and yields for any user verification. The queue is recorded in `warm-apple/human-follow-up.json`.
+The main 27-cell matrix and final nine-cell Apple matrix have explicit independent reviews. Earlier Apple authentication and setup-error datasets remain separate. All four audits pass: 54 sample tasks archived, scratch databases and runner directories absent, locks released, fixture removed and phone power restored. Two diagnostic tasks are also archived. Focused harness tests pass 22/22; the final Apple run verifies the bounded pre-timing tab initialization wait. No human dependency remains. Production priority guidance is unchanged; conditional recommendations are in the results report.
