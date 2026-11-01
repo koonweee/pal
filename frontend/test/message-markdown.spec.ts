@@ -52,6 +52,48 @@ test('renders Markdown for both message roles with readable user bubbles', async
   }
 });
 
+test('contains wide and nested ordered-list markers in both message roles', async ({
+  page,
+}) => {
+  const text =
+    '3499. **Roommate** is not the neatest. Master bedroom, but laundry is in the master bathroom so access is occasionally shared.\n      1. Nested item\n      2. Nested item two\n3500. Second item\n\nBetween lists.\n\n123456789. Largest CommonMark marker';
+  const messages = (['user', 'assistant'] as const).map((role) =>
+    backend.message(text, role),
+  );
+  backend.rows.push(...messages);
+
+  await page.setViewportSize({ width: 390, height: 1000 });
+  await page.goto('/');
+
+  for (const message of messages) {
+    const article = page.locator(`[data-message-id="${message.id}"]`);
+    const bubble = article.locator('.message-bubble');
+    const body = article.locator('.message-body');
+    const lists = body.locator('ol.message-ordered-list');
+    await expect(lists).toHaveCount(3);
+    await expect(lists.first()).toHaveAttribute('start', '3499');
+    await expect(body.locator('.message-list-marker')).toHaveText([
+      '3499.',
+      '1.',
+      '2.',
+      '3500.',
+      '123456789.',
+    ]);
+    await expect(body.locator('strong')).toHaveText('Roommate');
+
+    const bubbleBounds = (await bubble.boundingBox())!;
+    for (const part of await body
+      .locator('.message-list-marker, .message-list-content')
+      .all()) {
+      const bounds = (await part.boundingBox())!;
+      expect(bounds.x).toBeGreaterThanOrEqual(bubbleBounds.x);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(
+        bubbleBounds.x + bubbleBounds.width,
+      );
+    }
+  }
+});
+
 test('keeps Markdown source in the composer and renders optimistic and saved sends', async ({
   page,
 }) => {

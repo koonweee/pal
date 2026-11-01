@@ -362,8 +362,33 @@ textarea::-webkit-scrollbar-thumb,
   font-size: 15px;
 }
 .message-body ul,
-.message-body ol {
+.message-body ol:not(.message-ordered-list) {
   padding-left: 24px;
+}
+.message-body ol.message-ordered-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  row-gap: 3px;
+  padding-inline-start: 0;
+  list-style: none;
+}
+.message-ordered-list-item {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  column-gap: 0.5ch;
+  min-width: 0;
+}
+.message-list-marker {
+  text-align: end;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.message-list-content {
+  min-width: 0;
+}
+.message-ordered-list-item + .message-ordered-list-item {
+  margin-top: 0;
 }
 .message-body li + li {
   margin-top: 3px;
