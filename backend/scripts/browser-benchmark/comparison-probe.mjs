@@ -171,7 +171,6 @@ scope.preflight = async () => {
         capability = {
           foreground: view.identity?.packageName,
           fields: view.inputs?.length ?? 0,
-          configured: Boolean(r.android.loginApps[packageName]),
           setupRequired: view.identity?.packageName !== packageName,
         };
       } catch {
@@ -274,13 +273,6 @@ scope.run = async () => {
         reason = 'account-setup-or-choice';
       else if (live && arm === 'android' && native?.setupRequired)
         reason = 'native-first-run-setup';
-      else if (
-        live &&
-        scenario.login &&
-        arm === 'android' &&
-        !native?.configured
-      )
-        reason = 'trusted-native-login-mapping';
       if (reason) {
         result({
           ...row,
@@ -332,23 +324,13 @@ scope.run = async () => {
           );
         let url = fixture?.url ?? scenario.url;
         if (arm === 'android' && !live) {
-          const view = await prepareNativeFixture(r.android, {
+          await prepareNativeFixture(r.android, {
             taskId: task.id,
             workerId: seedWorker,
           });
           emit('fixture.startVerified', { stage: 'username' });
           await r.android.release(task.id, seedWorker);
-          android = new AndroidService(
-            new ConfigService({
-              ...process.env,
-              PAL_ANDROID_LOGIN_APPS: JSON.stringify({
-                'dev.pal.securefixture': {
-                  origin: 'https://android-fixture.example.test',
-                  signers: view.identity.signers,
-                },
-              }),
-            }),
-          );
+          android = new AndroidService(new ConfigService(process.env));
           url = 'dev.pal.securefixture';
         }
         entry = await comparisonPrivate(
@@ -508,7 +490,13 @@ scope.run = async () => {
                 )
                   throw Error('Computer navigation must use computer tools');
                 if (name === 'login_inspect' && arm === 'android')
-                  args = { ...args, target: 'android' };
+                  args = {
+                    ...args,
+                    target: 'android',
+                    website: scenario.url
+                      ? new URL(scenario.url).origin
+                      : 'https://android-fixture.example.test',
+                  };
                 if (arm !== 'android' && args.target === 'android')
                   throw Error('Phone outside assigned method');
                 const result = await execute(args, context);

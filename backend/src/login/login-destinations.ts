@@ -25,8 +25,10 @@ export class LoginDestinations {
     taskId: string,
     workerId: string | undefined,
     surface: 'browser' | 'android',
+    website?: string,
   ) {
-    if (surface === 'android') return this.android.inspect(taskId, workerId);
+    if (surface === 'android')
+      return this.android.inspect(taskId, workerId, website);
     const page = await this.browser.selectedPage(taskId, workerId);
     return {
       ...(await this.web.inspect(page, loginOwner(taskId, workerId))),

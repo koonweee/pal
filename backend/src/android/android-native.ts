@@ -1,7 +1,6 @@
 /** Private sidecar protocol. Values never enter model-facing Android tools. */
 export interface NativeIdentity {
   packageName: string;
-  signers: string[];
 }
 export interface NativeRect {
   x: number;

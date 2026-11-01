@@ -181,6 +181,7 @@ export class LoginService implements OnModuleDestroy {
     action?: string[],
     signal?: AbortSignal,
     surface: 'browser' | 'android' = 'browser',
+    website?: string,
   ) {
     try {
       signal?.throwIfAborted();
@@ -224,7 +225,12 @@ export class LoginService implements OnModuleDestroy {
           await this.browser.selectedPage(taskId, workerId)
         ).waitForLoadState('domcontentloaded', { timeout: 5000 });
       signal?.throwIfAborted();
-      const result = await this.inspector.inspect(taskId, workerId, surface);
+      const result = await this.inspector.inspect(
+        taskId,
+        workerId,
+        surface,
+        website,
+      );
       const origin = result.origin;
       const accounts = new Map<
         string,

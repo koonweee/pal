@@ -35,14 +35,11 @@ export class StaleSecureFieldsError extends ApplicationError {
 }
 
 export type SecureDestination =
-  | { kind: 'browser' }
-  | { kind: 'android'; packageName: string; signers: string[] };
+  { kind: 'browser' } | { kind: 'android'; packageName: string };
 export const sameDestination = (a: SecureDestination, b: SecureDestination) =>
   a.kind === b.kind &&
   (a.kind === 'browser' ||
-    (b.kind === 'android' &&
-      a.packageName === b.packageName &&
-      [...a.signers].sort().join(',') === [...b.signers].sort().join(',')));
+    (b.kind === 'android' && a.packageName === b.packageName));
 
 export interface LoginInput {
   ref: string;

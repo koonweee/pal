@@ -37,7 +37,7 @@ it('binds device/worker, masks observations, serializes private operations and r
             ? {
                 status: 'ready',
                 session: 'fixture',
-                identity: { packageName: 'com.example.app', signers: [] },
+                identity: { packageName: 'com.example.app' },
                 inputs: [],
                 elements: [
                   { ref: '@a1', text: 'Public heading', type: 'TextView' },
@@ -209,32 +209,4 @@ it('binds device/worker, masks observations, serializes private operations and r
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
-});
-
-it('requires explicit HTTPS app mappings with complete pinned signer hashes', () => {
-  for (const mapping of [
-    '[]',
-    '{"com.app":{"origin":"http://example.com","signers":[]}}',
-    '{"com.app":{"origin":"https://example.com","signers":["bad"]}}',
-  ]) {
-    expect(
-      () =>
-        new AndroidService(
-          new ConfigService({ PAL_ANDROID_LOGIN_APPS: mapping }),
-        ),
-    ).toThrow('PAL_ANDROID_LOGIN_APPS');
-  }
-  const service = new AndroidService(
-    new ConfigService({
-      PAL_ANDROID_LOGIN_APPS: JSON.stringify({
-        'com.example.app': {
-          origin: 'https://example.com',
-          signers: ['a'.repeat(64)],
-        },
-      }),
-    }),
-  );
-  expect(service.loginApps['com.example.app'].origin).toBe(
-    'https://example.com',
-  );
 });

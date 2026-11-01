@@ -14,16 +14,16 @@ Scope: development acceptance on the USB phone connected to this Mac, using cont
 
 - [Android Mobile MCP](android-mobile-mcp.md) supplies worker-only navigation through the existing sidecar and container ADB. Ordinary inspection and screenshots use the private helper's masked observations. The host selects one phone and serializes ownership across ordinary and private operations.
 - `LoginService` and `LoginRepository` share account choice, Bitwarden lookup, private cards, staged merging, transient OTP, notifications and recovery across browser and native Android. `LoginDestinations` routes observation and filling to the browser or Android adapter.
-- `login_inspect` accepts `target: "android"` when Android is configured; existing fill/request tools infer the destination from opaque refs. Native filling binds the worker, helper session, window/node, package and installed signer. Operator-controlled `PAL_ANDROID_LOGIN_APPS` supplies the HTTPS vault origin.
+- `login_inspect` accepts `target: "android"` when Android is configured; existing fill/request tools infer the destination from opaque refs. Native filling binds the worker, helper session, window/node and foreground package. Android inspection takes the HTTPS account website for shared vault matching; installed apps need no registration. See [secure-fill simplification](android-secure-fill-simplification.md) for the current policy.
 - The unrooted instrumentation helper exposes native field properties and performs validated `ACTION_SET_TEXT` through an authenticated ADB channel. Mobile MCP and the helper hand off Android's single UI Automation connection.
-- Native username/password and OTP are supported. WebView private filling, payments, unlock, biometrics and passkeys require manual or separately supported workflows. No personal live-app trust mapping is configured in dev.
+- Native and accessible WebView username/password and OTP fields are supported. Payments, unlock, biometrics, passkeys and inaccessible fields require manual or separately supported workflows.
 
 ## Target Data Shape
 
 - Keep one owner for credential policy, private cards, staged account selection and request lifecycle. Introduce a narrow destination-adapter contract only where browser/Android behavior differs: inspect, validate/select, fill and binding lifetime.
 - Inspected native fields expose opaque refs, role-relevant metadata, verified app identity and a masked preview. Values remain private. Bind refs to task/worker, device, helper session, app/window and native node; reinspection, replacement, expiry and ownership changes invalidate them.
-- Durable request/inspection metadata must distinguish browser and Android targets, including enough trusted identity to recover safely after restart. Reuse existing records; add a small migration only if needed to encode that distinction. Never infer the target from website origin alone or persist live native handles.
-- Reuse existing HTTPS vault matching through an operator-controlled package/signing-identity to website mapping. The model cannot supply or change trusted mappings. Add configuration to `.env.example` when implemented; choose one concrete representation.
+- Durable request/inspection metadata must distinguish browser and Android targets, including the foreground package to recover safely after restart. Reuse existing records; add a small migration only if needed to encode that distinction. Never infer the target from website origin alone or persist live native handles.
+- Reuse existing HTTPS vault matching with the account website supplied during Android inspection. Installed apps are controlled by the operator.
 - Keep the model surface small: extend `login_inspect` with an Android target selector, defaulting to browser. `secure_fill` and `secure_entry_request` infer the target from opaque refs. Keep device choice in host code. Reject browser action arguments and payment roles for Android. Native session controls/preferences need explicit semantics; do not claim browser persistence controls apply to apps.
 
 ## Milestones
@@ -37,7 +37,7 @@ Implementation tasks:
 - Use an authenticated private channel over ADB for requests. Keep credentials out of command arguments, shell text, clipboard, persistent files, instrumentation arguments, logs and diagnostic responses. Do not expose a public phone listener.
 - Add a minimal native fixture for username/password and staged identifier/password/OTP screens. Prove filling with synthetic secrets, including Unicode, without submitting automatically.
 - Verify helper start/stop, connection loss and serialized coexistence with Mobile MCP. Use supported APIs and document their integration gap. If simultaneous automation sessions conflict, prove bounded handoff and safe reconnection before continuing.
-- Inspect the intended Amazon/Facebook native login paths when accounts/setup permit. Record whether native fields are accessible and whether login moves into a WebView or another app. Embedded browser credentials require verified domain binding; unsupported identity is a handoff. Do not infer a domain from screenshots, labels or an app's resource IDs.
+- Inspect the intended Amazon/Facebook native login paths when accounts/setup permit. Record whether native fields are accessible and whether login moves into a WebView or another app. The worker supplies the service account website for vault matching; inaccessible fields require a handoff.
 
 Exit criteria:
 
@@ -49,8 +49,8 @@ Exit criteria:
 Implementation tasks:
 
 - Extract the browser destination assumptions from `LoginService` while preserving its current behavior. Keep vault access, account matching/selection, private cards, staged credential merging, transient codes, notifications and recovery in their existing shared owners.
-- Add the Android destination adapter and trusted app/website mapping. Verify installed signing identity and foreground window/app before credential lookup/fill. Browser-hosted login handoffs require their own verified identity.
-- Let the interaction worker assign semantic roles from sanitized metadata and preview. Code requires an editable destination and password metadata for reusable passwords/PINs, rejects incompatible roles, and validates every selected node before writing.
+- Use the Android destination adapter with foreground package/window/node validation and the account website for vault matching.
+- Let the interaction worker assign semantic roles from sanitized metadata and preview. Code requires an editable destination, treats password metadata as a hint, and validates every selected node before writing.
 - Revalidate immediately at each native write; never fall back to coordinates or current-focus typing for secrets. Preserve code-ref order. Report a failed/uncertain or partial fill without automatically replaying secret mutations or submitting the form.
 - Apply the same phone ownership/serialization to private submissions and model-driven operations. Define bounded reservation while awaiting private entry, cancellation, expiry, worker resume and release. A late submission cannot target another worker's screen. A released or restarted helper requires fresh inspection.
 - Reuse browser account-picking and private-entry UI, with target-appropriate identity and copy. Keep native flow state distinct from browser flow state even when both use the same website/account.
@@ -59,7 +59,7 @@ Exit criteria:
 
 - The real Task-to-interaction-worker path can reuse a saved synthetic login, collect new private credentials, continue staged entry and fill transient OTP fields on Android.
 - Account choice and credential persistence have one shared policy. Existing browser private-entry and staged-login journeys still pass.
-- Wrong app/signer/owner, stale node/window, missing password metadata, cancellation and late submissions fail without misdirected filling.
+- Wrong app/owner, stale node/window, cancellation and late submissions fail without misdirected filling. Password metadata is a role hint.
 
 ### 3. Protect observations and align guidance — complete
 
@@ -69,7 +69,7 @@ Implementation tasks:
 - Exclude populated editable text and value-bearing metadata; mask all text-entry regions, including unselected fields and sensitive keyboard suggestions. Recheck screen/window consistency around capture and withhold observations when masking cannot be established. Never substitute an unmasked image after masking errors.
 - Keep raw hierarchy/screenshot material transient. Reuse private preview retention and metadata notifications; redact error and reconnect paths. Preserve the existing accepted agent trust boundary without claiming protection against a malicious agent with unrelated privileged access.
 - Compare shared Task/Worker and authentication skill guidance. Keep common secret-handling/account-choice policy in one applicable source; add only Android inspection, capability limits and recovery to its worker skill.
-- Document helper build/lifecycle, supported fields, trusted mappings, manual fallbacks and dev commands. Add configuration examples and generated API updates only where the contract changes.
+- Document helper build/lifecycle, supported fields, account website context, manual fallbacks and dev commands. Add configuration examples and generated API updates only where the contract changes.
 
 Exit criteria:
 
@@ -94,7 +94,7 @@ Exit criteria:
 ## Tests
 
 - One helper/device fixture journey covers direct fill, staged credentials, OTP, Unicode and masked post-fill observation. Use synthetic secrets and independent fixture state checks.
-- Focused host cases cover owner/device/app/signer binding, stale refs, role checks, cancellation/late private submission, partial or lost-response handling and observation privacy. Add cases where they enforce different invariants, not a test for every helper method.
+- Focused host cases cover owner/device/app binding, stale refs, role checks, cancellation/late private submission, partial or lost-response handling and observation privacy. Add cases where they enforce different invariants, not a test for every helper method.
 - Reuse browser login integration/E2E and frontend private-entry coverage; add frontend tests only for changed target-specific UI behavior.
 
 ## Validation Commands
@@ -123,7 +123,7 @@ Create the named scratch database before database-backed local checks and remove
 
 - Native username/password and OTP flows reuse Pal's shared secure-entry workflow; credential values reach only the trusted backend/helper and intended app.
 - Root and a full autofill provider are unnecessary. The helper has a reproducible container build and validated coexistence with Mobile MCP.
-- Validated direct-node filling, trusted target matching, bounded ownership and masked ordinary observations are enforced in code. Semantic field-role assignment and authentication-result interpretation remain model judgment.
+- Validated direct-node filling, foreground target binding, bounded ownership and masked ordinary observations are enforced in code. Semantic field-role assignment and authentication-result interpretation remain model judgment.
 - Browser regressions pass; development acceptance and cleanup are recorded; the dependent benchmark can exercise actual filling. Production deployment and deferred features remain outside this plan.
 
 ## Validation Evidence
@@ -135,7 +135,7 @@ Acceptance: 2026-10-31, connected unrooted Samsung SM-A376U, Android 17, contain
 - The actual Sol Task → Terra interaction worker passes fresh staged private entry and a second sign-in using the saved synthetic account with a fresh private OTP. Actual private HTTP submissions fill username/password/code/code; saved-vault filling supplies the second username/password. Independent fixture state confirms both authenticated outcomes and the vault contains one merged login with no OTP. The acceptance runner preloads the production skill bodies; focused skill tests cover on-demand discovery. No real vault or account is used.
 - Focused backend checks pass: 13 service/worker/skill tests, nine browser/native secure-entry E2E tests, authenticated-helper transport test, build, lint/boundaries and OpenAPI consistency. Coverage includes owner/app/signer/role checks, stale refs, cancellation/late submissions, retained-worker resume, and an applied fill whose response is lost without a duplicate replay. Frontend type/API/ownership checks and all three secure-entry Playwright cases pass, including browser layouts and native private entry.
 - Ordinary Task/worker Android smoke passes Chrome navigation to IANA and native Settings model/version lookup. Chrome navigation uses sanitized element text. Its WebView screenshot is fully masked, so visual verification of web content is unavailable through this path; native screen screenshots remain usable. This capability limit must stay visible in the comparison.
-- Amazon inspection stops at Android permission-controller setup; Facebook stops at Meta app-manager setup. Neither exposes a native login field at that point. No permission decisions, sign-outs or personal-account fills were performed, and these setup-component signers were not trusted as app identities. Benchmark preflight must complete setup, verify real destination identity and explicitly configure eligible app signers/origins. Live account-fill capability remains unverified.
+- Amazon inspection stops at Android permission-controller setup; Facebook stops at Meta app-manager setup. Neither exposes a native login field at that point. No permission decisions, sign-outs or personal-account fills were performed, and these setup-component signers were not trusted as app identities. Benchmark preflight must complete setup and inspect actual login fields. The original signer-registration requirement is superseded by the simplification plan. Live account-fill capability remains unverified.
 - Dev backend and Android sidecar are rebuilt; the user-approved dev PWA refresh is available at `http://localhost:14173`. Production deployment and benchmark collection remain outside this plan.
 
 Cleanup retains the installed production helper, current development images, persistent development volumes, Android SDK/Gradle/signing build caches and the three masked proof images. The owned fixture, synthetic vault/database records, copied acceptance scripts, temporary APKs/probes and test-only forwards are removed; the phone's original USB power setting is restored. Resource sizes are recorded in the completion report.

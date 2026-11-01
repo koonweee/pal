@@ -16,12 +16,10 @@ import { noopObserve } from '@mastra/core/tools';
 import { PARENT_TASK_ID, WORKER_ID } from '../dist/agent/task-workers.js';
 
 it('uses shared private HTTP entry, staged vault reuse and transient codes with bound Android identity and cancellation', async () => {
-  const signer = 'a'.repeat(64),
-    packageName = 'dev.pal.fixture';
+  const packageName = 'dev.pal.fixture';
   const session = randomUUID();
   let ref = '',
     stage = 0,
-    wrongSigner = false,
     changed = false;
   let loseFillResponse = false;
   const fills: string[] = [],
@@ -48,14 +46,13 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
           session,
           identity: {
             packageName,
-            signers: [wrongSigner ? 'b'.repeat(64) : signer],
           },
           inputs: [
             {
               ref,
               type: stage === 1 ? 'password' : 'text',
-              password: stage === 1,
-              inputType: stage === 1 ? 129 : 1,
+              password: false,
+              inputType: 1,
               label: ['Username', 'Password', 'Code'][stage],
               identifier: 'field',
               maxLength: -1,
@@ -97,12 +94,6 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       PAL_ANDROID_MCP_URL: `http://127.0.0.1:${address.port}/mcp`,
       PAL_ANDROID_MCP_TOKEN: 'fixture',
       PAL_ANDROID_DEVICE_ID: 'phone',
-      PAL_ANDROID_LOGIN_APPS: JSON.stringify({
-        [packageName]: {
-          origin: 'https://native.example.test',
-          signers: [signer],
-        },
-      }),
     },
   });
   const android = fixture.app.get(AndroidService),
@@ -142,10 +133,23 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
   };
   const outputs: unknown[] = [];
   try {
+    await expect(
+      login.inspect(task.id, workerId, undefined, undefined, 'android'),
+    ).rejects.toMatchObject({ code: 'invalid_input' });
+    await expect(
+      login.inspect(
+        task.id,
+        workerId,
+        undefined,
+        undefined,
+        'android',
+        'http://native.example.test',
+      ),
+    ).rejects.toMatchObject({ code: 'invalid_input' });
     for (const [index, role] of ['username', 'password', 'code'].entries()) {
       stage = index;
       const inspected = await tools.login_inspect.execute!(
-        { target: 'android' },
+        { target: 'android', website: 'https://native.example.test/login' },
         context,
       );
       outputs.push(inspected);
@@ -155,15 +159,6 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
         role === 'code'
           ? { code: [inspected.inputs[0].ref] }
           : { [role]: inspected.inputs[0].ref };
-      if (role === 'username')
-        await expect(
-          login.fill(
-            task.id,
-            { password: inspected.inputs[0].ref },
-            undefined,
-            workerId,
-          ),
-        ).rejects.toMatchObject({ code: 'conflict' });
       const pending = await login.request(task.id, fields, workerId);
       outputs.push(pending);
       expect(await login.retainWorkerSession(task.id, workerId, true, 0)).toBe(
@@ -218,6 +213,7 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       undefined,
       undefined,
       'android',
+      'https://native.example.test',
     );
     const fields = { password: inspection.inputs[0].ref };
     outputs.push(await login.fill(task.id, fields, undefined, workerId));
@@ -230,17 +226,13 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       login.fill(task.id, fields, undefined, workerId),
     ).rejects.toMatchObject({ code: 'conflict' });
     changed = false;
-    wrongSigner = true;
-    await expect(
-      login.inspect(task.id, workerId, undefined, undefined, 'android'),
-    ).rejects.toMatchObject({ code: 'conflict' });
-    wrongSigner = false;
     const fresh = await login.inspect(
       task.id,
       workerId,
       undefined,
       undefined,
       'android',
+      'https://native.example.test',
     );
     const cancelled = await login.request(
       task.id,
@@ -269,6 +261,7 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       undefined,
       undefined,
       'android',
+      'https://native.example.test',
     );
     const late = await login.request(
       task.id,
@@ -301,6 +294,7 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       undefined,
       undefined,
       'android',
+      'https://native.example.test',
     );
     const uncertainFields = { password: uncertain.inputs[0].ref };
     loseFillResponse = true;

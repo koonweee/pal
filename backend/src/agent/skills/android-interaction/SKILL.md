@@ -8,7 +8,7 @@ Use android_apps to discover installed package names and android_launch_app to s
 
 Host code binds one phone and reserves it for your assignment. A busy result means another worker owns it; return the blocker to Task. After a disconnect or uncertain action, inspect fresh state before deciding whether to retry. Do not assume an action failed merely because its response was lost.
 
-For authentication, load website-authentication for the shared account/private-entry procedure. Navigate to the native form, then use login_inspect with target android and its opaque refs for secure_fill or secure_entry_request. Host code validates the configured app identity and fills native nodes privately. Navigation invalidates refs. Yield on awaiting_user; the host reserves the phone for up to ten minutes. On continuation inspect current state before acting. Never enter credentials/codes through android_type.
+For authentication, load website-authentication for the shared account/private-entry procedure. Navigate to the native form, then use login_inspect with target android and its opaque refs for secure_fill or secure_entry_request. Host code binds the current app and fills inspected nodes privately. Navigation invalidates refs. Yield on awaiting_user; the host reserves the phone for up to ten minutes. On continuation inspect current state before acting. Never enter credentials/codes through android_type.
 
 Private payment entry, device unlock, biometrics and unsupported login destinations require a manual phone handoff to Task. Finish that assignment to release ownership. Preserve the user's app data and existing sessions.
 

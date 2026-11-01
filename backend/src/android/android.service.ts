@@ -35,54 +35,11 @@ export class AndroidService implements OnApplicationShutdown {
   private owner?: Owner;
   private closing = false;
   private nativeGeneration = 0;
-  readonly loginApps: Record<string, { origin: string; signers: string[] }>;
   readonly endpoint?: string;
   private readonly token?: string;
   private readonly device?: string;
 
   constructor(@Inject(ConfigService) config: ConfigService) {
-    try {
-      const apps: unknown = JSON.parse(
-        config.get<string>('PAL_ANDROID_LOGIN_APPS') || '{}',
-      );
-      if (!apps || typeof apps !== 'object' || Array.isArray(apps))
-        throw new Error();
-      this.loginApps = {};
-      for (const [packageName, raw] of Object.entries(apps)) {
-        const entry = raw as { origin?: unknown; signers?: unknown };
-        if (
-          !/^[A-Za-z]\w*(?:\.[A-Za-z]\w*)+$/.test(packageName) ||
-          typeof entry.origin !== 'string' ||
-          !Array.isArray(entry.signers) ||
-          !entry.signers.length ||
-          entry.signers.some(
-            (value: unknown) =>
-              typeof value !== 'string' || !/^[0-9a-f]{64}$/.test(value),
-          )
-        )
-          throw new Error();
-        const url = new URL(entry.origin);
-        if (
-          url.protocol !== 'https:' ||
-          url.username ||
-          url.password ||
-          url.pathname !== '/' ||
-          url.search ||
-          url.hash
-        )
-          throw new Error();
-        this.loginApps[packageName] = {
-          origin: url.origin,
-          signers: (entry.signers as string[]).toSorted((a, b) =>
-            a.localeCompare(b),
-          ),
-        };
-      }
-    } catch {
-      throw new Error(
-        'PAL_ANDROID_LOGIN_APPS must map Android package names to HTTPS origins and SHA-256 signer arrays',
-      );
-    }
     this.endpoint = config.get<string>('PAL_ANDROID_MCP_URL') || undefined;
     this.token = config.get<string>('PAL_ANDROID_MCP_TOKEN');
     this.device = config.get<string>('PAL_ANDROID_DEVICE_ID');

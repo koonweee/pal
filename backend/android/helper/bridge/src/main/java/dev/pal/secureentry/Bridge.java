@@ -3,9 +3,6 @@ package dev.pal.secureentry;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Instrumentation;
 import android.app.UiAutomation;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
-import android.content.pm.Signature;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -157,13 +154,6 @@ public final class Bridge extends Instrumentation {
         }
         if (action.equals("validate") || action.equals("fill")) {
             if (!session.equals(request.getString("session"))) throw new IllegalStateException();
-            JSONArray expectedSigners = request.getJSONArray("signers");
-            JSONArray currentSigners = identity(request.getString("packageName")).getJSONArray("signers");
-            List<String> expected = new ArrayList<>(), actual = new ArrayList<>();
-            for (int i = 0; i < expectedSigners.length(); i++) expected.add(expectedSigners.getString(i));
-            for (int i = 0; i < currentSigners.length(); i++) actual.add(currentSigners.getString(i));
-            java.util.Collections.sort(expected); java.util.Collections.sort(actual);
-            if (!expected.equals(actual)) throw new IllegalStateException();
             JSONArray fields = request.getJSONArray("fields");
             if (fields.length() == 0 || fields.length() > 64) throw new IllegalArgumentException();
             for (int i = 0; i < fields.length(); i++) {
@@ -213,14 +203,7 @@ public final class Bridge extends Instrumentation {
             if (role != null) {
                 if (!editable(bound.node) || bound.password != bound.node.isPassword() || bound.inputType != bound.node.getInputType()) throw new IllegalStateException();
                 if (!role.equals("username") && !role.equals("password") && !role.equals("code")) throw new IllegalArgumentException();
-                if (role.equals("password") && !bound.password) throw new IllegalStateException();
-                if (role.equals("username") && bound.password) throw new IllegalStateException();
-                for (AccessibilityNodeInfo ancestor = bound.node.getParent(); ancestor != null;) {
-                    AccessibilityNodeInfo parent = ancestor.getParent();
-                    boolean web = string(ancestor.getClassName()).contains("WebView");
-                    ancestor.recycle(); ancestor = parent;
-                    if (web) { if (ancestor != null) ancestor.recycle(); throw new IllegalStateException(); }
-                }
+
             }
         } finally { root.recycle(); }
     }
@@ -291,7 +274,7 @@ public final class Bridge extends Instrumentation {
             String label = privateField ? string(node.getHintText()) : node.getChildCount() == 0 ? string(node.getContentDescription()) : "";
             String text = privateField || node.getChildCount() > 0 ? "" : string(node.getText());
             elements.put(new JSONObject().put("ref", ref).put("type", string(node.getClassName())).put("text", text).put("label", label).put("identifier", string(node.getViewIdResourceName())).put("focused", node.isFocused()).put("enabled", node.isEnabled()).put("rect", rect(rect)));
-            if (bind && !inSensitive && !web && editable(node) && node.isEnabled() && fields.length() < 200 && string(node.getPackageName()).equals(string(root.getPackageName()))) {
+            if (bind && !inSensitive && editable(node) && node.isEnabled() && fields.length() < 200 && string(node.getPackageName()).equals(string(root.getPackageName()))) {
                 String input = "i" + (fields.length() + 1) + "-" + nonce();
                 inputs.put(input, new Bound(node, root, window));
                 fields.put(new JSONObject().put("ref", input).put("type", node.isPassword() ? "password" : "text").put("password", node.isPassword()).put("inputType", node.getInputType()).put("label", label).put("identifier", string(node.getViewIdResourceName())).put("maxLength", node.getMaxTextLength()).put("rect", rect(rect)));
@@ -304,14 +287,7 @@ public final class Bridge extends Instrumentation {
     }
 
     private JSONObject identity(String app) throws Exception {
-        PackageInfo info = getTargetContext().getPackageManager().getPackageInfo(app, PackageManager.GET_SIGNING_CERTIFICATES);
-        JSONArray signers = new JSONArray();
-        for (Signature signature : info.signingInfo.getApkContentsSigners()) {
-            byte[] hash = MessageDigest.getInstance("SHA-256").digest(signature.toByteArray());
-            StringBuilder hex = new StringBuilder(); for (byte value : hash) hex.append(String.format("%02x", value & 255));
-            signers.put(hex.toString());
-        }
-        return new JSONObject().put("packageName", app).put("signers", signers);
+        return new JSONObject().put("packageName", app);
     }
     private String mac(String direction, String nonce, String body) throws Exception {
         Mac hmac = Mac.getInstance("HmacSHA256");

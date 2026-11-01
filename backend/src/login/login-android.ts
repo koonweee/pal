@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { AndroidService } from '../android/android.service.js';
 import type {
-  NativeIdentity,
   NativeInput,
   NativeSnapshot,
   NativeStatus,
@@ -39,19 +38,6 @@ export class LoginAndroid {
       );
     return { taskId, workerId };
   }
-  private trusted(identity: NativeIdentity) {
-    const mapping = this.android.loginApps[identity.packageName];
-    if (
-      !mapping ||
-      JSON.stringify([...identity.signers].sort()) !==
-        JSON.stringify(mapping.signers)
-    )
-      throw new ApplicationError(
-        'conflict',
-        'This Android app is not configured for private entry. Return the manual phone action to Task.',
-      );
-    return mapping.origin;
-  }
   has(ref: string) {
     return this.inputs.has(ref);
   }
@@ -72,7 +58,19 @@ export class LoginAndroid {
       );
     });
   }
-  async inspect(taskId: string, workerId?: string) {
+  async inspect(taskId: string, workerId?: string, website?: string) {
+    let origin: string;
+    try {
+      const url = new URL(website ?? '');
+      if (url.protocol !== 'https:' || url.username || url.password)
+        throw new Error();
+      origin = url.origin;
+    } catch {
+      throw new ApplicationError(
+        'invalid_input',
+        'Supply the HTTPS account website for Android private entry',
+      );
+    }
     const identity = this.identity(taskId, workerId);
     const snapshot = await this.android.secure<NativeSnapshot | NativeStatus>(
       identity,
@@ -83,7 +81,6 @@ export class LoginAndroid {
         'unavailable',
         'Android private inspection unavailable; wait for the screen to settle',
       );
-    const origin = this.trusted(snapshot.identity);
     const owner = taskId + ':' + workerId;
     for (const [ref, input] of this.inputs)
       if (input.owner === owner || Date.now() - input.at >= 10 * 60_000)
@@ -92,7 +89,6 @@ export class LoginAndroid {
     const destination: Extract<SecureDestination, { kind: 'android' }> = {
       kind: 'android',
       packageName: snapshot.identity.packageName,
-      signers: [...snapshot.identity.signers].sort(),
     };
     const inputs: LoginInput[] = snapshot.inputs.map((native) => {
       this.inputs.set(native.ref, {
@@ -160,21 +156,15 @@ export class LoginAndroid {
     if (!this.live(taskId, workerId, fields))
       throw new StaleSecureFieldsError();
     const first = this.inputs.get(selected[0][1])!;
-    for (const [role, ref] of selected) {
+    for (const [, ref] of selected) {
       const input = this.inputs.get(ref)!;
-      if (
-        input.inspectionId !== first.inspectionId ||
-        (role === 'password' && !input.native.password) ||
-        (role === 'username' && input.native.password)
-      )
+      if (input.inspectionId !== first.inspectionId)
         throw new StaleSecureFieldsError();
     }
-    this.trusted(first.destination);
     const result = await this.android.secure<NativeStatus>(identity, {
       action: 'validate',
       session: first.session,
       packageName: first.destination.packageName,
-      signers: first.destination.signers,
       fields: selected.map(([role, ref]) => ({ role, ref })),
     });
     if (result.status !== 'valid') throw new StaleSecureFieldsError();
@@ -229,7 +219,6 @@ export class LoginAndroid {
           action: 'fill',
           session: first.session,
           packageName: target.destination.packageName,
-          signers: target.destination.signers,
           fields: prepared,
         },
       );

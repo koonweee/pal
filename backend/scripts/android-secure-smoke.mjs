@@ -123,15 +123,6 @@ try {
     'dev.pal.securefixture',
     'Launch only the owned fixture before acceptance',
   );
-  config.set(
-    'PAL_ANDROID_LOGIN_APPS',
-    JSON.stringify({
-      'dev.pal.securefixture': {
-        origin: 'https://android-fixture.example.test',
-        signers: initial.identity.signers,
-      },
-    }),
-  );
   android = new AndroidService(config);
   const privateCall = android.secure.bind(android);
   android.secure = async (owner, input, signal) => {
@@ -366,11 +357,11 @@ try {
   }
   await runFlow(
     'entry',
-    'Development acceptance: delegate the complete native login in dev.pal.securefixture to an interaction worker. Use Android and Pal private entry for each missing credential/code stage. Never type or request secrets in chat or ordinary tools. Verify the final Authenticated screen; keep everything inside the synthetic fixture and leave other apps alone. When private entry is awaiting, report that and yield. No scheduling/task-metadata tools exist in this test.',
+    'Account website: https://android-fixture.example.test. Development acceptance: delegate the complete native login in dev.pal.securefixture to an interaction worker. Use Android and Pal private entry for each missing credential/code stage. Never type or request secrets in chat or ordinary tools. Verify the final Authenticated screen; keep everything inside the synthetic fixture and leave other apps alone. When private entry is awaiting, report that and yield. No scheduling/task-metadata tools exist in this test.',
   );
   await runFlow(
     'reuse',
-    'Development acceptance: delegate another login in dev.pal.securefixture. It currently shows Authenticated; use Start again to begin a new fixture sign-in. Reuse the saved fixture account through secure_fill for username and password. Request only the new verification code through private entry. Verify Authenticated again. Use Android only, preserve other apps and never expose or type secrets through ordinary tools. Yield when private entry is awaiting.',
+    'Account website: https://android-fixture.example.test. Development acceptance: delegate another login in dev.pal.securefixture. It currently shows Authenticated; use Start again to begin a new fixture sign-in. Reuse the saved fixture account through secure_fill for username and password. Request only the new verification code through private entry. Verify Authenticated again. Use Android only, preserve other apps and never expose or type secrets through ordinary tools. Yield when private entry is awaiting.',
   );
   assert.deepEqual(privateFills, [
     ['username'],
