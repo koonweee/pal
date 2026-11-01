@@ -8,7 +8,9 @@ const { chromium } = createRequire(import.meta.url)(
 );
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 try {
-  for (const scenario of cases.filter((c) => c.kind === 'synthetic')) {
+  for (const scenario of cases.filter(
+    (c) => c.kind === 'synthetic' && !c.driverCase,
+  )) {
     const context = await browser.newContext();
     const state = initialState();
     await context.route('https://fixture.example.test/**', async (route) => {
@@ -40,7 +42,7 @@ try {
     } else if (scenario.id === 'stays') {
       await tab.getByRole('link', { name: 'Cedar House', exact: true }).click();
       await tab.getByRole('heading', { name: 'Cedar House' }).waitFor();
-    } else if (scenario.id === 'support') {
+    } else if (scenario.id === 'support' || scenario.id === 'support-file') {
       await tab.getByLabel('Workspace').selectOption('Acme Studio');
       await tab.getByLabel('Subject').fill('CSV export error E42');
       await tab.getByLabel('Priority').selectOption('High');

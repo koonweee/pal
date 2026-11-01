@@ -24,7 +24,7 @@ test('matrix contains exact settings with paired contexts and counterbalanced re
   );
   const jobs = schedule(
     variants,
-    cases.filter((c) => !c.attachment),
+    cases.filter((c) => !c.attachment && !c.driverCase),
     ['fresh', 'established'],
     3,
   );

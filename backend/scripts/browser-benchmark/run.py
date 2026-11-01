@@ -13,6 +13,8 @@ SCRIPTS = Path(__file__).resolve().parent
 REMOTE = '/tmp/pal-browser-benchmark-' + uuid.uuid4().hex[:10]
 VARIANTS = ['control', 'sol-low', 'sol-medium', 'sol-high', 'luna-low', 'luna-high', 'luna-xhigh', 'astra-low', 'astra-medium', 'terra-medium', 'terra-high', 'luna-coordinator', 'luna-services', 'luna-execution', 'luna-coordinator-both', 'luna-interaction-mcp']
 CASES = ['billing', 'stays', 'support', 'desktop', 'live-mdn', 'live-wikipedia', 'support-file']
+CASES += ['driver-form', 'driver-auth', 'driver-payment', 'driver-handoff', 'driver-recovery', 'driver-concurrent', 'driver-resume']
+VARIANTS += ['driver-current', 'driver-cua']
 
 def selected(value, choices):
     values = value.split(',')

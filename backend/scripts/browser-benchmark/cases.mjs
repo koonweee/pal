@@ -1,4 +1,5 @@
 import { delegationVariants } from './delegation.mjs';
+import { driverCases, scoreDriver } from './driver-cases.mjs';
 export const variants = [
   { id: 'control', model: 'gpt-6.1-sol', effort: 'medium', delegated: false },
   ...['low', 'medium', 'high'].map((effort) => ({
@@ -27,6 +28,15 @@ export const variants = [
   })),
 ];
 export const allVariants = [...variants, ...delegationVariants];
+allVariants.push(
+  ...['current', 'cua'].map((driver) => ({
+    id: 'driver-' + driver,
+    model: 'gpt-6.1-terra',
+    effort: 'medium',
+    delegated: true,
+    driver,
+  })),
+);
 export const cases = [
   {
     id: 'billing',
@@ -117,6 +127,8 @@ cases.push({
   prompt:
     'Read the supplied troubleshooting brief, prepare and save a high-priority support draft in the website, and report its title and priority. Preserve all facts from the brief. Do not submit.',
 });
+
+cases.push(...driverCases);
 
 // Explicit synthetic history: the same bytes are supplied to both arms. It is
 // meaningful project conversation, not a copy of a private user thread.
@@ -222,6 +234,7 @@ function containsFact(answer, value) {
   return text.includes(normalize(value));
 }
 export function score(scenario, state, answer, tools = []) {
+  if (scenario.driverCase) return scoreDriver(scenario, state, answer, tools);
   const checks = {};
   for (const value of scenario.expected)
     checks[`answer:${value}`] = containsFact(answer, value);
@@ -274,7 +287,9 @@ export function score(scenario, state, answer, tools = []) {
           ? Number(state.expense?.[field]) === Number(value)
           : state.expense?.[field] === value;
     checks.computerUsed = tools.some((name) =>
-      /computer.*(click|type|key)/i.test(name),
+      /computer.*(click|type|key)|^cua_(click|type_text|press_key|hotkey)$/i.test(
+        name,
+      ),
     );
     checks.noAutomation = !tools.some((name) =>
       /^(browser|login_|secure_)|execute_command|execute_typescript/.test(name),

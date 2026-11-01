@@ -1,3 +1,4 @@
+import { driverState, driverPage, driverTransition } from './driver-cases.mjs';
 const escape = (value) =>
   String(value)
     .replaceAll('&', '&amp;')
@@ -127,15 +128,35 @@ export async function installFixture(browserService, scenario, tag) {
   // Use the same CDP connection that resolves owned tabs, avoiding routing races.
   const browser = await browserService.connect();
   const context = browser.contexts()[0];
-  const state = initialState();
-  const predicate = (url) => url.hostname === host;
+  const state = scenario.driverCase ? driverState() : initialState();
+  const owners = new Map();
+  const predicate = (url) =>
+    url.hostname === host ||
+    (scenario.driverCase && url.hostname === 'processor-' + host);
   const handler = async (route) => {
     const request = route.request(),
       url = new URL(request.url());
     if (url.pathname === '/favicon.ico') return route.fulfill({ status: 204 });
     if (url.pathname === '/action') {
-      const { action, values } = request.postDataJSON();
-      return route.fulfill({ json: transition(state, action, values) });
+      const { action, values, lane } = request.postDataJSON();
+      if (scenario.concurrent && action === 'parallel') {
+        const owner = owners.get(request.frame().page());
+        state.laneOwners ??= {};
+        if (
+          !owner ||
+          (state.laneOwners[lane] && state.laneOwners[lane] !== owner) ||
+          Object.entries(state.laneOwners).some(
+            ([other, id]) => other !== lane && id === owner,
+          )
+        )
+          state.ownershipViolation = true;
+        state.laneOwners[lane] = owner;
+      }
+      return route.fulfill({
+        json: scenario.driverCase
+          ? driverTransition(state, action, values, lane)
+          : transition(state, action, values),
+      });
     }
     if (
       (url.pathname === '/billing' || url.pathname.startsWith('/invoices/')) &&
@@ -147,6 +168,8 @@ export async function installFixture(browserService, scenario, tag) {
         body: '',
       });
     state.pages.push(url.pathname);
+    if (scenario.driverCase && ['/account', '/receipt'].includes(url.pathname))
+      state.completedAt = Date.now();
     if (
       url.pathname === '/invoices/INV-2609-104' ||
       url.pathname === '/stays/cedar'
@@ -154,7 +177,9 @@ export async function installFixture(browserService, scenario, tag) {
       state.completedAt = Date.now();
     return route.fulfill({
       contentType: 'text/html',
-      body: page(url.pathname, state),
+      body: scenario.driverCase
+        ? driverPage(url.pathname, state, origin)
+        : page(url.pathname, state),
     });
   };
   await context.route(predicate, handler);
@@ -236,6 +261,7 @@ export async function installFixture(browserService, scenario, tag) {
   }
   return {
     state,
+    owners,
     accountId,
     origin,
     host,

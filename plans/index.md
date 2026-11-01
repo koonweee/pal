@@ -15,6 +15,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Cua Driver comparison](cua-driver-comparison.md) | Complete | Partial current/Cua evaluation; findings and interrupted-run gaps. |
 | [Graceful database shutdown](graceful-database-shutdown.md) | Done | Correlate planned process stops with PostgreSQL pool termination while preserving unexpected-loss logging and reconnection. |
 | [Mastra stable upgrade and primitive audit](mastra-stable-upgrade.md) | Done | Stable stack deployed and validated in development/production; verified cleanup, retained-gap audit and migration evidence. |
 | [Monitoring memory reliability](monitoring-memory-reliability.md) | Complete | Evidence-aware compaction, forward-progress guidance and three monitoring checkpoint repairs. |

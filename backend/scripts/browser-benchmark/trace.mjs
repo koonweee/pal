@@ -158,7 +158,10 @@ export function toolTiming(emit, sample, role) {
                       tool: name,
                       ms: Date.now() - start,
                       resultError:
-                        result?.success === false || result?.status === 'error',
+                        result?.success === false ||
+                        result?.status === 'error' ||
+                        result?.isError === true ||
+                        Boolean(result?.error),
                     });
                     return result;
                   } catch (error) {
