@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress. Implementation and development collection are authorized. [Android Secure Fill](android-secure-fill.md) meets development acceptance. The user authorizes benchmark sign-outs. Every user-dependent setup, account choice, verification challenge and review is queued after independent main work. Apple Store is a separate final run; no human-assisted sample is interleaved with main.
+In Progress. Independent collection, review and cleanup are complete; the separate assisted phase remains. See [results](android-browser-computer-benchmark-results.md). Implementation and development collection are authorized. [Android Secure Fill](android-secure-fill.md) meets development acceptance. The user authorizes benchmark sign-outs. Every user-dependent setup, account choice, verification challenge and review is queued after independent main work. Apple Store is a separate final run; no human-assisted sample is interleaved with main.
 
 ## Goal
 
@@ -97,7 +97,7 @@ Exit criteria:
 
 - All three arms complete a real synthetic private-fill journey with equivalent outcome checks. A container interruption leaves previously completed evidence intact; resume cannot silently mix different code/protocol versions or duplicate completed samples.
 
-### 3. Collect matched and live results
+### 3. Collect matched and live results — independent work complete; assisted pending
 
 Implementation tasks:
 
@@ -110,7 +110,7 @@ Exit criteria:
 
 - All 42 cells have a scored outcome or an explicit unavailable/pending reason. Actual-fill cases have stage and authenticated-state evidence. Human assistance, incomplete usage, privacy failures and uncertain state remain visible.
 
-### 4. Report priorities and clean up
+### 4. Report priorities and clean up — independent report/cleanup complete
 
 Implementation tasks:
 
@@ -157,8 +157,10 @@ python3 backend/scripts/browser-benchmark/run.py --suite interaction --phase ass
 
 ## Implementation and Collection State
 
-- The existing runner supports the `interaction` suite, exact method inventories, a matched native/web staged-login and single-draft fixture, actual private HTTP filling, source/image fingerprints, five-second host checkpoints and separate assisted outcomes. Production method priorities are unchanged.
-- Initial development probes are smoke-only. A missing fixture `pages` field caused a service restart during setup; the shared-route browser regression now covers that contract. Private continuation waits for the shared asynchronous notification sweep before resuming. Restored checkpoint files are assigned to the service user before attachment. The matched web/native draft receipt includes the exact reference and save count; web reload preserves that receipt.
-- Preflight finds no matching saved Amazon/Facebook accounts. Amazon remains at Android permission-controller setup. Facebook now reaches com.facebook.katana, with no eligible native inputs observed. These account/setup dependencies belong to the final assisted queue. No personal account values are exported.
-- Protocol amendment before collection: the public Amazon product task may use the available anonymous web session. Record/review its authentication state, marketplace and delivery context; do not describe an anonymous sample as the planned authenticated warm-session condition. The unavailable native cell remains explicit.
-- Nineteen focused benchmark tests and the real browser fixture/reload/public-evidence privacy checks pass. The final acceptance directory is `.local/android-browser-comparison/acceptance/`; all three methods pass, including one private write per role and one draft save. Completed-run resume retains exactly three sample starts and nine original private fills with no replay, complete artifact export and no cleanup errors. The first main dataset under `1b3bb0e` in `.local/android-browser-comparison/main-20261101/` was stopped after Android repetition 2 exposed an invalid fixture starting state: the uppercase START AGAIN button was not matched. Its 15 rows, source snapshot and independent reviews are retained, including the failed no-fill Android row and interrupted browser row. It is excluded from the corrected primary matrix. Setup now matches the button case-insensitively and verifies the username screen before each native measurement and after native scoring. Twenty focused tests pass. All three flows in `.local/android-browser-comparison/reset-acceptance/` pass, including actual native reset from the saved draft back to the verified username screen, nine private fills, and verified cleanup. The corrected primary matrix uses `.local/android-browser-comparison/main-reset-verified/`. The six Apple Store samples and every user-dependent prerequisite remain outside the active independent-work goal.
+- Harness implementation is committed as `1b3bb0e`; verified native reset is `d136e5a`. Twenty focused tests and three-arm real acceptance pass. Production method priorities are unchanged.
+- Primary collection is `.local/android-browser-comparison/main-reset-verified/`: 36 unique cells, 15 executed, 12 passes, three retrieval failures, 21 setup deferrals. All live outcomes are reviewed; all nine staged-fill journeys pass with 27 private fills. Native start/reset, source fingerprints, privacy/method gates, usage completeness and cleanup pass audit.
+- [Results and recommendations](android-browser-computer-benchmark-results.md) distinguish fixture reliability, live retrieval failure, setup dependencies and timing. The original interrupted dataset and calibration runs remain separate from primary aggregates.
+- Preflight finds no matching saved Amazon/Facebook accounts. Amazon remains at Android permission-controller setup. Facebook reaches its installed app, with no eligible native inputs observed. Real native trust mappings remain pending. No personal account values are exported.
+- The recorded product-case amendment permits the available anonymous Amazon.com session. It does not establish matched authenticated warm-session behavior.
+- The final assisted manifest validates 27 samples: 21 deferred main cells followed by six Apple Store browser/computer cells. Human-dependent setup, private entry, challenges and Apple Store URL confirmation are the remaining work.
+- Scratch databases, runner directories, fixture app, owned sessions and temporary review images are cleaned up; power state is restored. Sanitized local evidence is retained. The full plan remains In Progress for assisted coverage.
