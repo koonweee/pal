@@ -1,5 +1,7 @@
 # pal backend
 
+Agent run telemetry uses selective native Mastra observability in the existing PostgreSQL store. Pal records input/publication references and worker parent identities; telemetry expires by UTC day after 30 days. The runtime refreshes telemetry partitions daily and prunes hourly. [Agent run queries](agent-run-queries.md) describes read-only storage APIs and evidence limits.
+
 ## Security
 
 The first-party API uses private Tailnet ingress. Execution has no direct backend/database route; the web gateway rejects execution-subnet requests and a separate routed egress container filters private destinations. Service credentials and canonical files remain in service-private storage.

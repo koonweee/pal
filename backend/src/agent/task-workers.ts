@@ -61,6 +61,7 @@ export function taskWorkerDelegation(
         run.workerId = workerId;
         context.requestContext.set(PARENT_TASK_ID, taskId);
         context.requestContext.set(WORKER_ID, workerId);
+        context.requestContext.set('palParentRunId', context.runId);
         return { modifiedMaxSteps: 0 };
       } catch (error) {
         active.delete(id);

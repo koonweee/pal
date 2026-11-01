@@ -101,6 +101,10 @@ Use `npm` and run frontend commands from `frontend/`:
 - Document configuration in `.env.example` as it is introduced.
 - Keep credentials, local environment files, uploaded files, and database data out of version control.
 
+## Agent Run Inspection
+
+Read [architecture/agent-run-queries.md](architecture/agent-run-queries.md) when investigating Pal agent runs. Write temporary, bounded, read-only scripts against Mastra storage APIs using that guide.
+
 ## Local Skills
 
 - [explain-agent-harness-scenarios](.agents/skills/explain-agent-harness-scenarios/SKILL.md): Use to align on expected agent flows before implementation or explain implemented behavior through user scenarios, separating code guarantees from model judgment.

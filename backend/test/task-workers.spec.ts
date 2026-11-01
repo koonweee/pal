@@ -301,6 +301,35 @@ it('runs native workers concurrently with per-task limits, private output, and f
     expect(
       publications.some((value) => value.includes('private finding')),
     ).toBe(false);
+    await main.telemetry.observability.flush();
+    const telemetry = (await main.storage.getStore('observability'))!;
+    const traces = await telemetry.listTraces({
+      pagination: { page: 0, perPage: 50 },
+    });
+    const branches = await Promise.all(
+      traces.spans.map((span) => telemetry.getTrace({ traceId: span.traceId })),
+    );
+    const workerSpans = branches
+      .flatMap((trace) => trace?.spans ?? [])
+      .filter(
+        (span) =>
+          span.spanType === 'agent_run' && span.entityId === 'pal-task-worker',
+      );
+    expect(workerSpans.length).toBeGreaterThan(0);
+    expect(
+      workerSpans.every(
+        (span) =>
+          typeof span.metadata?.palParentRunId === 'string' &&
+          typeof span.metadata?.palParentTaskId === 'string',
+      ),
+    ).toBe(true);
+    const parentTraces = await telemetry.listTraces({
+      filters: { runId: cancelled.runId },
+      pagination: { page: 0, perPage: 10 },
+    });
+    expect(parentTraces.spans.some((span) => span.outcome === 'aborted')).toBe(
+      true,
+    );
   } finally {
     for (const gate of Object.values(gates)) gate.resolve();
     for (const run of main?.taskAgent?.listActiveThreadRuns() ?? [])

@@ -33,6 +33,10 @@ interface FailedPublication {
 
 export function publishTextProcessor(
   publish: (output: PublicOutput, context: TextContext) => Promise<void>,
+  report?: (
+    event: 'pal.output.fallback' | 'pal.publication.failed',
+    context: { runId?: string; threadId?: string; category: string },
+  ) => void,
 ): Processor & Required<Pick<Processor, 'processOutputStream'>> {
   return {
     id: 'pal-publish-text',
@@ -73,6 +77,14 @@ export function publishTextProcessor(
           try {
             outputs = parsePublicResponse(text);
           } catch (error) {
+            report?.('pal.output.fallback', {
+              runId: context.runId,
+              threadId: context.threadId,
+              category:
+                error instanceof AttachmentDeliveryError
+                  ? 'attachment'
+                  : 'structured-output',
+            });
             if (error instanceof AttachmentDeliveryError) {
               const failed = (state.failedPublications ??=
                 []) as FailedPublication[];
@@ -111,6 +123,14 @@ export function publishTextProcessor(
             try {
               await publish(output, context);
             } catch (error) {
+              report?.('pal.publication.failed', {
+                runId: context.runId,
+                threadId: context.threadId,
+                category:
+                  error instanceof AttachmentDeliveryError
+                    ? 'attachment'
+                    : 'publication',
+              });
               if (!(error instanceof AttachmentDeliveryError)) throw error;
               const failed = (state.failedPublications ??=
                 []) as FailedPublication[];

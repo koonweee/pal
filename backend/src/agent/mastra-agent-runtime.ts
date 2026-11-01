@@ -139,6 +139,7 @@ export class MastraAgentRuntime
       loadAgentInstructions('worker'),
     ]);
     this.main = await createMainSession({
+      releaseId: this.config.get<string>('PAL_RELEASE_ID'),
       mainContext: async () => {
         const [name, destinations] = await Promise.all([
           this.agentNameInstruction(),
@@ -320,15 +321,34 @@ export class MastraAgentRuntime
           );
           return this.closing ? null : undefined;
         },
-        onFinish: ({ schedule, trigger }) =>
+        onFinish: ({ schedule, trigger, runId, outcome }) => {
+          this.main?.telemetry.record('pal.input.accepted', {
+            runId,
+            threadId: schedule.threadId,
+            scheduleId: schedule.id,
+            triggerId: schedule.id + ':' + trigger.firedAt.toISOString(),
+            action: outcome,
+          });
           this.admission.finishSchedule(
             schedule.id + ':' + trigger.firedAt.toISOString(),
-          ),
+          );
+        },
         onAbort: ({ schedule, trigger }) =>
           this.admission.finishSchedule(
             schedule.id + ':' + trigger.firedAt.toISOString(),
           ),
-        onError: async ({ schedule, trigger }) => {
+        onError: async ({ schedule, trigger, runId, phase }) => {
+          this.main?.telemetry.record(
+            'pal.schedule.failed',
+            {
+              runId,
+              threadId: schedule.threadId,
+              scheduleId: schedule.id,
+              triggerId: schedule.id + ':' + trigger.firedAt.toISOString(),
+              phase,
+            },
+            true,
+          );
           this.admission.finishSchedule(
             schedule.id + ':' + trigger.firedAt.toISOString(),
           );
@@ -425,7 +445,7 @@ export class MastraAgentRuntime
       await this.sendTask(message.taskId, contents, true, attributes);
     } else {
       try {
-        await this.main.session.sendSignal(
+        const accepted = await this.main.session.sendSignal(
           {
             type: 'user',
             contents,
@@ -436,6 +456,12 @@ export class MastraAgentRuntime
             ifIdle: { attributes: { executionStart: true } },
           },
         ).accepted;
+        this.main.telemetry.record('pal.input.accepted', {
+          runId: accepted.runId,
+          threadId: 'pal-main',
+          messageRef: message.sequence,
+          action: accepted.action,
+        });
       } catch {
         throw new AgentHandoffError(
           true,
@@ -557,6 +583,13 @@ export class MastraAgentRuntime
     }
     if (accepted.action !== 'wake' && accepted.action !== 'deliver')
       throw new Error('Task input was not accepted');
+    this.main?.telemetry.record('pal.input.accepted', {
+      runId: accepted.runId,
+      threadId,
+      taskId,
+      messageRef: attributes.messageRef,
+      action: accepted.action,
+    });
     if (accepted.action === 'wake') {
       this.activity.setRunWorking(accepted.runId, true, taskId);
       const run = this.consumeTask(
@@ -713,6 +746,13 @@ export class MastraAgentRuntime
         },
         output.files,
       );
+      this.main?.telemetry.record('pal.publication', {
+        runId: context.runId,
+        threadId: context.threadId,
+        taskId,
+        messageRef: message.sequence,
+        phase: context.phase,
+      });
       if (context.phase === 'commentary' && context.runId) {
         this.activity.commentary(context.runId, taskId, {
           messageId: message.id,
@@ -764,7 +804,15 @@ export class MastraAgentRuntime
               ifIdle: { attributes: { executionStart: true } },
             },
           );
-          await delivery.accepted;
+          const accepted = await delivery.accepted;
+          this.main.telemetry.record('pal.input.accepted', {
+            runId: accepted.runId,
+            threadId: 'pal-main',
+            messageRef: message.sequence,
+            parentRunId: context.runId,
+            taskId,
+            action: accepted.action,
+          });
         } catch {
           this.logger.error('Task result delivery to Main failed');
         }

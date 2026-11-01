@@ -724,6 +724,66 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
         }),
       ),
     });
+    await mainSession.telemetry.observability.flush();
+    const telemetry = (await mainSession.storage.getStore('observability'))!;
+    const auditLogs = [];
+    for (let page = 0; page < 10; page++) {
+      const result = await telemetry.listLogs({
+        pagination: { page, perPage: 100 },
+      });
+      auditLogs.push(...result.logs);
+      if (!result.pagination?.hasMore) break;
+    }
+    expect(
+      auditLogs.some(
+        (log) =>
+          log.message === 'pal.input.accepted' &&
+          log.data?.messageRef === mainInputRef &&
+          typeof log.runId === 'string',
+      ),
+    ).toBe(true);
+    expect(
+      auditLogs.some(
+        (log) =>
+          log.message === 'pal.input.accepted' &&
+          log.data?.scheduleId === scheduled.id &&
+          typeof log.runId === 'string',
+      ),
+    ).toBe(true);
+    expect(
+      auditLogs.some(
+        (log) =>
+          log.message === 'pal.publication' &&
+          typeof log.data?.messageRef === 'number' &&
+          typeof log.runId === 'string',
+      ),
+    ).toBe(true);
+    expect(
+      auditLogs.some(
+        (log) =>
+          log.message === 'pal.input.accepted' &&
+          log.data?.action === 'deliver',
+      ),
+    ).toBe(true);
+    const mainRoots = await telemetry.listTraces({
+      filters: { entityId: 'pal-main-agent' },
+      pagination: { page: 0, perPage: 100 },
+    });
+    const mainEvidence = await Promise.all(
+      mainRoots.spans.map((span) =>
+        telemetry.getTrace({ traceId: span.traceId }),
+      ),
+    );
+    expect(
+      mainEvidence
+        .flatMap((trace) => trace?.spans ?? [])
+        .some(
+          (span) =>
+            span.entityId === 'sendToUser' &&
+            Array.isArray(span.attributes?.messageRefs) &&
+            span.attributes.messageRefs.length > 0,
+        ),
+    ).toBe(true);
     await runtime.beforeApplicationShutdown();
     quietCheck = true;
     // Recreate against the same storage without waking tasks.

@@ -13,7 +13,8 @@ import {
 } from '@mastra/core/agent-controller';
 import { Memory } from '@mastra/memory';
 import type { MemoryConfig } from '@mastra/core/memory';
-import { PostgresStore } from '@mastra/pg';
+import { PostgresStoreVNext } from '@mastra/pg';
+import { RunTelemetry, telemetryRetention } from './run-telemetry.js';
 import {
   Workspace,
   WORKSPACE_TOOLS,
@@ -40,6 +41,7 @@ export const MAIN_THREAD_ID = 'pal-main';
 export async function createMainSession(options: {
   connectionString: string;
   schemaName?: string;
+  releaseId?: string;
   workingDirectory?: string;
   computer?: SandboxComputer;
   sandbox?: WorkspaceSandbox;
@@ -103,10 +105,16 @@ export async function createMainSession(options: {
       value: options.computer,
       configurable: true,
     });
-  const storage = new PostgresStore({
+  const telemetry = new RunTelemetry(options.releaseId);
+  const storage = new PostgresStoreVNext({
     id: 'pal-main-storage',
     connectionString: options.connectionString,
     schemaName: options.schemaName ?? 'mastra',
+    retention: telemetryRetention,
+    observability: {
+      connectionString: options.connectionString,
+      schemaName: options.schemaName ?? 'mastra',
+    },
   });
   try {
     await storage.init();
@@ -149,6 +157,7 @@ export async function createMainSession(options: {
       tools: options.tools,
       workspace,
       maxProcessorRetries: 1,
+      outputProcessors: [telemetry.memoryProcessor],
     });
     const controller = new AgentController({
       id: 'pal-main-controller',
@@ -185,6 +194,7 @@ export async function createMainSession(options: {
     // A supported parent host exposes scheduler configuration to the Controller.
     const mastra = new Mastra({
       storage,
+      observability: telemetry.observability,
       logger: noopLogger,
       agentControllers: { main: controller },
       schedules: options.scheduleHooks,
@@ -192,6 +202,7 @@ export async function createMainSession(options: {
         ? { scheduler: { enabled: true }, workers: [new TaskSchedulerWorker()] }
         : {}),
     });
+    telemetry.startRetention(storage);
     await controller.init();
     const taskWorkspace =
       options.task && workspace
@@ -337,11 +348,15 @@ export async function createMainSession(options: {
           workspace: taskWorkspace,
           maxProcessorRetries: 1,
           outputProcessors: [
+            telemetry.memoryProcessor,
             compactWorkerResultProcessor,
-            publishTextProcessor(options.task.publish),
+            publishTextProcessor(options.task.publish, (event, context) =>
+              telemetry.record(event, { ...context }),
+            ),
           ],
         })
       : undefined;
+    if (worker) mastra.addAgent(worker);
     if (taskAgent) mastra.addAgent(taskAgent);
     const session = await controller.createSession({
       id: 'pal-main-session',
@@ -370,6 +385,7 @@ export async function createMainSession(options: {
       worker,
       memory,
       storage,
+      telemetry,
       workspace,
       async close() {
         // Keep the native event consumer attached until cancellation finishes,
@@ -390,10 +406,16 @@ export async function createMainSession(options: {
         unsubscribe();
         await memory.settled();
         await (await worker?.getMemory())?.settled();
+        await telemetry.stopRetention();
+        await mastra.stopWorkers();
+        // Mastra closes storage before exporter shutdown; drain the bus while pools are open.
+        await telemetry.observability.shutdown();
         await mastra.shutdown();
       },
     };
   } catch (error) {
+    await telemetry.stopRetention();
+    await telemetry.observability.shutdown();
     try {
       await workspace?.stop();
     } finally {

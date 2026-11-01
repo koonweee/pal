@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createWorkspaceTools, WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import { Pool } from 'pg';
+import { ObservabilityStoragePostgresVNext as ObservabilityPG } from '@mastra/pg';
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
 import { createTool } from '@mastra/core/tools';
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
@@ -59,6 +60,25 @@ const publicTextParts = (text: string) =>
   textParts(JSON.stringify({ text, replyTo: null }));
 let main: Awaited<ReturnType<typeof createMainSession>> | undefined;
 let schema: string;
+const telemetryWriteErrors: string[] = [];
+// oxlint-disable-next-line typescript/unbound-method -- Rebound with .call for each adapter below.
+const nativeWrite = ObservabilityPG.prototype.batchCreateSpans;
+const writeSpy = vi
+  .spyOn(ObservabilityPG.prototype, 'batchCreateSpans')
+  .mockImplementation(async function (this: ObservabilityPG, args) {
+    try {
+      return await nativeWrite.call(this, args);
+    } catch (error) {
+      telemetryWriteErrors.push(
+        String(
+          (error as Error & { cause?: Error }).cause?.message ??
+            (error as Error).message,
+        ),
+      );
+      throw error;
+    }
+  });
+afterAll(() => writeSpy.mockRestore());
 beforeEach(() => {
   schema = 'pal_test_' + randomUUID().replaceAll('-', '');
 });
@@ -71,6 +91,7 @@ afterEach(async () => {
   } finally {
     await pool.end();
   }
+  expect(telemetryWriteErrors).toEqual([]);
 });
 
 it('accepts B during A, keeps Main text private, and resumes the same thread', async () => {
@@ -359,6 +380,10 @@ it('compresses through native observation/reflection and restores the corrected 
   expect(record?.generationCount).toBeGreaterThan(0);
   expect(record?.activeObservations).toContain('PAL-43');
   expect(record?.activeObservations).toContain('unfinished');
+  expect(
+    (await store!.getObservationalMemoryHistory('pal-main', 'pal-owner', 10))
+      .length,
+  ).toBeGreaterThan(0);
   await main.close();
   main = undefined;
   main = await createMainSession(options);
