@@ -68,9 +68,7 @@ if args.phase == 'diagnostic':
 if args.phase == 'warm':
     if args.suite != 'interaction' or ('apple-store' in args.cases and args.cases != ['apple-store']):
         parser.error('Warm Apple checks must run separately after Amazon/Facebook')
-    config['variants'] = args.arms or (['browser','computer'] if args.cases == ['apple-store'] else ['browser','computer','android'])
-    if 'apple-store' in args.cases and 'android' in config['variants']:
-        parser.error('Apple Store supports browser and computer only')
+    config['variants'] = args.arms or ['browser','computer','android']
     config['signOutAuthorized'] = False
 source_hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(SCRIPTS.iterdir()) if p.is_file()}
 if args.resume:

@@ -452,12 +452,15 @@ scope.run = async () => {
               ? await androidTools(
                   android,
                   Object.keys(androidActions).filter(
-                    (name) => name !== 'android_open_url',
+                    (name) =>
+                      scenario.packageName === 'com.android.chrome' ||
+                      name !== 'android_open_url',
                   ),
                 )
               : {}),
         };
-        delete tools.android_open_url;
+        if (scenario.packageName !== 'com.android.chrome')
+          delete tools.android_open_url;
         for (const [name, tool] of Object.entries(tools)) {
           const execute = tool.execute.bind(tool);
           tools[name] = Object.assign(
@@ -641,7 +644,7 @@ scope.run = async () => {
             workingMemory: { enabled: false },
           },
         });
-        const guidance = `\nBenchmark method: ${arm}. Use only the assigned UI method and Pal private filling. No service/API/search/shell/code-mode bypass. ${arm === 'computer' ? 'Use screenshots/mouse/keyboard for navigation; private inspection/filling are allowed. Do not supply browser actions to login tools.' : ''} ${arm === 'android' ? 'Use the native app; browser handoffs require reporting a blocker.' : ''} Preserve unrelated tabs/apps. ${settings.phase === 'warm' ? 'Use the existing signed-in session only. Do not sign out, fill credentials, or start private entry. Report any authentication challenge as a blocker and stop.' : 'Request credentials only through private entry, then yield.'} Return a setup/challenge blocker immediately when user action is required. Verify the actual destination/draft before reporting success.`;
+        const guidance = `\nBenchmark method: ${arm}. Use only the assigned UI method and Pal private filling. No service/API/search/shell/code-mode bypass. ${arm === 'computer' ? 'Use screenshots/mouse/keyboard for navigation; private inspection/filling are allowed. Do not supply browser actions to login tools.' : ''} ${arm === 'android' ? (scenario.packageName === 'com.android.chrome' ? 'Use Android Chrome on the phone for the supplied website, through Android UI tools.' : 'Use the native app; browser handoffs require reporting a blocker.') : ''} Preserve unrelated tabs/apps. ${settings.phase === 'warm' ? 'Use the existing signed-in session only. Do not sign out, fill credentials, or start private entry. Report any authentication challenge as a blocker and stop.' : 'Request credentials only through private entry, then yield.'} Return a setup/challenge blocker immediately when user action is required. Verify the actual destination/draft before reporting success.`;
         const worker = new Agent({
           id: 'comparison-worker-' + sample,
           name: 'Interaction',
@@ -729,7 +732,7 @@ scope.run = async () => {
         ]);
         const threadId = 'pal-task:' + task.id;
         start = Date.now();
-        let message = `${scenario.prompt}\nMethod: ${arm}. ${arm === 'android' ? 'Native package: ' + (scenario.packageName ?? 'dev.pal.securefixture') : 'Website already open in the owned session: ' + url}`;
+        let message = `${scenario.prompt}\nMethod: ${arm}. ${arm === 'android' ? 'Android package: ' + (scenario.packageName ?? 'dev.pal.securefixture') + (scenario.packageName === 'com.android.chrome' ? '. Navigate to: ' + url : '') : 'Website already open in the owned session: ' + url}`;
         for (let turn = 0; turn < 8; turn++) {
           const output = await agent.stream(message, {
             ...options(sample, 'task'),

@@ -235,11 +235,17 @@ test('warm retrieval preserves sessions, matches the public event, and separates
   const apple = comparisonSchedule({
     phase: 'warm',
     cases: ['apple-store'],
-    variants: ['browser', 'computer'],
   });
-  assert.equal(apple.length, 6);
+  assert.equal(apple.length, 9);
+  assert.equal(
+    apple.find((job) => job.arm === 'android').scenario.packageName,
+    'com.android.chrome',
+  );
   assert.throws(() =>
-    comparisonSchedule({ phase: 'warm', cases: ['apple-store'] }),
+    comparisonSchedule({
+      phase: 'warm',
+      cases: ['apple-store', 'amazon-order'],
+    }),
   );
   assert.throws(() =>
     comparisonSchedule({ phase: 'warm', cases: ['staged-login'] }),

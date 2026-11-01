@@ -115,8 +115,7 @@ export function comparisonSchedule({
           scenario.kind !== 'live' ||
           !variants.length ||
           variants.some((arm) => !arms.includes(arm)) ||
-          (id === 'apple-store' &&
-            (selected.length !== 1 || variants.includes('android')))
+          (id === 'apple-store' && selected.length !== 1)
         )
           throw Error('Invalid warm retrieval');
         const prompts = {
@@ -130,6 +129,8 @@ export function comparisonSchedule({
         scenario = {
           ...scenario,
           login: false,
+          packageName:
+            id === 'apple-store' ? 'com.android.chrome' : scenario.packageName,
           url:
             id === 'facebook-event'
               ? 'https://www.facebook.com/events/1711829129869706/'
