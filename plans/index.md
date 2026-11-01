@@ -15,6 +15,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Android phone viewer](android-phone-viewer.md) | Done | Live scrcpy phone drawer and touch control in the development PWA. |
 | [Computer-first interaction](computer-first-interaction.md) | Complete | Remove browser tools, bind visual navigation to private fill, and deploy the reviewed release. |
 | [Android upstream interaction](android-upstream-interaction.md) | Done | Upstream navigation and private-fill handoff verified; friction follow-up completes 3/3 product runs and order lookup, with batch-null regression fixed. |
 | [Android Secure Fill Simplification](android-secure-fill-simplification.md) | Done | Remove app trust registration and audit native fill restrictions under controlled app installation. |

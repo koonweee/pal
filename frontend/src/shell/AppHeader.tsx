@@ -1,4 +1,4 @@
-import { Monitor, Settings } from 'lucide-react';
+import { Monitor, Settings, Smartphone } from 'lucide-react';
 import { useLayoutEffect, useRef } from 'react';
 import { ActivityBubble } from '../activity/ActivityBubble';
 import { AgentAvatar } from '../instance-settings/AgentAvatar';
@@ -9,6 +9,8 @@ import { IconAction } from '../ui/IconAction';
 export function AppHeader({
   chat,
   threadOpen,
+  phoneOpen,
+  onOpenPhone,
   desktopOpen,
   onOpenDesktop,
   onOpenThread,
@@ -16,6 +18,8 @@ export function AppHeader({
 }: {
   chat: ChatController;
   threadOpen: boolean;
+  phoneOpen: boolean;
+  onOpenPhone(): void;
   desktopOpen: boolean;
   onOpenDesktop(): void;
   onOpenThread(): void;
@@ -103,6 +107,17 @@ export function AppHeader({
         </span>
       </div>
       <div className="header-actions">
+        <IconAction
+          id="phone-open"
+          type="button"
+          label="Open phone"
+          aria-haspopup="dialog"
+          aria-controls="phone-sheet"
+          aria-expanded={phoneOpen}
+          onClick={onOpenPhone}
+        >
+          <Smartphone aria-hidden="true" size={20} strokeWidth={1.75} />
+        </IconAction>
         <IconAction
           id="desktop-open"
           type="button"

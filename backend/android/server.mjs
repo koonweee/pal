@@ -1,6 +1,7 @@
 import { createServer, request as proxyRequest } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { attachViewer } from './viewer.mjs';
 import { HelperClient } from './helper-client.mjs';
 
 const token = process.env.MOBILEMCP_AUTH;
@@ -62,11 +63,13 @@ const server = createServer(async (request, response) => {
   request.on('aborted', () => upstream.destroy());
   request.pipe(upstream);
 });
+const stopViewer = attachViewer(server, token);
 server.listen(3000, '0.0.0.0');
 async function close() {
   if (closing) return;
   closing = true;
   server.close();
+  await stopViewer();
   await pending;
   await helper.close().catch(() => {});
   mcp.kill('SIGTERM');

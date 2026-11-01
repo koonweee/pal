@@ -20,7 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends adb ca-certific
 WORKDIR /opt/android
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
-COPY start.sh health.mjs helper-client.mjs server.mjs ./
+ADD --checksum=sha256:7e70323ba7f259649dd4acce97ac4fefbae8102b2c6d91e2e7be613fd5354be0 https://github.com/Genymobile/scrcpy/releases/download/v3.3.3/scrcpy-server-v3.3.3 /opt/android/scrcpy-server
+COPY start.sh health.mjs helper-client.mjs server.mjs viewer.mjs ./
 COPY --from=helper /build/bridge/build/outputs/apk/debug/bridge-debug.apk ./helper.apk
 COPY --from=helper /build/fixture/build/outputs/apk/debug/fixture-debug.apk ./fixture.apk
 ENV HOME=/state MOBILEMCP_DISABLE_TELEMETRY=1

@@ -7,6 +7,7 @@ import { useChat } from './chat/use-chat';
 import type { ChatController } from './chat/use-chat';
 import { Conversation } from './chat/Conversation';
 import { Composer } from './composer/Composer';
+import { Phone } from './phone/Phone';
 import { Desktop } from './desktop/Desktop';
 import {
   PreferencesDialog,
@@ -27,6 +28,7 @@ export function PlaygroundShellView({
 }) {
   const [threadOpen, setThreadOpen] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [phoneOpen, setPhoneOpen] = useState(false);
   const [desktopOpen, setDesktopOpen] = useState(false);
   const [fileDragging, setFileDragging] = useState(false);
   const [notificationPending, setNotificationPending] = useState(false);
@@ -41,6 +43,7 @@ export function PlaygroundShellView({
     if (chat.openMainLatest()) {
       setThreadOpen(false);
       setDesktopOpen(false);
+      setPhoneOpen(false);
       setPreferencesOpen(false);
       setNotificationPending(false);
     }
@@ -48,8 +51,8 @@ export function PlaygroundShellView({
   const shell = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (shell.current) shell.current.inert = desktopOpen;
-  }, [desktopOpen]);
+    if (shell.current) shell.current.inert = desktopOpen || phoneOpen;
+  }, [desktopOpen, phoneOpen]);
 
   function closeDesktop() {
     setDesktopOpen(false);
@@ -61,6 +64,8 @@ export function PlaygroundShellView({
         <AppHeader
           chat={chat}
           threadOpen={threadOpen}
+          phoneOpen={phoneOpen}
+          onOpenPhone={() => setPhoneOpen(true)}
           desktopOpen={desktopOpen}
           onOpenDesktop={() => setDesktopOpen(true)}
           onOpenThread={() => setThreadOpen(true)}
@@ -95,7 +100,9 @@ export function PlaygroundShellView({
           >
             <Conversation
               chat={chat}
-              active={!threadOpen && !desktopOpen && !preferencesOpen}
+              active={
+                !threadOpen && !desktopOpen && !phoneOpen && !preferencesOpen
+              }
             />
             <Composer chat={chat} />
           </div>
@@ -142,6 +149,7 @@ export function PlaygroundShellView({
         onClose={() => setPreferencesOpen(false)}
         onNavigateMessage={(id, taskId) => void chat.ensureMessage(id, taskId)}
       />
+      {phoneOpen && <Phone onClose={() => setPhoneOpen(false)} />}
       {(!preview || desktopOpen) && (
         <Desktop open={desktopOpen} onClose={closeDesktop} />
       )}

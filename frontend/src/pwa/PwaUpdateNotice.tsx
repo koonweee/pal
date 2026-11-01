@@ -46,7 +46,7 @@ export function PwaUpdateNotice({
     : required
       ? 'Pal updated and must refresh before making more changes.'
       : deferred
-        ? 'Finish or clear your draft, uploads, send, settings edit, or desktop session before updating.'
+        ? 'Finish or clear your draft, uploads, send, settings edit, or device session before updating.'
         : undefined;
 
   return (

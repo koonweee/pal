@@ -25,11 +25,12 @@ export default defineConfig(({ mode }) => {
       },
     },
     '/api': {
+      ws: true,
       target:
         process.env.PAL_BACKEND_URL ??
         env.PAL_BACKEND_URL ??
         'http://127.0.0.1:3000',
-      changeOrigin: true,
+      changeOrigin: false,
       rewrite: (path: string) => path.replace(/^\/api(?=\/|$)/, ''),
       configure(proxy) {
         proxy.on('proxyRes', (incoming, _request, outgoing) => {

@@ -1,0 +1,50 @@
+.desktop-sheet.phone-sheet {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  width: min(460px, 100%);
+  height: calc(var(--pal-viewport-height, 100dvh) * 0.96);
+}
+.desktop-sheet.phone-sheet > .phone-body {
+  height: auto !important;
+}
+.phone-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.phone-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  background: var(--pal-panel);
+  border-radius: 10px;
+}
+.phone-screen canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  touch-action: none;
+}
+.phone-navigation {
+  display: flex;
+  justify-content: space-around;
+  padding-top: 6px;
+}
+.phone-status {
+  position: absolute;
+  top: 40%;
+  left: 20px;
+  right: 20px;
+  text-align: center;
+  color: var(--pal-text);
+}
+.desktop-sheet.phone-sheet[data-fullscreen='true'] {
+  width: 100%;
+  height: var(--pal-viewport-height, 100dvh);
+}

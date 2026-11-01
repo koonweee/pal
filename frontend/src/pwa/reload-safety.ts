@@ -3,6 +3,7 @@ export interface ReloadSafetyState {
   draft: string;
   pendingFiles: number;
   submitting: boolean;
+  phoneOpen?: boolean;
   desktopOpen: boolean;
   dirtyForms: boolean;
 }
@@ -14,6 +15,7 @@ export function canActivateUpdate(state: ReloadSafetyState) {
     state.pendingFiles === 0 &&
     !state.submitting &&
     !state.desktopOpen &&
+    !state.phoneOpen &&
     !state.dirtyForms
   );
 }
