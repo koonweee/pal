@@ -1,8 +1,47 @@
 # Android, Browser and Computer Benchmark Results
 
-## Status and evidence
+## Current warm-session results
 
-Warm-session collection is in progress. The [full plan](android-browser-computer-benchmark.md) preserves the earlier fixture and anonymous-web results as historical datasets. Live logins are setup only; sign-outs and repeated login comparisons are excluded.
+The 27 Amazon/Facebook samples are complete and independently reviewed: **23 passes, four incomplete results**. Apple has nine recorded outcomes: **eight authentication blockers and one error before measured execution**. Eligible Apple account-access comparison remains pending separate login setup. Original outcomes are retained.
+
+| Flow | Method | Pass / executed | Median elapsed | Range |
+| --- | --- | --- | ---: | ---: |
+| Amazon latest order | Browser | 2/3 | 14.1 s | 12.5–39.8 s |
+| Amazon latest order | Computer | 3/3 | 12.3 s | 11.6–12.6 s |
+| Amazon latest order | Android | 3/3 | 53.8 s | 37.6–61.2 s |
+| Amazon product comparison | Browser | 0/3 | 204.3 s | 156.2–353.1 s |
+| Amazon product comparison | Computer | 3/3 | 227.5 s | 217.5–247.1 s |
+| Amazon product comparison | Android | 3/3 | 207.6 s | 171.0–313.7 s |
+| Facebook public event | Browser | 3/3 | 19.1 s | 17.7–19.4 s |
+| Facebook public event | Computer | 3/3 | 16.4 s | 15.3–24.2 s |
+| Facebook public event | Android | 3/3 | 30.8 s | 29.8–51.1 s |
+
+Medians include failed attempts. Browser products have no successful-run median; the browser order successful-run median is 13.3 seconds. All measured human waits and credential-fill counts are zero. Task uses Sol medium and the interaction worker Terra medium. All 35 measured samples pass method/privacy gates; the remaining Apple cell failed before a model call and has no measured elapsed time. Recorded model usage is complete.
+
+Datasets: `.local/android-browser-comparison/warm-retrieval/` (revision `f3e1e52`) and `warm-apple/` (revision `785a7ae`). Each contains frozen manifests, original rows, explicit independent reviews, reports and a passing cleanup/source audit. Native Amazon uses the same US marketplace and delivery context as desktop; order facts and the identical public Facebook event were checked against each sample’s saved observations.
+
+### Findings and recommendation
+
+- For the measured Amazon offer-panel task, Android and computer use both succeed 3/3; browser automation fails 3/3 on the Sony new-offer panel. No CAPTCHA is observed in those failures. Android has a slightly lower median but a wider range and more model input than computer use. This does not establish a universal Android-first priority.
+- For known account/event destinations, desktop methods are faster here. Browser order failure is a handoff/verification problem: one worker retrieved correct authenticated order facts, then another inspected a remaining sign-in tab and withheld the answer. The next two browser repetitions pass.
+- Keep service/MCP/API preference. Choose the UI method using the task and usable session; use computer interaction or Android when browser DOM interaction cannot retrieve an offer panel. Do not repeat the same blocked browser path. Production priority guidance is unchanged pending review.
+- Android screenshot fallback is necessary: the final product screenshot visibly shows New $263.95 offers that accessibility text omitted. Retain upstream Mobile MCP observations and screenshot/coordinate fallback rather than rebuilding hierarchy interpretation.
+- Native share/clipboard handling remains variable. One product attempt recovered by constructing links from observed ASINs; a Facebook attempt unnecessarily copied a link already supplied in the task and read stale Amazon clipboard content. Reuse known canonical URLs and verify newly copied content.
+- Existing shared recovery guidance already says not to re-delegate a blocked method without changed state. The second browser product attempt nevertheless repeated the failure across three workers. This is an adherence/evidence-continuity issue, not evidence that another general instruction is missing.
+
+### Apple follow-up
+
+The desktop Apple session was verified during setup at 07:38 UTC; checks at 08:25–08:28 UTC required sign-in again. The reason is unproven. Android Chrome also reaches the Apple sign-in form. Browser has two authentication-blocked measured checks plus one unclassified setup error; computer and Android each have three authentication-blocked checks. Do not use these times to rank authenticated retrieval.
+
+Separate dev PWA setup is running in task `fd8eb1d0-bb59-492f-8a54-af3b769a4052`, reusing saved credentials where available and yielding for user verification. After both destinations are authenticated, use a new `warm-apple-authenticated` dataset; retain `warm-apple` as setup/access evidence. The end-of-run queue is recorded in `warm-apple/human-follow-up.json`.
+
+### Timing and cleanup
+
+Timing includes Task planning, delegation, interaction and final answer. Browser URL opening happens before the measured stream; order setup through first model request was 1.9–2.7 seconds on desktop versus 0.02–0.04 seconds on Android. Android navigation occurs within the task. Direct URL access, native navigation, cache and initial screen differences remain confounders. Three repetitions on one phone and desktop support task-specific guidance, not a general reliability ranking.
+
+Both original runners completed cleanup: 36 owned tasks archived, scratch databases and copied runner directories absent, locks released, fixture APK uninstalled and phone power policy restored to 15. Temporary review screenshots are removed after inspection. Profiles, app data and protected dev resources are retained. The separate login setup task remains active and is not a benchmark-owned cleanup target.
+
+## Historical fixture and anonymous-web baseline
 
 Primary dataset: `.local/android-browser-comparison/main-reset-verified/` on this Mac. It contains the frozen protocol/environment, incremental traces, original results, independent reviews, `audit.json`, `summary.json`, `report.html` and `assisted-queue.json`. Collection ran on November 1, 2026, 03:27–04:10 UTC (October 31 locally), using implementation `1b3bb0e` and reset correction `d136e5a`.
 

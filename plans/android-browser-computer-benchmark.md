@@ -2,175 +2,132 @@
 
 ## Status
 
-In Progress. Independent collection, review and cleanup are complete; the separate assisted phase remains. See [results](android-browser-computer-benchmark-results.md). Implementation and development collection are authorized. [Android Secure Fill](android-secure-fill.md) meets development acceptance. The user authorizes benchmark sign-outs. Every user-dependent setup, account choice, verification challenge and review is queued after independent main work. Apple Store is a separate final run; no human-assisted sample is interleaved with main.
+In Progress. The 27 warm Amazon/Facebook samples are complete and reviewed; all nine initial Apple checks have recorded outcomes, but authenticated Apple comparison needs login setup. Both benchmark runners passed cleanup audit. See [results and evidence](android-browser-computer-benchmark-results.md).
 
 ## Goal
 
-Measure when Pal should prefer Android apps, browser automation or desktop computer interaction, including actual credential and verification-code filling. Produce task-specific priority guidance based on correctness, human intervention, latency and model usage. Test the hypothesis that native Android completes more real tasks because web encounters CAPTCHA or other access friction. Retrieval failures are outcome evidence even when handled correctly; classify observed causes separately from completion and latency, and keep unknown causes explicit. Separate one-time setup blockers from failures during an eligible task.
+Measure when Pal should prefer Android apps, browser automation or desktop computer interaction, using correctness, human intervention, latency and model usage. Treat incomplete retrieval as outcome evidence and distinguish setup dependencies from failures in eligible tasks. Live logins are setup only; the user does not want repeated login comparisons or sign-outs. Earlier staged secure-fill results remain separate evidence.
 
 ## Current Behavior
 
-- Task owns coordination and delegates UI work to an interaction worker. Current shared guidance prefers service tools/APIs, then suitable Android apps for UI workflows, with browser/computer available as appropriate. See `backend/src/agent/instructions/interaction-methods.md`.
-- The interaction worker uses `gpt-6.1-terra` at medium effort; Task uses `gpt-6.1-sol` at medium effort. Android controls are configured through the development sidecar; detailed procedures load on demand.
-- [Existing benchmark infrastructure](../backend/scripts/browser-benchmark/README.md) already measures Task/Worker timing, usage, boundaries and fixture results. [Cua comparison findings](cua-driver-comparison.md) identify evidence-loss and interpretation limits to avoid repeating.
-- Android private filling passes native/WebView acceptance and saved-login fixture journeys with OTP. Ordinary interaction uses Mobile MCP with unmasked observations. Installed apps require no trust registration. Signed-in Amazon retrieval passes the navigation follow-up; see the results report. Live login trials and matched warm-session collection remain separate work.
+- Task coordinates with `gpt-6.1-sol` medium and delegates UI work to an interaction worker using `gpt-6.1-terra` medium.
+- Ordinary Android interaction uses Mobile MCP; the Android helper supplies private field inspection/fill. Installed apps require no trust registration. Observations are unmasked.
+- Browser automation and computer use share persistent execution Chromium cookies. Native Android apps and Android Chrome have their own sessions.
+- Shared method/recovery policy lives in `backend/src/agent/instructions/interaction-methods.md`. Production prompts remain unchanged during collection and pending review of recommendations.
+- [Android Secure Fill](android-secure-fill.md) passes development acceptance. The historical matched fixture completes username, password, OTP and one saved draft in all nine samples, with 27 actual private fills.
 
-## Login-first protocol amendment
+## Protocol and Evidence
 
-Logins are setup only; the user does not want login comparisons. Complete Amazon and Facebook access, then Apple Store last within setup. Reuse authenticated sessions and matching saved credentials. Do not sign out or repeat login for measurement. Browser and computer share the persistent execution-browser profile and need one authenticated session per service; Android uses its installed-app session. Preserve app data and saved credentials. Missing credentials and verification use the dev PWA secure-entry flow.
+### Current matrix
 
-Record setup readiness and blockers separately from scored retrieval. Normal dev PWA tasks prepare Amazon browser (`f9f9742e-1e1a-4682-b4f4-cfb86391008a`) and Facebook Android (`35f25e34-6c61-49eb-a4e1-1d17e9e99681`). These are outside the frozen benchmark dataset and have no measured login-comparison outcomes. Amazon Android remains signed in. Prepare Facebook browser after credentials are available for reuse, then Apple Store browser at `https://www.apple.com/shop/account/home`.
+| Case | Methods | Repetitions per method | Required outcome |
+| --- | --- | ---: | --- |
+| Amazon latest order | Browser, computer, native Android | 3 | Date, first item and delivery/status from the current first order; no addresses, payment details, full order IDs or mutations |
+| Amazon products | Browser, computer, native Android | 3 | Sony WH-1000XM5 Black and Bose QuietComfort Headphones Black; exact variant, new one-time price, availability and links; no cart/checkout |
+| Facebook public event | Browser, computer, native Android | 3 | Identical event name, date/time with timezone and location; no RSVP, posts or messages |
+| Apple Store account access | Browser, computer, Android Chrome | 3 | Authenticated account destination; no purchase or account changes |
 
-After setup, run three warm-session retrieval repetitions per method for Amazon products/orders and Facebook event details; Apple uses browser, computer and Android Chrome. The user delegates selection of one public upcoming Facebook event; record its canonical URL and use the identical event across methods without RSVP or other mutation. Unexpected reauthentication is queued after independent retrieval work. Fresh-login repetition counts and the old 27-sample assisted manifest are superseded by this split. The runner supports `--phase warm`: 27 Amazon/Facebook samples, followed by a separate nine-sample `--cases apple-store` run. It disables sign-out and removes credential-fill requirements from retrieval scoring. Authentication challenges stop the sample for later review. Initial live-login comparison cases below describe the historical protocol, not the current collection scope.
+The main matrix has 27 cells. Apple has nine cells in a separate final run. Facebook uses [Quarry Lakes 25th Anniversary Celebration](https://www.facebook.com/events/1711829129869706/). Apple uses `https://www.apple.com/shop/account/home`; the Android method uses `com.android.chrome` rather than a native Apple Store app.
 
-## Comparison Protocol
+Rotate method order across repetitions and collect sequentially. Freeze models, effort, case prompts, role/skill guidance, tool inventories, repository source hashes and container images. Force one UI method per sample; service/API/search/shell/code-mode bypasses are unavailable. Preserve failed attempts and the original raw rows. Review actual UI evidence independently before counting success.
 
-### Arms and boundaries
+Use existing sessions and preserve profile/app data. Do not sign out, fill credentials or wait for user input during warm samples. Stop at authentication challenges and queue setup after independent work. Reuse saved credentials only in separate dev PWA setup; the user handles missing credentials or verification through secure entry, never benchmark chat.
 
-| Arm | Navigation and ordinary interaction | Private filling |
-| --- | --- | --- |
-| Browser | Current Pal browser automation | Shared secure-entry workflow through browser adapter |
-| Computer | Screenshots, mouse and keyboard in Pal's execution desktop | Same shared workflow through browser adapter |
-| Android | Current Mobile MCP on the USB phone | Same shared workflow through Android adapter/helper |
+Each sample has a 600-second deadline. Measured elapsed includes Task planning, delegation, worker interaction and final answer. Setup and explicitly measured human wait are separate. Browser pages are opened before timing; Android navigation occurs inside the measured task. Report this starting-state difference and three-repetition uncertainty. Include failed elapsed times in all-run medians and distinguish successful-run medians.
 
-Keep Task/worker models, effort, user objective, account permissions and scoring constant. Force the assigned method by tool availability and verify boundaries from tool traces. Task delegates; neither Task nor worker can bypass the assigned UI through service MCP, web search, shell, direct HTTP, DOM scripting in the computer arm, or code-mode escape routes. Host setup and independent scoring are outside the agent tool boundary.
+### Local artifacts
 
-Private inspection/fill is explicitly allowed in the computer arm. Its result measures screenshot-driven navigation with Pal's shared secure entry; label that hybrid accurately. It is not a mouse-only authentication implementation. Browser and computer use the same execution desktop/profile setup, with matched fresh state for login samples.
+Gitignored datasets under `.local/android-browser-comparison/` contain frozen config/protocol/environment, incremental traces, original outcomes, reviews, reports and cleanup/source audits. No secret values belong in exported evidence. Temporary screenshots used for independent review are removed afterward; public product excerpts and bounded findings remain.
 
-Reuse current browser/computer tooling. Cua and alternative models are outside this matrix. Capture exact role prompts, skill sources, tool inventories, model/effort, repo revision, images and helper versions; leave production defaults unchanged during collection.
-
-### Cases
-
-Freeze concrete objectives and eligibility after preflight, before scoring. These are the initial cases:
-
-| Case | Starting state and actual work | Success evidence |
-| --- | --- | --- |
-| Matched staged login and OTP | Signed out of equivalent web/native fixtures; fill identifier, reusable password/PIN and OTP through real private-entry requests, then save a harmless draft | Independent authenticated identity, expected draft, stage-specific requests, transient OTP and no duplicate write |
-| Amazon login and order lookup | Signed out; use the matching saved vault account to fill login, then retrieve agreed details from an existing order | Fill operation occurred, correct authenticated account, correct requested order facts; no order/account changes |
-| Amazon product comparison | Warm session; compare agreed exact products/variants and return a small structured comparison | Correct variants, current price/availability and useful links; no checkout |
-| Facebook login and event lookup | Signed out; perform actual private filling, then locate an agreed event and its requested details | Fill operation occurred, authenticated account and correct event facts; no posting, RSVP or messages |
-| Apple Store browser login | Signed out of the intended Apple Store website; fill the supported login stages, verify account access and perform an agreed read-only check | Actual private fill, correct site/account and verified account destination; no purchase or account changes |
-
-The first four cases are three-arm comparisons. Apple Store is a separate browser/computer comparison; an equivalent native Android Apple Store workflow is not assumed. Verify the user's intended Apple Store URL before login. If the offered path is passkey-only or otherwise performs no field filling, record that limitation and do not label it a completed fill case.
-
-Use a native fixture only for repeatable lifecycle/privacy and staged-OTP evidence. The live cases must exercise the actual services and actual fill paths, rather than fixture-only or already-logged-in shortcuts. If a named live app lacks a supported login destination, retain its capability result. A substitute service requires a recorded protocol amendment before scored collection.
-
-### State, repetitions and timing
-
-- Minimum matrix: four matched cases x three arms x three repetitions = 36 samples; Apple Store x two arms x three repetitions = six additional samples. Total 42, excluding preflight, smoke and separate recovery probes. Keep incomplete/unavailable cells visible. Three repetitions are exploratory.
-- Run the 36 main samples first. The six Apple Store samples belong to a separate assisted manifest referencing the completed main run; start them last. Main-run challenges that require human action retain their blocked outcome.
-- Run sequentially in a quiet window; the phone and desktop are shared resources. Rotate first arm across repetitions, using all three cyclic orders for matched cases. Alternate Apple Store order; report the unavoidable imbalance with three repetitions.
-- Match account, marketplace/region, delivery location, locale, currency, product variants and account access across app/web. Record device/browser versions, connectivity/egress and native/web differences. Do not attribute all differences to the tools alone.
-- Login cases start demonstrably signed out with credentials ready in the shared vault or an explicitly defined private-entry scenario. Prefer dedicated accounts or isolated profiles. Obtain user agreement before signing out an existing personal app session; never clear app data or reset credentials to manufacture state.
-- Warm-session cases retain an authenticated account. Setup, installation, vault readiness and resetting fixture state occur outside measured samples and are recorded separately. Do not erase the measured difference between a naturally warm app and web during a later operational recommendation.
-- Time request-to-final-answer, including Task delegation and actual private filling. Record observation, model, tool, fill, authenticated-destination and human-wait spans. Report both total elapsed and elapsed excluding explicitly measured user waits. Retain the original total; waiting is part of practical friction.
-- Fix a per-sample active-time deadline and a separate human-wait policy after preflight. Freeze both in the manifest before collection. Preserve timeouts, retries, CAPTCHA, device permission prompts and uncertain outcomes.
-- A login case needs private-fill evidence plus independent authentication/post-login evidence. A filled field, successful transport or model claim alone cannot pass. Known auto-submit/auto-advance behavior belongs in the case definition.
-
-## Target Data Shape
-
-Extend the existing harness rather than create a second orchestration system. Store a frozen run manifest and incremental per-sample results under a gitignored `.local/android-browser-comparison/RUN/` directory on the Mac, outside disposable containers.
-
-Each sample records case/arm/round, account alias, starting-state check, capability/eligibility, tool inventory/hash, fill source and stage counts, outcome checks, retries, manual intervention type/count/wait, timing, Task/Worker token usage and usage completeness. Account aliases and review notes must avoid unnecessary personal/order data.
-
-Record privacy and ownership gates separately from task correctness. Keep final-answer quality separate from independently verified state. Missing usage remains unknown. Do not log credentials, OTPs, raw arguments, request bodies/headers, raw hierarchies, unmasked screenshots or private card contents. Persist only sanitized evidence and explicitly needed metadata. Preserve raw outcome rows; reviewed/rescored reports identify their scorer revision.
+- `main-reset-verified`: historical fixture and anonymous-web baseline, 36 scheduled cells, 15 executed and 21 setup deferrals.
+- `warm-retrieval`: current 27-cell Amazon/Facebook matrix; 23 passes and four incomplete results, all reviewed.
+- `warm-apple`: initial nine Apple checks; eight authentication dependencies and one error before measured execution. No eligible authenticated retrieval ranking.
+- `warm-apple-authenticated`: planned separate collection after Apple setup. Preserve the initial outcomes rather than overwriting them.
 
 ## Milestones
 
-### 1. Preflight accounts and freeze the protocol — independent preflight complete
+### 1. Validate prerequisites and freeze cases — complete
 
 Implementation tasks:
 
-- Verify prerequisite secure-fill acceptance, Android app coverage and masked observation after filling. Probe the exact browser/computer/Android tool boundaries and actual Task-to-worker models.
-- Select the concrete live objectives with the user where account/order/event details are needed. Check vault mappings privately, account readiness and native/web state-reset feasibility without opening secrets in chat.
-- Loop the user in at the Apple Store browser login. Prepare the page and explain the private entry/device action needed; let the user handle credential entry, 2FA, passkeys or account challenges through the existing private UI or directly. Record assistance and wait time. Do not request passwords or codes in chat.
-- Separate one-time setup assistance from assistance during a scored sample. Schedule a quiet collection window with the user; do not run repeated Apple logins unattended if a fresh user step is required.
-- Freeze cases, tool boundaries, repetition order, account aliases, state resets, deadlines, scoring and known unsupported cells. Verify all 42 scheduled cells with a dry-run manifest check.
+- Reuse validated native/WebView Unicode fill, OTP, saved-vault reuse, stale-reference and lifecycle acceptance.
+- Verify the same Task/worker models and method boundaries.
+- Select exact Amazon products, order fields, Facebook event and Apple URL.
+- Prepare sessions through normal dev PWA tasks; record setup separately.
 
 Exit criteria:
 
-- A versioned protocol identifies supported actual fill flows, pending user steps and capability blockers. No scored collection starts before Android privacy/direct-fill acceptance.
+- Secure-fill acceptance precedes collection; concrete case requirements, capability gates and setup dependencies are recorded.
 
-### 2. Extend the harness and prove real filling — complete
+### 2. Extend the existing harness — complete
 
 Implementation tasks:
 
-- Add method arms and the native fixture adapter to existing benchmark infrastructure. Reuse private-entry/vault services, ownership, Task/Worker telemetry and independent scoring.
-- Synthetic samples must traverse the actual private-request submission/fill path. Supply synthetic values through the private HTTP boundary; do not mutate fixture auth state directly or expose synthetic secrets to model prompts.
-- Add live vault/private-entry execution without recording secret-bearing arguments. Include resume after an actual private submission, rather than treating filling as setup.
-- Export results/evidence incrementally to the Mac after every completed sample, with bounded trace checkpoints during samples. Do not rely on copying container-local files at the end. Record owned task/session/fixture/vault/helper identifiers for cleanup and resume.
-- Run one synthetic staged-login smoke per arm. Check actual fixture state, direct fill, model observation privacy and method isolation. Keep smoke results separate from the scored dataset.
+- Reuse the existing runner, private-entry services, ownership and telemetry.
+- Verify real synthetic private HTTP filling and native fixture reset across three methods.
+- Add warm-session scheduling without sign-outs or credential-fill scoring requirements.
+- Add Android Chrome to the separate Apple matrix and test scheduling/arm constraints.
+- Preserve incremental evidence and require source/image consistency for resume.
 
 Exit criteria:
 
-- All three arms complete a real synthetic private-fill journey with equivalent outcome checks. A container interruption leaves previously completed evidence intact; resume cannot silently mix different code/protocol versions or duplicate completed samples.
+- Three-arm real fixture acceptance passes. The warm dry run contains 27 main cells and nine separate Apple cells. Focused harness tests pass; original results remain immutable.
 
-### 3. Collect matched and live results — independent work complete; assisted pending
+### 3. Collect and review live outcomes — main complete; Apple setup pending
 
 Implementation tasks:
 
-- Collect the frozen matrix sequentially, including the user-assisted Apple Store browser flow. Verify starting state before timing; record setup failures separately from agent-task failures while preserving unavailable cells in the report.
-- Preserve failed attempts and manual interventions. Stop and repair privacy or wrong-destination failures before continuing; retain affected samples and start a new versioned dataset after material fixes.
-- Run a small separate synthetic recovery check for late private submission after cancellation/ownership release, changed screen/ref, helper disconnect with uncertain fill response, and pause/resume. Reuse prerequisite evidence where runtime and contracts are identical; avoid redundant matrix expansion.
-- Independently verify each live outcome and review final answers against sanitized evidence. Identify native-only/web-only functionality and do not score unavailable features as invented equivalents.
+- Collect and independently review all 27 main samples.
+- Execute Apple last and retain explicit authentication/setup outcomes.
+- Complete separate Apple desktop and Android Chrome login setup, then collect the authenticated Apple matrix in a new dataset.
+- Preserve all failures, manual dependencies and timing/usage limitations.
 
 Exit criteria:
 
-- All 42 cells have a scored outcome or an explicit unavailable/pending reason. Actual-fill cases have stage and authenticated-state evidence. Human assistance, incomplete usage, privacy failures and uncertain state remain visible.
+- Every scheduled cell has a reviewed outcome or explicit setup/unavailable reason. Eligible live successes are supported by actual UI observations. Apple authenticated access is either measured after setup or clearly remains pending user action.
 
-### 4. Report priorities and clean up — independent report/cleanup complete
+### 4. Report recommendations and clean up — in progress
 
 Implementation tasks:
 
-- Report correctness, privacy/ownership gates and human intervention before latency. Include all-run outcomes, successful-run timings, total/active time, token usage and coverage per case/arm.
-- Separate fixture reliability, live login/setup friction and warm-session productivity. Report three-repetition uncertainty and ordering/native-web differences; avoid an unsupported universal winner.
-- Recommend conditional UI priorities: installed/supported app with usable session, supported private-fill login, structured/bulk web work, unsupported native login, CAPTCHA/manual challenges, and an occupied phone. Keep service tools/APIs first unless separate evidence changes that policy.
-- Keep guidance recommendations in the report until reviewed. Any later prompt change should update the existing shared method policy once and preserve role boundaries; implementation completion includes the required tool/guidance availability table.
-- Remove owned fixture apps/data, synthetic vault items, scratch tasks/databases, helper test resources and temporary sessions. Preserve personal app data/logins, ADB authorization, unrelated browser tabs and protected dev resources. Restore only changes tracked as benchmark-owned. Inspect Docker usage after builds and remove exact disposable artifacts.
-- Keep sanitized benchmark evidence outside containers; commit harness/report documentation locally. Production rollout and unrelated driver/model changes remain separate.
+- Report correctness before latency, with per-method ranges, successful/all-run medians and complete/unknown usage.
+- Separate historical secure-fill reliability, login setup and warm retrieval.
+- Recommend conditional method priorities without introducing an unsupported universal winner; keep service tools/APIs first.
+- Audit exact benchmark-owned tasks, scratch databases, copied scripts, fixture installation and locks. Restore tracked phone settings and preserve personal app/profile data and protected dev resources.
+- Keep sanitized audit evidence and commit harness/report changes locally. No production rollout.
 
 Exit criteria:
 
-- A reproducible report supports specific priority recommendations and lists unresolved comparisons. Cleanup ownership is reconciled; incomplete live review prevents a definitive ranking.
+- Reproducible reviewed results support specific recommendations; unresolved comparisons are explicit. Resource cleanup and source provenance pass audit.
 
 ## Tests
 
-- Extend existing harness tests for arm boundaries, schedule rotation, actual-fill requirements, independent scoring, human-wait accounting and incremental evidence/resume.
-- Reuse secure-fill privacy and lifecycle regressions. Add one native/web staged fixture acceptance per arm and only distinct recovery probes.
-- Live correctness requires independent review; mocked or fixture-only success cannot satisfy live exit criteria.
+- Existing protocol/scoring tests cover arm isolation, rotation, actual private filling and independent live review.
+- Warm scheduling regression checks 27 main cells, session preservation, the canonical Facebook event and nine separate Apple cells including Android Chrome.
+- Reuse secure-fill lifecycle and real-device acceptance; no redundant fault-injection matrix.
 
 ## Validation Commands
 
-Run the existing runner from the repository root. It uses the idle development service, desktop and connected phone.
-
 ```sh
 node --test backend/scripts/browser-benchmark/comparison.test.mjs backend/scripts/browser-benchmark/benchmark.test.mjs
-node backend/scripts/browser-benchmark/comparison-fixtures-check.mjs
-python3 backend/scripts/browser-benchmark/run.py --suite interaction --check
-python3 backend/scripts/browser-benchmark/run.py --suite interaction --phase smoke --repetitions 1 --output .local/android-browser-comparison/SMOKE
-python3 backend/scripts/browser-benchmark/run.py --suite interaction --validated-smoke .local/android-browser-comparison/SMOKE --output .local/android-browser-comparison/MAIN
-python3 backend/scripts/browser-benchmark/run.py --resume .local/android-browser-comparison/MAIN
-node backend/scripts/browser-benchmark/report.mjs .local/android-browser-comparison/MAIN
-# Only after main and the user's setup/URL confirmation:
-python3 backend/scripts/browser-benchmark/run.py --suite interaction --phase assisted --parent .local/android-browser-comparison/MAIN --output .local/android-browser-comparison/ASSISTED
+python3 backend/scripts/browser-benchmark/run.py --suite interaction --phase warm --check
+python3 backend/scripts/browser-benchmark/run.py --suite interaction --phase warm --cases apple-store --check
+python3 backend/scripts/browser-benchmark/run.py --suite interaction --phase warm --output .local/android-browser-comparison/warm-retrieval
+# After main collection and cleanup:
+python3 backend/scripts/browser-benchmark/run.py --suite interaction --phase warm --cases apple-store --output .local/android-browser-comparison/warm-apple
+node backend/scripts/browser-benchmark/report.mjs .local/android-browser-comparison/warm-retrieval
+node backend/scripts/browser-benchmark/report.mjs .local/android-browser-comparison/warm-apple
 ```
 
-`--check` validates the manifest without Docker or model calls. `--preflight-only` records model/account/native readiness. `--cases` selects services. Main collection requires a passing three-arm smoke with identical sources/images. The assisted manifest imports deferred main cells and appends six Apple Store samples last. Source/image changes require a new dataset; unverified prior cleanup blocks resume.
+Use a new output directory after material protocol/source changes. Do not resume across changed source hashes or unverified cleanup. Existing-run replay and historical fill phases remain available in the harness; they are outside current collection scope.
 
 ## Overall Exit Criteria
 
-- Android secure fill is validated before collection. The comparison includes actual native and browser private filling, staged OTP coverage and Apple Store browser login with user assistance as needed.
-- Same-model, method-isolated arms have matched requirements and explicit platform differences. Correctness, manual assistance and privacy gates are visible alongside time and usage.
-- Durable evidence supports conditional method-selection guidance, with unavailable/pending cases and uncertainty stated. Existing development resources and personal account state are preserved.
+- Secure-fill implementation is validated, including actual native/browser fixture fills and OTP.
+- Current method-isolated comparisons use matched requirements and explicit platform/session differences; all scheduled outcomes and unresolved human dependencies remain visible.
+- Every live success has independent evidence. Correctness, assistance, elapsed time and model usage are reported without treating setup blockers as an authenticated retrieval ranking.
+- Reports/plans are current, commits are local, and benchmark-owned cleanup is verified while personal sessions and the dev stack are preserved.
 
-## Implementation and Collection State
+## Current Follow-up
 
-- Harness implementation is committed as `1b3bb0e`; verified native reset is `d136e5a`. Twenty focused tests and three-arm real acceptance pass. Production method priorities are unchanged.
-- Primary collection is `.local/android-browser-comparison/main-reset-verified/`: 36 unique cells, 15 executed, 12 passes, three retrieval failures, 21 setup deferrals. All live outcomes are reviewed; all nine staged-fill journeys pass with 27 private fills. Native start/reset, source fingerprints, privacy/method gates, usage completeness and cleanup pass audit.
-- [Results and recommendations](android-browser-computer-benchmark-results.md) distinguish fixture reliability, live retrieval failure, setup dependencies and timing. The original interrupted dataset and calibration runs remain separate from primary aggregates.
-- Current login setup is verified for Amazon and Facebook on native Android and web, plus Apple Store web. Android Chrome Apple readiness remains to be observed. The earlier missing-account/native-setup outcomes remain in the historical dataset.
-- The recorded product-case amendment permits the available anonymous Amazon.com session. It does not establish matched authenticated warm-session behavior.
-- Current collection uses 27 warm Amazon/Facebook samples followed by nine Apple Store browser/computer/Android Chrome checks. New authentication challenges are queued at the end; login comparisons and sign-outs are excluded.
-- Scratch databases, runner directories, fixture app, owned sessions and temporary review images are cleaned up; power state is restored. Sanitized local evidence is retained. The full plan remains In Progress for assisted coverage.
-
-Warm-session readiness: Amazon and Facebook native apps, Amazon web, Facebook web and Apple Store web are verified. Browser and computer methods share the persistent Chromium profile. The matched Facebook target is [Quarry Lakes 25th Anniversary Celebration](https://www.facebook.com/events/1711829129869706/). Collection is running in `warm-retrieval`; `warm-apple` is queued after all 27 main samples and verified cleanup. Apple includes Android Chrome. Live authentication remains setup only.
+Apple setup reuses dev PWA task `fd8eb1d0-bb59-492f-8a54-af3b769a4052`. Desktop account access was verified at 07:38 UTC, but later checks required sign-in; cause is unproven. Android Chrome also requires sign-in. Setup is outside scored timing, follows all independent work, and yields for any user verification. The queue is recorded in `warm-apple/human-follow-up.json`.

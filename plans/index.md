@@ -18,7 +18,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 | [Android upstream interaction](android-upstream-interaction.md) | Done | Upstream navigation and private-fill handoff verified; friction follow-up completes 3/3 product runs and order lookup, with batch-null regression fixed. |
 | [Android Secure Fill Simplification](android-secure-fill-simplification.md) | Done | Remove app trust registration and audit native fill restrictions under controlled app installation. |
 | [Android Secure Fill](android-secure-fill.md) | Done | Shared browser/Android private entry, native field binding and direct filling. |
-| [Android, Browser and Computer Comparison](android-browser-computer-benchmark.md) | In Progress | Independent benchmark complete: 15 executed, 21 deferred; assisted live comparisons and Apple Store remain. |
+| [Android, Browser and Computer Comparison](android-browser-computer-benchmark.md) | In Progress | Warm main complete: 23/27 pass; Apple authentication/setup outcomes reviewed, authenticated follow-up pending. |
 | [Android Mobile MCP](android-mobile-mcp.md) | Done | USB phone sidecar, exclusive worker control, and development app flows. |
 | [Browser click readiness](browser-click-readiness.md) | Done | Target-specific rendering guard; three concurrent background-tab benchmark passes. |
 | [Focused Cua comparison](cua-focused-comparison.md) | Complete | 30 isolated samples: reliability, safety, latency and token usage with durable evidence. |
