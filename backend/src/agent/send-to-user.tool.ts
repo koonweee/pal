@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { jsonSchema } from 'ai';
 import type { UserVisibleMessage } from '../chat/chat.types.js';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import {
   parsePublicResponse,
   publicOutputSchema,
@@ -9,13 +10,18 @@ import {
 } from './public-output.js';
 
 type Routing = { destinationIds: string[]; notify: boolean };
-type SendInput = Routing & {
+type RoutingInput = { explicitDestinationIds?: string[]; notify: boolean };
+type SendInput = RoutingInput & {
   content:
     | { kind: 'message'; message: PublicResponse }
     | { kind: 'reaction'; messageRef: number; emoji: string };
 };
 
 export function sendToUserTool(
+  resolveRouting: (
+    input: RoutingInput,
+    messages: readonly MastraDBMessage[],
+  ) => Promise<Routing>,
   send: (
     output: PublicOutput,
     routing: Routing,
@@ -28,10 +34,10 @@ export function sendToUserTool(
   ) => Promise<UserVisibleMessage>,
 ) {
   const routing = {
-    destinationIds: {
+    explicitDestinationIds: {
       type: 'array' as const,
       description:
-        'Additional enabled channels beyond Pal; [] sends only in Pal.',
+        "Additional enabled channels explicitly requested by the current user instruction. Example: if the user says 'send this to Telegram', use ['telegram']. Omit for ordinary replies. Automatic routing follows origin channels only and does not fulfill a request for another channel.",
       maxItems: 100,
       uniqueItems: true,
       items: { type: 'string' as const },
@@ -41,7 +47,7 @@ export function sendToUserTool(
   return createTool({
     id: 'sendToUser',
     description:
-      'Send a message or set/replace the single emoji reaction on a Main message. Pal is always included. Select additional enabled channels; notify requests alerts on Pal and every selected channel where supported. Returns persisted acceptance, not provider receipt.',
+      "Send a message or set/replace the single emoji reaction on a Main message. Pal is always included, and secondary routing is determined automatically from the current execution origins. To fulfill a current instruction such as 'send this to Telegram', explicitly set explicitDestinationIds to that enabled channel. Otherwise omit it. notify requests alerts on every included channel where supported. Returns persisted acceptance, not provider receipt.",
     inputSchema: jsonSchema<SendInput>({
       type: 'object',
       properties: {
@@ -70,19 +76,22 @@ export function sendToUserTool(
           ],
         },
       },
-      required: ['content', 'destinationIds', 'notify'],
+      required: ['content', 'notify'],
       additionalProperties: false,
     }),
     execute: async (input, context) => {
       const key = context?.agent?.toolCallId;
       if (!key) throw new Error('Native tool call identity is required');
+      const resolvedRouting = await resolveRouting(
+        input,
+        context.agent?.getMessages?.() ?? [],
+      );
       if (input.content.kind === 'reaction') {
         const message = await react(
           {
             messageRef: input.content.messageRef,
             emoji: input.content.emoji,
-            destinationIds: input.destinationIds,
-            notify: input.notify,
+            ...resolvedRouting,
           },
           key,
         );
@@ -94,10 +103,16 @@ export function sendToUserTool(
       const refs: number[] = [];
       for (const [index, output] of outputs.entries()) {
         try {
-          const message = await send(output, input, key + ':' + index, {
-            ...input,
-            part: index,
-          });
+          const message = await send(
+            output,
+            resolvedRouting,
+            key + ':' + index,
+            {
+              ...input,
+              resolvedDestinationIds: resolvedRouting.destinationIds,
+              part: index,
+            },
+          );
           refs.push(message.sequence);
         } catch (error) {
           if (!refs.length) throw error;

@@ -60,7 +60,11 @@ export class TaskSchedulesService {
     return schedule;
   }
 
-  async create(taskId: string, input: ScheduleInput) {
+  async create(
+    taskId: string,
+    input: ScheduleInput,
+    routingDestinationIds: string[] = [],
+  ) {
     await this.tasks.details(taskId);
     const id = 'agent_' + randomUUID();
     const schedule = await this.schedules.create({
@@ -75,6 +79,13 @@ export class TaskSchedulesService {
         source: 'automation',
         scheduleId: id,
         taskId,
+        ...(routingDestinationIds.length
+          ? {
+              routingDestinationIds: JSON.stringify([
+                ...new Set(routingDestinationIds),
+              ]),
+            }
+          : {}),
       },
       ifActive: { behavior: 'deliver' },
       ifIdle: {

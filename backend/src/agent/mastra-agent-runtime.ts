@@ -10,6 +10,10 @@ import {
 } from '@mastra/core/agent';
 import { DestinationService } from '../delivery/destination.service.js';
 import { sendToUserTool } from './send-to-user.tool.js';
+import {
+  currentExecutionDestinationIds,
+  signalDestinationIds,
+} from './execution-audience.js';
 import { loadAgentInstructions } from './agent-instructions.js';
 import { resolve } from 'node:path';
 import {
@@ -75,6 +79,7 @@ import {
 interface TaskProvenance {
   origins: { messageRef: number; destinationId: string | null }[];
   scheduleIds: string[];
+  routingDestinationIds: string[];
 }
 
 @Injectable()
@@ -169,6 +174,7 @@ export class MastraAgentRuntime
       // Keep Main's tool set focused on routing to preserve fast acknowledgments.
       tools: {
         sendToUser: sendToUserTool(
+          (input, messages) => this.resolveMainRouting(input, messages),
           (output, { destinationIds, notify }, key, request) =>
             this.publishMessage(
               {
@@ -332,6 +338,9 @@ export class MastraAgentRuntime
               'I could not start that scheduled check.',
               taskIdFromThread(schedule.threadId),
               schedule.id,
+              signalDestinationIds(
+                schedule.attributes as Record<string, unknown> | undefined,
+              ),
             );
           }
         },
@@ -422,7 +431,10 @@ export class MastraAgentRuntime
             contents,
             attributes,
           },
-          { requireDelivery: true },
+          {
+            requireDelivery: true,
+            ifIdle: { attributes: { executionStart: true } },
+          },
         ).accepted;
       } catch {
         throw new AgentHandoffError(
@@ -583,11 +595,18 @@ export class MastraAgentRuntime
     }
   }
 
-  private publishFailure(text: string, taskId: string, scheduleId?: string) {
+  private publishFailure(
+    text: string,
+    taskId: string,
+    scheduleId?: string,
+    routingDestinationIds: string[] = [],
+  ) {
     return this.publishTask(
       { text, replyTo: null, attachmentIds: [], files: [] },
       { threadId: taskThreadId(taskId), phase: 'final_answer' },
-      scheduleId ? { origins: [], scheduleIds: [scheduleId] } : undefined,
+      scheduleId
+        ? { origins: [], scheduleIds: [scheduleId], routingDestinationIds }
+        : undefined,
     );
   }
 
@@ -597,9 +616,11 @@ export class MastraAgentRuntime
     currentMessages: MastraDBMessage[] = [],
   ): Promise<TaskProvenance> {
     const store = await this.main?.storage.getStore('memory');
-    if (!store) return { origins: [], scheduleIds: [] };
+    if (!store)
+      return { origins: [], scheduleIds: [], routingDestinationIds: [] };
     const refs = new Set<number>();
     const scheduleIds = new Set<string>();
+    const routingDestinationIds = new Set<string>();
     let executionStart = false;
     // Streaming finals can precede native input persistence. Prefer the live list;
     // compressed context can recover the same boundary from native storage.
@@ -622,6 +643,8 @@ export class MastraAgentRuntime
         if (!isMastraSignalMessage(message)) continue;
         const signal = mastraDBMessageToSignal(message);
         const attributes = signal.attributes;
+        for (const id of signalDestinationIds(attributes))
+          routingDestinationIds.add(id);
         if (
           signal.tagName === 'scheduled-execution' &&
           typeof attributes?.scheduleId === 'string'
@@ -648,7 +671,8 @@ export class MastraAgentRuntime
       }
       if (executionStart) break;
     }
-    if (!executionStart) return { origins: [], scheduleIds: [] };
+    if (!executionStart)
+      return { origins: [], scheduleIds: [], routingDestinationIds: [] };
     const messages = await Promise.all(
       [...refs].map((ref) => this.chat.getBySequence(ref)),
     );
@@ -662,7 +686,11 @@ export class MastraAgentRuntime
           ]
         : [],
     );
-    return { origins, scheduleIds: [...scheduleIds] };
+    return {
+      origins,
+      scheduleIds: [...scheduleIds],
+      routingDestinationIds: [...routingDestinationIds],
+    };
   }
 
   private publishTask(
@@ -708,6 +736,13 @@ export class MastraAgentRuntime
                 ...(sources.scheduleIds.length
                   ? { scheduleIds: JSON.stringify(sources.scheduleIds) }
                   : {}),
+                ...(sources.routingDestinationIds.length
+                  ? {
+                      routingDestinationIds: JSON.stringify(
+                        sources.routingDestinationIds,
+                      ),
+                    }
+                  : {}),
                 ...(message.replyTo
                   ? { replyToRef: message.replyTo.sequence }
                   : {}),
@@ -726,6 +761,7 @@ export class MastraAgentRuntime
             },
             {
               requireDelivery: true,
+              ifIdle: { attributes: { executionStart: true } },
             },
           );
           await delivery.accepted;
@@ -734,6 +770,26 @@ export class MastraAgentRuntime
         }
       }
     });
+  }
+
+  private async resolveMainRouting(
+    input: { explicitDestinationIds?: string[]; notify: boolean },
+    messages: readonly MastraDBMessage[],
+  ) {
+    const enabledSecondary = new Set(
+      (await this.destinations.list())
+        .filter((destination) => destination.role === 'secondary')
+        .map((destination) => destination.id),
+    );
+    const automatic = currentExecutionDestinationIds(messages).filter((id) =>
+      enabledSecondary.has(id),
+    );
+    return {
+      destinationIds: [
+        ...new Set([...automatic, ...(input.explicitDestinationIds ?? [])]),
+      ],
+      notify: input.notify,
+    };
   }
 
   private async publishMessage(

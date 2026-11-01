@@ -1,10 +1,14 @@
 import { sendToUserTool } from '../dist/agent/send-to-user.tool.js';
+import { currentExecutionDestinationIds } from '../dist/agent/execution-audience.js';
+import { createSignal } from '@mastra/core/agent';
 import { randomUUID } from 'node:crypto';
 import { openStream, startTestApp, until } from './helpers.js';
 import { TasksService } from '../dist/tasks/tasks.service.js';
 import { mainTaskTools } from '../dist/agent/task-tools.js';
 import { FilesService } from '../dist/files/files.service.js';
 import { ChatService } from '../dist/chat/chat.service.js';
+import { DestinationService } from '../dist/delivery/destination.service.js';
+import { DestinationRepository } from '../dist/delivery/destination.repository.js';
 let fixture: Awaited<ReturnType<typeof startTestApp>>;
 beforeAll(async () => {
   fixture = await startTestApp();
@@ -203,6 +207,10 @@ it('reports accepted message parts when a later part needs correction', async ()
   const chat = fixture.app.get(ChatService);
   let calls = 0;
   const tool = sendToUserTool(
+    async ({ explicitDestinationIds = [], notify }) => ({
+      destinationIds: explicitDestinationIds,
+      notify,
+    }),
     async (output) => {
       if (++calls === 2) throw new Error('Attachment unavailable');
       return chat.publish({
@@ -218,7 +226,6 @@ it('reports accepted message parts when a later part needs correction', async ()
   );
   const result = await tool.execute!(
     {
-      destinationIds: [],
       notify: false,
       content: {
         kind: 'message',
@@ -246,4 +253,100 @@ it('reports accepted message parts when a later part needs correction', async ()
   expect((await chat.history({})).messages.map((m) => m.text)).toEqual([
     'Accepted',
   ]);
+});
+
+it('derives the current execution audience and adds an explicit send override', async () => {
+  const dbMessage = (
+    attributes: Record<string, string | number | boolean>,
+    tagName?: string,
+  ) =>
+    createSignal({
+      id: randomUUID(),
+      type: tagName ? 'reactive' : 'user',
+      ...(tagName ? { tagName } : {}),
+      contents: 'Input',
+      attributes,
+    }).toDBMessage({ threadId: 'pal-main', resourceId: 'pal-owner' });
+  const messages = [
+    dbMessage({
+      originDestinationId: 'old-channel',
+      executionStart: true,
+    }),
+    dbMessage({ originDestinationId: 'web', executionStart: true }),
+    dbMessage(
+      {
+        origins: JSON.stringify([
+          { messageRef: 10, destinationId: 'telegram' },
+        ]),
+      },
+      'task-result',
+    ),
+  ];
+  expect(currentExecutionDestinationIds(messages)).toEqual(['telegram', 'web']);
+
+  const destinationRepository = fixture.app.get(DestinationRepository);
+  await destinationRepository.setEnabled('telegram', true);
+  const enabledSecondary = new Set(
+    (await fixture.app.get(DestinationService).list())
+      .filter((destination) => destination.role === 'secondary')
+      .map((destination) => destination.id),
+  );
+  const currentMessages = [
+    dbMessage({ originDestinationId: 'web', executionStart: true }),
+  ];
+  const routed: string[][] = [];
+  let sent: Awaited<ReturnType<ChatService['publish']>> | undefined;
+  const tool = sendToUserTool(
+    async ({ explicitDestinationIds = [], notify }, toolMessages) => ({
+      destinationIds: [
+        ...new Set([
+          ...currentExecutionDestinationIds(toolMessages).filter((id) =>
+            enabledSecondary.has(id),
+          ),
+          ...explicitDestinationIds,
+        ]),
+      ],
+      notify,
+    }),
+    async (output, routing) => {
+      routed.push(routing.destinationIds);
+      sent = await fixture.app.get(ChatService).publish({
+        role: 'assistant',
+        text: output.text,
+        destinationIds: routing.destinationIds,
+        notify: false,
+      });
+      return sent;
+    },
+    async () => {
+      throw new Error('Unexpected reaction');
+    },
+  );
+  try {
+    await tool.execute!(
+      {
+        explicitDestinationIds: ['telegram'],
+        notify: false,
+        content: {
+          kind: 'message',
+          message: { text: 'Done', replyTo: null },
+        },
+      },
+      {
+        agent: {
+          agentId: 'pal-main-agent',
+          toolCallId: randomUUID(),
+          messages: currentMessages,
+          getMessages: () => currentMessages,
+        },
+      },
+    );
+  } finally {
+    await destinationRepository.setEnabled('telegram', false);
+  }
+  expect(routed).toEqual([['telegram']]);
+  expect(sent).toMatchObject({
+    deliveryDestinationIds: ['ios', 'telegram', 'web'],
+    notificationDestinationIds: [],
+  });
 });

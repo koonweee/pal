@@ -9,6 +9,7 @@ import type { TasksService } from '../tasks/tasks.service.js';
 import type { FilesService } from '../files/files.service.js';
 import type { ChatService } from '../chat/chat.service.js';
 import type { TaskStatus, TaskSearchInput } from '../tasks/tasks.types.js';
+import { currentExecutionDestinationIds } from './execution-audience.js';
 
 export const TASK_THREAD_PREFIX = 'pal-task:';
 export function taskThreadId(taskId: string) {
@@ -239,7 +240,11 @@ export function taskScheduleTools(schedules: TaskSchedulesService) {
         additionalProperties: false,
       }),
       execute: async (input, context) =>
-        schedules.create(currentTask(context), input),
+        schedules.create(
+          currentTask(context),
+          input,
+          currentExecutionDestinationIds(context?.agent?.getMessages?.() ?? []),
+        ),
     }),
     list_task_schedules: createTool({
       id: 'list_task_schedules',

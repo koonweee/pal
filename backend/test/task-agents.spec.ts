@@ -79,7 +79,6 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
   const sentResults = new Set<string>();
   const send = (value: string | string[]) =>
     call('sendToUser', {
-      destinationIds: [],
       notify: true,
       content: {
         kind: 'message',
@@ -112,7 +111,6 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
           ++mainCalls === 1
             ? [
                 call('sendToUser', {
-                  destinationIds: [],
                   notify: false,
                   content: { kind: 'reaction', messageRef: 1, emoji: '👀' },
                 }),
@@ -486,6 +484,14 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
     );
     await until(() => alphaCalls >= 4, 10000);
     const [scheduled] = await schedules.list(alpha.id);
+    expect(
+      JSON.parse(
+        String(
+          (await mainSession.mastra.schedules.get(scheduled.id))?.attributes
+            ?.routingDestinationIds,
+        ),
+      ),
+    ).toEqual(expect.arrayContaining(['ios', 'web']));
     const nativeStore = (await mainSession.storage.getStore('schedules'))!;
     await nativeStore.updateSchedule(scheduled.id, {
       nextFireAt: Date.now() - 1000,
@@ -584,6 +590,9 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
       ]),
     );
     expect(JSON.parse(String(alphaResult.scheduleIds))).toEqual([scheduled.id]);
+    expect(JSON.parse(String(alphaResult.routingDestinationIds))).toEqual(
+      expect.arrayContaining(['ios', 'web']),
+    );
     expect(final?.phase).toBe('final_answer');
     const next = mainHistory.find((m) => m.text === 'Alpha next steps');
     expect(next).toMatchObject({
