@@ -97,9 +97,9 @@ it('loads authentication skills only on interaction and starts fresh after resta
     session = await createMainSession(options);
     expect(await session.agent.listSkills()).toEqual([]);
     expect(await session.taskAgent!.listSkills()).toEqual([]);
-    expect((await session.worker!.listSkills()).map((s) => s.name)).toEqual([
-      'website-authentication',
-    ]);
+    expect(
+      (await session.worker!.listSkills()).map((s) => s.name).sort(),
+    ).toEqual(['android-interaction', 'website-authentication']);
     const skill = await session.worker!.getSkill('website-authentication');
     expect(skill).toBeDefined();
     const containsBody = (value: unknown) =>

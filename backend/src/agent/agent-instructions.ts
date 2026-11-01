@@ -18,10 +18,17 @@ const instructionFiles = {
     'preference-learning',
     'context-authority',
     'workspace',
+    'interaction-methods',
     'execution',
     'task',
   ],
-  worker: ['voice', 'workspace', 'interaction', 'worker'],
+  worker: [
+    'voice',
+    'workspace',
+    'interaction-methods',
+    'interaction',
+    'worker',
+  ],
 } as const;
 
 export type AgentRole = keyof typeof instructionFiles;

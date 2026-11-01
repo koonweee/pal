@@ -1,3 +1,4 @@
+import { AndroidService } from '../dist/android/android.service.js';
 import request from 'supertest';
 import { ConfigService } from '@nestjs/config';
 import { ApplicationError } from '../dist/application/contracts/errors.js';
@@ -453,6 +454,7 @@ it('keeps Main catalog-free and refreshes code mode for reused and scheduled tas
           mcp,
           admission,
           browser,
+          new AndroidService(new ConfigService()),
           login,
           files,
           preferences,

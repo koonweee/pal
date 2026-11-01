@@ -1,3 +1,5 @@
+import { AndroidService } from '../android/android.service.js';
+import { androidTools } from '../android/android-tools.js';
 import { LoginService } from '../login/login.service.js';
 import { loginTools } from '../login/login-tools.js';
 import { webSearchTool } from './web-search.js';
@@ -98,6 +100,7 @@ export class MastraAgentRuntime
     @Inject(AgentAdmissionService)
     private readonly admission: AgentAdmissionService,
     @Inject(BrowserService) private readonly browser: BrowserService,
+    @Inject(AndroidService) private readonly android: AndroidService,
     @Inject(LoginService) private readonly login: LoginService,
     @Inject(FilesService) private readonly files: FilesService,
     @Inject(PreferencesService)
@@ -210,6 +213,8 @@ export class MastraAgentRuntime
             name +
             '\n' +
             this.mcp.instructions() +
+            '\n' +
+            this.android.instructions +
             '\nCurrent time (UTC): ' +
             new Date().toISOString() +
             '\nTask: ' +
@@ -256,16 +261,20 @@ export class MastraAgentRuntime
           ),
           instructions: () =>
             workerInstructions +
+            '\n' +
+            this.android.instructions +
             '\nCurrent time (UTC): ' +
             new Date().toISOString(),
           tools: () => ({
             ...browserTools(this.browser),
+            ...androidTools(this.android),
             ...loginTools(this.login),
           }),
           inputProcessors: [new CodeModeProcessor()],
           resume: (taskId, assignment) =>
             this.login.resumeWorker(taskId, assignment),
           cleanup: async (taskId, workerId, completed, startedAt) => {
+            await this.android.release(taskId, workerId);
             const retain = await this.login
               .retainWorkerSession(taskId, workerId, completed, startedAt)
               .catch((error: unknown) => {

@@ -236,7 +236,7 @@ export async function createMainSession(options: {
           name: 'Interaction',
           skills: agentSkillPaths('worker'),
           description:
-            'Complete a browser, computer or website-login workflow and return verified findings to Task. Supply all relevant facts, URLs, constraints, requested interaction method and required evidence; no conversation history is inherited.',
+            'Complete a browser, computer, Android or website-login workflow and return verified findings to Task. Supply all relevant facts, URLs, constraints, requested interaction method and required evidence; no conversation history is inherited.',
           instructions: options.task.worker.instructions,
           model: options.task.worker.model,
           memory: new Memory({

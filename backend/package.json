@@ -38,7 +38,8 @@
     "files:smoke": "sh scripts/split-stack-smoke.sh files",
     "runtime:smoke": "sh scripts/split-runtime-smoke.sh",
     "runtime:stack:smoke": "sh scripts/split-stack-smoke.sh",
-    "login:smoke": "npm run build && node scripts/login-browser-smoke.mjs"
+    "login:smoke": "npm run build && node scripts/login-browser-smoke.mjs",
+    "android:smoke": "node scripts/android-smoke.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "3.0.124",

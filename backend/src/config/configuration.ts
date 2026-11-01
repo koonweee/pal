@@ -20,6 +20,31 @@ export function validateEnvironment(env: Record<string, unknown>) {
     env.PAL_AGENT_WORKING_DIR ?? AGENT_HOME + '/workspace';
   if (typeof workingDirectory !== 'string' || !workingDirectory.trim())
     throw new Error('PAL_AGENT_WORKING_DIR must be a nonempty path');
+  const androidUrl = env.PAL_ANDROID_MCP_URL;
+  if (androidUrl) {
+    if (typeof androidUrl !== 'string')
+      throw new Error('PAL_ANDROID_MCP_URL must be a string');
+    const url = new URL(androidUrl);
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.hash ||
+      url.search
+    )
+      throw new Error(
+        'PAL_ANDROID_MCP_URL must be an HTTP(S) endpoint without credentials',
+      );
+    if (
+      typeof env.PAL_ANDROID_MCP_TOKEN !== 'string' ||
+      !env.PAL_ANDROID_MCP_TOKEN.trim() ||
+      typeof env.PAL_ANDROID_DEVICE_ID !== 'string' ||
+      !/^[A-Za-z0-9._-]+$/.test(env.PAL_ANDROID_DEVICE_ID)
+    )
+      throw new Error(
+        'Android MCP requires a bearer token and a USB device serial',
+      );
+  }
   const desktopEnabled = env.PAL_DESKTOP_ENABLED ?? 'false';
   if (desktopEnabled !== 'true' && desktopEnabled !== 'false')
     throw new Error('PAL_DESKTOP_ENABLED must be true or false');

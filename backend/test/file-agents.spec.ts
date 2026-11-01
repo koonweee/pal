@@ -1,3 +1,4 @@
+import { AndroidService } from '../dist/android/android.service.js';
 import { randomUUID } from 'node:crypto';
 import { writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -259,6 +260,7 @@ it('carries file paths through native input/delegation and publishes file-only o
           mcp,
           admission,
           browser,
+          new AndroidService(new ConfigService()),
           login,
           files,
           preferences,

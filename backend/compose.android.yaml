@@ -1,0 +1,36 @@
+# Optional USB phone sidecar. PAL_ANDROID_USB_DEVICE is resolved on the Docker host.
+services:
+  android-mcp:
+    profiles: [android]
+    build:
+      context: ./android
+    image: pal-android-local
+    environment:
+      MOBILEMCP_AUTH: ${PAL_ANDROID_MCP_TOKEN:?Android MCP token required}
+    devices:
+      - ${PAL_ANDROID_USB_DEVICE:?Android USB device node required}:${PAL_ANDROID_USB_DEVICE}:rw
+    volumes:
+      - android_state:/state
+    networks: [service]
+    cap_drop: [ALL]
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 15s
+    healthcheck:
+      test: [CMD, node, /opt/android/health.mjs]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  agent-service:
+    environment:
+      PAL_ANDROID_MCP_URL: http://android-mcp:3000/mcp
+      PAL_ANDROID_MCP_TOKEN: ${PAL_ANDROID_MCP_TOKEN}
+      PAL_ANDROID_DEVICE_ID: ${PAL_ANDROID_DEVICE_ID:?Android device serial required}
+volumes:
+  android_state:

@@ -15,6 +15,18 @@ local_url="http://localhost:$frontend_port"
 pwa_local_port="${PAL_DEV_PWA_PORT:-14173}"
 pwa_local_url="http://localhost:$pwa_local_port"
 command_name="${1:-up}"
+android_env="$state_dir/android.env"
+android_services=()
+load_android() {
+  if [[ -f "$android_env" ]]; then
+    compose_files+=(-f "$backend_dir/compose.android.yaml")
+    android_services=(android-mcp)
+  fi
+}
+if [[ "$command_name" == android-up || "$command_name" == android-reconnect ]]; then
+  node "$repo_root/scripts/android-dev.mjs" prepare
+fi
+load_android
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -99,6 +111,8 @@ wait_for_url() {
 }
 
 compose() {
+  local android_args=()
+  if [[ -f "$android_env" ]]; then android_args=(--env-file "$android_env" --profile android); fi
   PAL_ENV_FILE="$config_file" \
   POSTGRES_PORT="${PAL_DEV_POSTGRES_PORT:-15433}" \
   PAL_DEV_PUBLIC_URL="$public_url" \
@@ -106,7 +120,7 @@ compose() {
   PAL_DEV_PWA_PORT="$pwa_local_port" \
   PAL_DEV_FRONTEND_PORT="$frontend_port" \
   PAL_EXECUTION_ID="$compose_project-execution" \
-    docker compose --env-file "$config_file" --project-name "$compose_project" "${compose_files[@]}" "$@"
+    docker compose --env-file "$config_file" "${android_args[@]}" --project-name "$compose_project" "${compose_files[@]}" "$@"
 }
 
 start_pwa_stage() {
@@ -168,9 +182,50 @@ case "$command_name" in
     compose build agent-service
     compose run --rm --no-deps agent-service node dist/agent/login.js --device
     ;;
+  android-up|android-reconnect)
+    prepare
+    compose build android-mcp
+    compose up -d --wait --force-recreate android-mcp
+    compose up -d --no-deps agent-service
+    compose exec -T android-mcp adb devices -l
+    ;;
+  android-smoke)
+    prepare
+    smoke_database="pal_android_$(date +%s)_test"
+    smoke_container="$(compose ps -q agent-service)"
+    if [[ -z "$smoke_container" || ! -f "$android_env" ]]; then
+      echo "Start the development backend and run android-up first." >&2
+      exit 1
+    fi
+    cleanup_android_smoke() {
+      compose exec -T postgres dropdb --if-exists -U pal "$smoke_database"
+      compose exec -T --user root agent-service sh -c 'rm -f /opt/pal/scripts/android-smoke.mjs; rmdir /opt/pal/scripts 2>/dev/null || true'
+    }
+    trap cleanup_android_smoke EXIT
+    compose exec -T postgres createdb -U pal "$smoke_database"
+    compose exec -T --user root agent-service mkdir -p /opt/pal/scripts
+    docker cp "$backend_dir/scripts/android-smoke.mjs" "$smoke_container:/opt/pal/scripts/android-smoke.mjs"
+    compose exec -T -e "TEST_DATABASE_URL=postgresql://pal:pal@postgres:5432/$smoke_database" agent-service node scripts/android-smoke.mjs
+    ;;
+  android-status)
+    prepare
+    if [[ ! -f "$android_env" ]]; then echo "Android is not configured. Run android-up."; exit 0; fi
+    compose ps android-mcp
+    compose exec -T android-mcp adb devices -l
+    ;;
+  android-down)
+    prepare
+    if [[ ! -f "$android_env" ]]; then echo "Android is not configured."; exit 0; fi
+    compose stop android-mcp
+    compose rm -f android-mcp
+    node "$repo_root/scripts/android-dev.mjs" down
+    compose_files=(-f "$backend_dir/compose.yaml" -f "$backend_dir/compose.dev.yaml")
+    android_services=()
+    compose up -d --no-deps agent-service
+    ;;
   up)
     prepare
-    compose build agent-service execution egress web
+    compose build agent-service execution egress web "${android_services[@]}"
     compose up -d --wait postgres
     compose run --rm --no-deps agent-service node dist/database/migrate.js
     if ! compose run --rm --no-deps agent-service sh -c 'test -s "$PAL_AGENT_AUTH_PATH"'; then
@@ -178,7 +233,7 @@ case "$command_name" in
       echo "  ./scripts/dev-local login" >&2
       exit 2
     fi
-    compose up -d --wait execution egress agent-service web pwa frontend
+    compose up -d --wait execution egress agent-service web pwa frontend "${android_services[@]}"
     wait_for_url "$pwa_local_url/health"
     echo "Pal development is available at $local_url"
     ;;
@@ -279,7 +334,7 @@ case "$command_name" in
     compose down
     ;;
   *)
-    echo "Usage: ./scripts/dev-local {config|login|up|rebuild|execution-rebuild|frontend-restart|logs|status|serve|unserve|pwa-up|down}" >&2
+    echo "Usage: ./scripts/dev-local {config|login|up|rebuild|execution-rebuild|frontend-restart|logs|status|serve|unserve|pwa-up|android-up|android-status|android-reconnect|android-smoke|android-down|down}" >&2
     exit 2
     ;;
 esac

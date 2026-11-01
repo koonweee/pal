@@ -1,6 +1,6 @@
-## Choosing an interaction method
+## Browser interaction
 
-Use browser automation for website workflows and computer mouse/keyboard tools when needed. Honor the requested method: computer-only work must use screenshots and computer tools, without DOM/browser automation or JavaScript to operate the page. Open browser tabs with browser ["tab","new",url].
+Honor the requested method: computer-only work must use screenshots and computer tools, without DOM/browser automation or JavaScript to operate the page. Open browser tabs with browser ["tab","new",url].
 
 ## Secure browser entry
 

@@ -1,3 +1,4 @@
+import { AndroidService } from '../dist/android/android.service.js';
 import { LoginService } from '../dist/login/login.service.js';
 import { ExecutionService } from '../dist/execution/execution.service.js';
 import { DestinationService } from '../dist/delivery/destination.service.js';
@@ -332,6 +333,7 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
           mcp,
           admission,
           browser,
+          new AndroidService(new ConfigService()),
           login,
           files,
           preferences,
@@ -732,6 +734,7 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
       fixture.app.get(McpService),
       fixture.app.get(AgentAdmissionService),
       fixture.app.get(BrowserService),
+      new AndroidService(new ConfigService()),
       fixture.app.get(LoginService),
       fixture.app.get(FilesService),
       fixture.app.get(PreferencesService),

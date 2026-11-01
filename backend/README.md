@@ -61,6 +61,29 @@ To expose the staged PWA over the script-managed Tailscale HTTPS route:
 
 serve retains the existing development HTTPS origin on port 8444 and configures the OAuth callback origin. pwa-up rebuilds the frontend and notifies connected clients. Use rebuild when an update includes backend/API changes.
 
+## Android phone development
+
+Use OrbStack 2.2.4+ USB passthrough on macOS. Enable USB debugging on the phone and connect it directly to the Mac. Release the phone from Mac ADB/Android Studio before attachment; a competing Mac ADB server can cause USB protocol errors. When its only device is this phone, `adb kill-server` releases that host connection. Pal's runtime uses the sidecar's ADB.
+
+```sh
+./scripts/dev-local android-up
+./scripts/dev-local android-status
+./scripts/dev-local rebuild
+```
+
+Accept the phone's USB debugging prompt for the container and select Always allow. The sidecar stores its identity in the `android_state` volume. `.local/dev-local/android.env` contains private generated connection configuration; the helper selects one USB phone, or uses `PAL_ANDROID_DEVICE_ID` when multiple phones are connected. Ordinary dev-local commands retain this configuration.
+
+```sh
+./scripts/dev-local android-reconnect
+./scripts/dev-local android-down
+```
+
+Reconnect resolves a changed Linux USB node and replaces only the Android container. Down removes that container and the helper-owned OrbStack attachment, clears local connection configuration, and retains authorization data. It refreshes agent-service to remove Android tools. Phone apps and logins stay on the phone.
+
+The optional `compose.android.yaml` overlay builds the image from `android/`, maps the selected USB device, and adds private MCP configuration to agent-service. `PAL_ANDROID_USB_DEVICE` is a device node on the Docker Linux host. Linux deployments supply it directly. No host ports are published.
+
+Run `./scripts/dev-local android-smoke` for isolated model-driven acceptance. It temporarily copies the runner into the existing development service and creates a disposable test database; both are removed on exit. The runner delegates Chrome and Settings flows to interaction workers, verifies native screenshots, and drops its scratch schema. It publishes no application chat messages.
+
 ## Configuration
 
 .env.example documents settings. Compose supplies the private database address, private authentication/upload paths, shared /home/pal/workspace, remote browser endpoint, and execution ID. PAL_DOCKER_GID selects Docker socket access on Linux. PAL_WEB_PORT selects the loopback gateway port.

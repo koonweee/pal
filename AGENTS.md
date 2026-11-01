@@ -42,6 +42,7 @@ Run the integrated local development stack from the repository root with `./scri
 - `serve`: expose the staged production PWA over Tailscale when Tailnet access is requested. Use `unserve` to remove the script-managed route.
 - `pwa-up`: rebuild the staged production PWA after frontend-only changes and notify connected clients that an update is available.
 - `status`, `logs`, and `down`: inspect or stop the stack.
+- `android-up`, `android-status`, `android-reconnect`, `android-smoke`, and `android-down`: manage the optional Android sidecar and run read-only app acceptance flows with container ADB.
 
 Use `pwa-up` only after `serve` has configured the staged PWA and the running backend supports the current frontend update contract. Use `rebuild` when backend or API changes are part of the update.
 
@@ -89,7 +90,7 @@ Use `npm` and run frontend commands from `frontend/`:
 - Complete routine cleanup of task-created resources as part of every task without asking for confirmation, including after failed or abandoned attempts. Prefer the existing development stack over duplicate stacks.
 - Track containers, images, volumes, and temporary files you create. Give one-off Docker resources a recognizable task name or label. After testing, remove task-created containers, disposable volumes, and temporary files.
 - Remove unneeded one-off test, migration, smoke-test, and intermediate images once no container references them. Keep at most one relevant rollback image per service and remove it after the replacement is validated.
-- Protect the entire `pal-dev-split` stack, its images, and its volumes: `pal-dev-split_agent_home`, `pal-dev-split_service_data`, `pal-dev-split_postgres_data`, and `pal-dev-split_frontend_node_modules`. Preserve the current image tags used to recreate the stack, even when running containers use older image IDs.
+- Protect the entire `pal-dev-split` stack, its images, and its volumes: `pal-dev-split_agent_home`, `pal-dev-split_service_data`, `pal-dev-split_postgres_data`, `pal-dev-split_frontend_node_modules`, and `pal-dev-split_android_state`. Preserve the current image tags used to recreate the stack, even when running containers use older image IDs.
 - Before deleting an image, check its exact ID against running and stopped containers. Before deleting a volume, check its mounts across all containers. Treat existing database and agent-home volumes as persistent data; delete them only with explicit authorization.
 - Remove resources by specific name or ID. Do not use global Docker pruning or `docker compose down -v` as routine cleanup, or stop, recreate, or delete shared development containers solely to reclaim space.
 - After build-heavy work, inspect `docker system df` and remove disposable task artifacts. Report what was removed and anything intentionally retained, with its purpose and approximate size.

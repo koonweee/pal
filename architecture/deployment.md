@@ -84,6 +84,14 @@ Browser permission and subscriptions belong to the stable HTTPS application orig
 
 The backend needs outbound HTTPS to FCM and Apple Web Push services. Browser push services deliver payloads without an inbound public Pal endpoint. Display uses the payload directly; registration and fetching chat after a tap require Tailnet access. Provider TTL zero discards notifications for unreachable devices; Pal's own transient retry queue expires after five minutes. Provider acceptance does not prove OS presentation. Physical-device acceptance is tracked in the [PWA notification plan](../plans/pwa-notifications.md).
 
+## Android sidecar
+
+The optional Android image in `backend/android` packages Mobile MCP 1.0.15 and Debian ADB. `backend/compose.android.yaml` attaches one selected USB device and a dedicated `android_state` volume to `android-mcp`. Mobile MCP requires a bearer token and listens only on the Compose service network. Agent-service receives `PAL_ANDROID_MCP_URL`, `PAL_ANDROID_MCP_TOKEN`, and `PAL_ANDROID_DEVICE_ID`. The execution desktop has no USB mount or direct route to the sidecar.
+
+ADB authorization keys and Mobile MCP device state live under `/state`. Preserve this volume across image replacement. Device app data and account sessions live on the phone. Service health checks MCP initialization independently of USB availability or authorization. Pal startup does not depend on the sidecar being reachable.
+
+On macOS, `scripts/dev-local android-up` forwards the selected USB phone through OrbStack and resolves its Linux device node. The phone must be released by competing Mac ADB clients. The container creates its own ADB identity; accept its debugging prompt on the phone. `android-reconnect` resolves USB renumbering and recreates only the sidecar. `android-down` releases the helper-owned attachment and preserves its volume. Production USB passthrough, image publication, and Stack v2 Compose wiring belong to the deployment repository.
+
 ## Password Vault
 
 Use a dedicated hosted Bitwarden account for Pal. Obtain its personal API key from Bitwarden's account settings and configure `PAL_BITWARDEN_CLIENT_ID`, `PAL_BITWARDEN_CLIENT_SECRET` and `PAL_BITWARDEN_MASTER_PASSWORD` in the private agent-service environment (`backend/.env.development` for development). Use the default US Bitwarden service for this implementation. Account creation, API-key access and account verification happen in Bitwarden's UI; never send these values through Pal chat. The API key authenticates and the master password decrypts; both are required. Agent-service unlocks automatically after restart or lock. Missing configuration keeps Pal available with vault operations disabled.

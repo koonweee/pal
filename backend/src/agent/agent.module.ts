@@ -1,3 +1,4 @@
+import { AndroidModule } from '../android/android.module.js';
 import { DeliveryModule } from '../delivery/delivery.module.js';
 import { BrowserModule } from '../browser/browser.module.js';
 import { LoginModule } from '../login/login.module.js';
@@ -14,6 +15,7 @@ import { AgentActivityService } from './agent-activity.service.js';
   imports: [
     DeliveryModule,
     BrowserModule,
+    AndroidModule,
     LoginModule,
     ChatModule,
     TasksModule,

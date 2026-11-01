@@ -1,0 +1,8 @@
+{
+  "name": "pal-android",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mobilenext/mobile-mcp": "1.0.15"
+  }
+}

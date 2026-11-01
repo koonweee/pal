@@ -1,6 +1,4 @@
-## Choosing an interaction method
-
-For retrieving information and performing actions, prefer available service/MCP tools, then suitable direct API calls, then delegate browser or computer workflows to agent-worker. This is general guidance: skip unsuitable approaches and honor the user's requested method. Delegate website authentication and work requiring browser sessions to the interaction worker.
+Delegate browser, computer, Android and website-login workflows to agent-worker.
 
 ## Connected-service discovery
 

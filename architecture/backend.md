@@ -109,7 +109,15 @@ Unused optional tool arguments accept null or omission. Invalid argument shapes 
 
 `login.updated` carries only task identity. Login-tool outputs, SSE, chat, errors and shared files receive no credential values. Existing generic browser/shell control permits access to browser state; ordinary DOM snapshots can include populated usernames. Shared Task/Worker guidance retains the secret-handling rule and directs authentication work to the on-demand website-authentication skill. That skill owns field selection, account choice, private-entry continuation, persistence, recovery and result verification. Known fill/action/inspection steps run together through native secure_fill. Secure-entry tools set needs-input when publishing an inline card. Filled notifications carry facts and persistence intent. These tools remain available within the accepted model trust boundary. The website and execution browser necessarily receive filled values.
 
-### Connected services (MCP)
+### Android interaction
+
+`AndroidModule` owns a dedicated SDK MCP client for the configured Android endpoint. `AndroidService` injects the configured USB serial into a fixed set of upstream Mobile MCP actions. Workers receive app discovery/launch, screen inspection/screenshot, taps, typing, swipes, and navigation. Task receives configured-availability guidance and delegates complete phone workflows. Service-specific MCP discovery remains Task-owned.
+
+The first Android call reserves the phone for the trusted parent-task/worker identity. Calls are serialized. Other workers receive a busy error. Worker completion, failure, and cancellation release ownership after dispatched requests settle; actions are never automatically retried. Connection failures invalidate the client, and a later operation reconnects. App sessions survive worker cleanup. Android screenshots use native image model output and direct calls. The Android skill covers screen inspection, recovery, and manual native-login handoff.
+
+`interaction-methods.md` supplies the shared method-selection policy to Task and Worker. Browser operation and secure-entry instructions stay worker-specific. Android tool definitions are present only when the endpoint is configured; device readiness is established by tool results.
+
+## Connected services (MCP)
 
 `McpService` loads general HTTP MCP connections at startup and explicit Apply. Task agents discover MCP tools with native Mastra `search_tools`; matches load automatically for the next model step. Server instructions are available from the start. Main remains a fast conversational router with task tools and generic connected-service delegation guidance. External checks use ordinary visible tasks and reuse suitable existing work.
 
@@ -121,7 +129,8 @@ Tool placement for new capabilities:
 | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | Feature-specific procedures and supporting guidance | Developer-owned native skills, scoped to receiving Task/Worker roles. |
 | Conversation routing, quick file reading, task search, inspection, delegation, preference read/write                   | Main's small always-available tool set.                                            |
-| Broad task operations, preference read/write, task status, schedules, filesystem, shell, browser, computer, web search | Task's always-available core tools and native workspace tools.                     |
+| Broad task operations, preference read/write, task status, schedules, filesystem, shell, web search | Task's always-available core tools and native workspace tools.                     |
+| Browser/computer/login and configured Android interaction | Interaction worker tools. |
 | Preference read                                                                                                        | Worker's always-available core tools.                                              |
 | Service-specific actions and queries                                                                                   | Task's searchable MCP catalog. Add MCP servers through connected-service settings. |
 

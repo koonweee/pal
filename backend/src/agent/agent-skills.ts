@@ -7,6 +7,7 @@ type SkillRole = Exclude<AgentRole, 'main'>;
 
 const nativeSkills: Record<string, readonly SkillRole[]> = {
   'website-authentication': ['worker'],
+  'android-interaction': ['worker'],
 };
 
 export function agentSkillPaths(role: SkillRole): string[] {
