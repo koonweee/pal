@@ -60,3 +60,25 @@
   width: 100%;
   height: var(--pal-viewport-height, 100dvh);
 }
+
+.phone-keyboard-input {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  font-size: 16px;
+}
+
+.phone-keyboard-input textarea {
+  width: 1px;
+  min-width: 0;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  font-size: 16px;
+}

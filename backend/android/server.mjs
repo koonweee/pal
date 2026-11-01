@@ -1,6 +1,7 @@
 import { createServer, request as proxyRequest } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { startKeyboard } from './keyboard.mjs';
 import { attachViewer } from './viewer.mjs';
 import { HelperClient } from './helper-client.mjs';
 
@@ -63,6 +64,7 @@ const server = createServer(async (request, response) => {
   request.on('aborted', () => upstream.destroy());
   request.pipe(upstream);
 });
+const stopKeyboard = startKeyboard();
 const stopViewer = attachViewer(server, token);
 server.listen(3000, '0.0.0.0');
 async function close() {
@@ -70,6 +72,7 @@ async function close() {
   closing = true;
   server.close();
   await stopViewer();
+  await stopKeyboard();
   await pending;
   await helper.close().catch(() => {});
   mcp.kill('SIGTERM');

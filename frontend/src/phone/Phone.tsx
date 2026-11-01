@@ -29,9 +29,11 @@ import {
 import { Consumable, WritableStream } from '@yume-chan/stream-extra';
 import { IconAction } from '../ui/IconAction';
 import { useReloadSafety } from '../pwa/ReloadSafetyProvider';
+import { PhoneKeyboard } from './PhoneKeyboard';
 import './phone.css';
 
 export function Phone({ onClose }: { onClose(): void }) {
+  const keyboardInput = useRef<HTMLTextAreaElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const controller = useRef<ScrcpyControlMessageWriter | undefined>(undefined);
   const [previewWidth, setPreviewWidth] = useState<number>();
@@ -190,7 +192,8 @@ export function Phone({ onClose }: { onClose(): void }) {
       return;
     event.preventDefault();
     if (action === 0) {
-      event.currentTarget.focus();
+      if (document.activeElement !== keyboardInput.current)
+        event.currentTarget.focus();
       event.currentTarget.setPointerCapture(event.pointerId);
     }
     const rect = event.currentTarget.getBoundingClientRect();
@@ -243,6 +246,14 @@ export function Phone({ onClose }: { onClose(): void }) {
         <Drawer.Header>
           <Drawer.Title>Phone</Drawer.Title>
           <div className="desktop-actions">
+            <PhoneKeyboard
+              disabled={!ready}
+              inputRef={keyboardInput}
+              typeText={(text) => {
+                void controller.current?.injectText(text).catch(() => {});
+              }}
+              pressKey={key}
+            />
             <IconAction
               label="Paste clipboard into phone"
               disabled={!ready || pasting || !navigator.clipboard?.readText}
