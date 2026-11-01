@@ -138,3 +138,39 @@ test('a duplicated credential write cannot pass the staged comparison', () => {
     false,
   );
 });
+
+test('native fixture reset accepts Android uppercase buttons and verifies the next starting state', async () => {
+  const { prepareNativeFixture } = await import('./comparison-native.mjs');
+  const fresh = {
+    status: 'ready',
+    identity: { packageName: 'dev.pal.securefixture' },
+    elements: [{ text: 'Pal secure fixture — Username' }],
+    inputs: [{ label: 'Email or username' }],
+  };
+  const saved = {
+    ...fresh,
+    elements: [{ text: 'START AGAIN', ref: '@reset' }],
+    inputs: [],
+  };
+  let view = saved,
+    taps = 0;
+  const android = {
+    secure: async () => view,
+    call: async (_, action, args) => {
+      if (action === 'android_tap') {
+        assert.equal(args.ref, '@reset');
+        taps++;
+        view = fresh;
+      }
+    },
+  };
+  await prepareNativeFixture(android, {});
+  await prepareNativeFixture(android, {});
+  assert.equal(taps, 1);
+  view = saved;
+  android.call = async () => {};
+  await assert.rejects(
+    prepareNativeFixture(android, {}),
+    /fresh username stage/,
+  );
+});

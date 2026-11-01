@@ -36,6 +36,7 @@ import {
 } from './comparison-cases.mjs';
 import { comparisonPrivate } from './comparison-private.mjs';
 import { productEvidence } from './comparison-evidence.mjs';
+import { prepareNativeFixture } from './comparison-native.mjs';
 import { validComparisonInventory } from './comparison-tools.mjs';
 import { installFixture } from './fixtures.mjs';
 import { trace, toolTiming } from './trace.mjs';
@@ -331,28 +332,11 @@ scope.run = async () => {
           );
         let url = fixture?.url ?? scenario.url;
         if (arm === 'android' && !live) {
-          await r.android.call(
-            { taskId: task.id, workerId: seedWorker },
-            'android_launch_app',
-            { packageName: 'dev.pal.securefixture' },
-          );
-          const view = await r.android.secure(
-            { taskId: task.id, workerId: seedWorker },
-            { action: 'inspect' },
-          );
-          if (
-            view.status !== 'ready' ||
-            view.identity.packageName !== 'dev.pal.securefixture'
-          )
-            throw Error('Owned native fixture not ready');
-          if (view.elements.some((e) => e.text === 'Start again')) {
-            const reset = view.elements.find((e) => e.text === 'Start again');
-            await r.android.call(
-              { taskId: task.id, workerId: seedWorker },
-              'android_tap',
-              { ref: reset.ref },
-            );
-          }
+          const view = await prepareNativeFixture(r.android, {
+            taskId: task.id,
+            workerId: seedWorker,
+          });
+          emit('fixture.startVerified', { stage: 'username' });
           await r.android.release(task.id, seedWorker);
           android = new AndroidService(
             new ConfigService({
@@ -751,6 +735,13 @@ scope.run = async () => {
               ? 1
               : 0,
           };
+        }
+        if (!live && arm === 'android') {
+          await prepareNativeFixture(android, {
+            taskId: task.id,
+            workerId: seedWorker,
+          });
+          emit('fixture.resetVerified', { stage: 'username' });
         }
         const events = telemetry.rows.filter((e) => e.sample === sample),
           boundaryValid =
