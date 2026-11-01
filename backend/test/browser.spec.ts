@@ -11,6 +11,71 @@ import { BrowserService } from '../dist/browser/browser.service.js';
 import { browserTools } from '../dist/browser/browser-tools.js';
 import { EventsService } from '../dist/events/events.service.js';
 import { TasksService } from '../dist/tasks/tasks.service.js';
+import type { Page } from 'playwright-core';
+
+it.each(['success', 'failure', 'cancel', 'ownership', 'closed'] as const)(
+  'guards the owned click target and cleans up on %s',
+  async (outcome) => {
+    const service = new BrowserService(
+      new ConfigService({ PAL_DESKTOP_ENABLED: true }),
+      {} as TasksService,
+      new EventsService(),
+      {} as ExecutionService,
+    );
+    const calls: string[] = [];
+    const controller = new AbortController();
+    const session = {
+      send: vi.fn(async (_method: string, value: { enabled: boolean }) => {
+        calls.push(value.enabled ? 'enable' : 'disable');
+        if (value.enabled && outcome === 'cancel') controller.abort();
+        if (!value.enabled && outcome === 'closed')
+          throw new Error('Target closed');
+      }),
+      detach: vi.fn(async () => {
+        calls.push('detach');
+      }),
+    };
+    const selected = vi.spyOn(service, 'selectedPage');
+    if (outcome === 'ownership')
+      selected.mockRejectedValue(new Error('not owned'));
+    else
+      selected.mockResolvedValue({
+        context: () => ({ newCDPSession: async () => session }),
+      } as unknown as Page);
+    const internal = service as unknown as {
+      workspace: () => Promise<void>;
+      groupRequest: () => Promise<void>;
+      cli: () => Promise<{ success: true; data: {}; error: null }>;
+    };
+    vi.spyOn(internal, 'workspace').mockResolvedValue();
+    vi.spyOn(internal, 'groupRequest').mockResolvedValue();
+    const cli = vi.spyOn(internal, 'cli').mockImplementation(async () => {
+      calls.push('click');
+      if (outcome === 'failure') throw new Error('click failed');
+      return { success: true, data: {}, error: null };
+    });
+    const result = service.command(
+      'task',
+      [outcome === 'success' ? 'dblclick' : 'click', '@e2'],
+      controller.signal,
+      'worker',
+    );
+    if (outcome === 'success' || outcome === 'closed')
+      await expect(result).resolves.toMatchObject({ success: true });
+    else await expect(result).rejects.toThrow();
+    expect(selected).toHaveBeenCalledWith('task', 'worker');
+    expect(calls).toEqual(
+      outcome === 'ownership'
+        ? []
+        : outcome === 'cancel'
+          ? ['enable', 'disable', 'detach']
+          : ['enable', 'click', 'disable', 'detach'],
+    );
+    expect(cli).toHaveBeenCalledTimes(
+      outcome === 'ownership' || outcome === 'cancel' ? 0 : 1,
+    );
+  },
+);
 
 it('routes concurrent task tools by trusted thread identity and preserves screenshot media', async () => {
   const service = new BrowserService(

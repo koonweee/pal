@@ -279,11 +279,11 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.workspace(taskId, signal, workerId);
       await this.groupRequest({ action: 'touch', taskId });
-      const result = await this.cli(
-        this.identity(taskId, workerId),
-        args,
-        signal,
-      );
+      const run = () => this.cli(this.identity(taskId, workerId), args, signal);
+      const result =
+        args[0] === 'click' || args[0] === 'dblclick'
+          ? await this.withClickReadiness(taskId, workerId, signal, run)
+          : await run();
       if (args[0] === 'tab' && args[1] === 'new' && result.success) {
         const targetId = result.data.targetId;
         if (typeof targetId !== 'string')
@@ -301,6 +301,41 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
     } finally {
       this.operations.set(taskId, (this.operations.get(taskId) ?? 1) - 1);
       if (!this.operations.get(taskId)) this.operations.delete(taskId);
+    }
+  }
+
+  private async withClickReadiness(
+    taskId: string,
+    workerId: string | undefined,
+    signal: AbortSignal | undefined,
+    run: () => Promise<CliResult>,
+  ) {
+    const page = await this.selectedPage(taskId, workerId);
+    signal?.throwIfAborted();
+    const session = await page.context().newCDPSession(page);
+    try {
+      // agent-browser can acknowledge clicks on a hidden document before its
+      // first rendered frame without delivering them. Keep this target rendering
+      // through the click, using the same focus-emulation guard as Cua.
+      await session.send('Emulation.setFocusEmulationEnabled', {
+        enabled: true,
+      });
+      await delay(25, undefined, { signal });
+      return await run();
+    } finally {
+      try {
+        await session.send('Emulation.setFocusEmulationEnabled', {
+          enabled: false,
+        });
+      } catch (error) {
+        // Navigation/tab closure can remove the session after a delivered click.
+        // Do not turn that successful action into a retryable command failure.
+        this.logger.warn(error);
+      } finally {
+        await session
+          .detach()
+          .catch((error: unknown) => this.logger.warn(error));
+      }
     }
   }
 
