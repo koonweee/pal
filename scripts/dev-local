@@ -227,7 +227,7 @@ case "$command_name" in
       fi
       compose exec -T postgres dropdb --if-exists -U pal "$smoke_database"
       compose exec -T --user root agent-service sh -c 'rm -f /opt/pal/scripts/android-secure-smoke.mjs; rmdir /opt/pal/scripts 2>/dev/null || true'
-      compose exec -T android-mcp rm -f /opt/android/helper-proof.mjs /opt/android/masked-username.png /opt/android/masked-password.png /opt/android/masked-code.png /opt/android/masked-web-username.png /opt/android/masked-web-password.png /opt/android/masked-web-code.png
+      compose exec -T android-mcp rm -f /opt/android/helper-proof.mjs /opt/android/preview-username.png /opt/android/preview-password.png /opt/android/preview-code.png /opt/android/preview-web-username.png /opt/android/preview-web-password.png /opt/android/preview-web-code.png
     }
     trap cleanup_android_private_smoke EXIT
     compose exec -T android-mcp adb shell svc power stayon usb
@@ -236,7 +236,7 @@ case "$command_name" in
     compose exec -T android-mcp node /opt/android/helper-proof.mjs
     mkdir -p "$repo_root/.local/android-secure-fill/last-proof"
     for role in username password code web-username web-password web-code; do
-      docker cp "$android_container:/opt/android/masked-$role.png" "$repo_root/.local/android-secure-fill/last-proof/$role.png"
+      docker cp "$android_container:/opt/android/preview-$role.png" "$repo_root/.local/android-secure-fill/last-proof/$role.png"
     done
     compose exec -T android-mcp adb shell am force-stop dev.pal.securefixture
     compose exec -T android-mcp adb shell am start -W -n dev.pal.securefixture/.Fixture >/dev/null

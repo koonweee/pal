@@ -128,7 +128,7 @@ export function loginTools(service: LoginService) {
     login_inspect: createTool({
       id: 'login_inspect',
       description:
-        'Inspect editable inputs in your selected browser tab or target Android phone. Optional action runs agent-browser arguments before inspection. Returns opaque input refs, field metadata, matching account IDs/labels and a masked screenshot. For Android, supply the account website for vault matching; installed apps require no registration. Android accepts no browser action. Assign username/password, ordered code refs, or cardholderName/number/expiry/expMonth/expYear/securityCode refs to secure_fill or secure_entry_request. Never read existing values. Reinspect after navigation or stale refs; after a loading page or action failure inspect without repeating action.',
+        'Inspect editable inputs in your selected browser tab or target Android phone. Optional action runs agent-browser arguments before inspection. Returns opaque input refs, field metadata, matching account IDs/labels and a screenshot (masked for browser, unmasked for Android). For Android, supply the account website for vault matching; installed apps require no registration. Android accepts no browser action. Assign username/password, ordered code refs, or cardholderName/number/expiry/expMonth/expYear/securityCode refs to secure_fill or secure_entry_request. Never read existing values. Reinspect after navigation or stale refs; after a loading page or action failure inspect without repeating action.',
       inputSchema: jsonSchema<{
         action?: string[] | null;
         target?: 'browser' | 'android' | null;

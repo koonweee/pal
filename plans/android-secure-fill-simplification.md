@@ -12,7 +12,7 @@ Remove app registration and signer trust policy under the operator-controlled in
 
 - Installed apps need no registration. Android inspection receives the account website for shared vault matching.
 - The worker assigns roles using labels and screen context; password metadata is a hint.
-- Native and WebView editable accessibility nodes share private filling. WebView screenshots remain fully masked.
+- Native and WebView editable accessibility nodes share private filling. Android screenshots and private-entry previews are unmasked; structured editable values remain omitted.
 - Shared services own private cards, vault selection, staged credentials, OTP and continuation.
 
 ## Target Data Shape
@@ -33,7 +33,7 @@ Exit: an unregistered installed app can inspect and fill through the private UI 
 
 ### 2. Audit and validate remaining restrictions — complete
 
-- Remove password-flag authorization; retain metadata for model role selection and private masking.
+- Remove password-flag authorization; retain metadata for model role selection and structured-value redaction.
 - Review WebView exclusion, stale binding, ownership, timeouts, payload limits and helper authentication. Record concrete retain/remove decisions.
 - Verify focused backend/browser/native regressions, rootless helper build and connected-device private fill. Update architecture and plans; commit locally and clean owned resources.
 
@@ -66,7 +66,7 @@ Use focused backend tests with a named scratch database, `npm run build`, `npm r
 | Exclusive worker ownership and native package binding | Retained to prevent concurrent workers or app switches from misdirecting a pending private submission. |
 | Session/window/node/geometry checks and ten-minute refs | Retained to reject changed selections while private input is pending. Fresh inspection restores operation. |
 | Editable action requirement | Retained because private entry needs a supported value-setting primitive without keyboard/clipboard exposure. |
-| Masked text/screenshots and full WebView mask | Retained to keep submitted values out of model observations. Full WebView masking limits visual navigation; sanitized accessible elements remain available. Finer masking is separate work requiring evidence. |
+| Screenshot masks | Removed at user request, including fields, WebViews and other windows. Agent images and private-entry previews show visible screen content. Structured editable values remain omitted. |
 | Helper authentication, bounded transport and value lengths | Retained for a private credential channel and bounded resource use; no per-app policy remains. |
 | No retry after uncertain/partial fill | Retained to prevent duplicate secret dispatch. Read-only capture may retry. |
 | Transient OTP, cancellation, late submission checks | Retained from shared private-entry behavior. |
@@ -78,3 +78,5 @@ Connected-device proof passes native and WebView username/password/OTP fills, Un
 
 
 Cleanup verified: scratch databases, fixture app and copied scripts/images were removed; USB stay-awake was restored to 15. The idle helper forward was removed by exact identity. Masked local proof images (72 KB) remain as evidence. No disposable task images remain; active dev images (~7.5 GB total Docker image storage), persistent volumes and shared build cache (~14.0 GB) are retained. Existing Mobile MCP forwards are outside task ownership.
+
+Screenshot-mask removal is implemented in source and awaits deployment at user request. Earlier device validation above covers the previously deployed masked implementation; this follow-up passed a compile-only helper build, backend build/lint and script syntax checks, with no phone installation or service restart. The cache-only build created no images or containers; shared build cache is retained (~14.04 GB total, ~20 MB added).

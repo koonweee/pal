@@ -38,17 +38,17 @@ try {
       if (i === 0) {
         const selectedPassword = await helper.call({ action: 'fill', ...target, fields: [{ ref: input.ref, role: 'password', value: secret[1] }] });
         assert.equal(selectedPassword.status, 'filled', 'Model-selected password role works without password metadata');
-        const masked = await inspect();
-        for (const value of secret) assert(!JSON.stringify(masked).includes(value), 'Non-password input remains private');
-        target.fields[0].ref = masked.inputs[0].ref;
+        const inspected = await inspect();
+        for (const value of secret) assert(!JSON.stringify(inspected).includes(value), 'Non-password value omitted from metadata');
+        target.fields[0].ref = inspected.inputs[0].ref;
       }
       const filled = await helper.call({ action: 'fill', ...target });
       assert.equal(filled.status, 'filled', 'Direct native field fill');
       console.log('Direct fill completed');
       const after = await inspect('observe');
-      assert.equal(after.status, 'ready', 'Masked observation after filling');
-      for (const value of secret) assert(!JSON.stringify(after).includes(value), 'No value in observation');
-      const image = directory + '/masked-' + (activity === 'Fixture' ? '' : 'web-') + role + '.png';
+      assert.equal(after.status, 'ready', 'Observation after filling');
+      for (const value of secret) assert(!JSON.stringify(after).includes(value), 'No value in structured observation');
+      const image = directory + '/preview-' + (activity === 'Fixture' ? '' : 'web-') + role + '.png';
       await writeFile(image, Buffer.from(after.image, 'base64')); images.push(image);
       const next = after.elements.find((e) => e.text.toLowerCase() === (role === 'code' ? 'verify' : 'continue'));
       assert(next, 'Continue control');
@@ -81,5 +81,5 @@ try {
   await sleep(500);
   const settings = await inspect();
   assert.equal(settings.identity.packageName, 'com.android.settings', 'Helper reconnects after Mobile MCP');
-  console.log(JSON.stringify({ status: 'passed', directFill: ['username', 'password', 'code'], webView: true, unicode: true, roleMetadataIsHint: true, staleGate: true, mcpHandoff: true, maskedImages: images }));
+  console.log(JSON.stringify({ status: 'passed', directFill: ['username', 'password', 'code'], webView: true, unicode: true, roleMetadataIsHint: true, staleGate: true, mcpHandoff: true, previewImages: images }));
 } finally { await helper.close(); }

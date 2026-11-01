@@ -184,7 +184,7 @@ export class AndroidService implements OnApplicationShutdown {
           });
           if (snapshot.status !== 'ready')
             throw new Error(
-              'Android masked observation unavailable. Inspect after the screen settles.',
+              'Android observation unavailable. Inspect after the screen settles.',
             );
           if (action === 'android_inspect')
             return {
@@ -245,7 +245,7 @@ export class AndroidService implements OnApplicationShutdown {
             );
           if (action === 'android_apps' || action === 'android_foreground_app')
             return result;
-          // UI state must come only from the native masked observation path.
+          // UI state must come only from the native observation path.
           return {
             content: [
               { type: 'text' as const, text: '{"status":"completed"}' },

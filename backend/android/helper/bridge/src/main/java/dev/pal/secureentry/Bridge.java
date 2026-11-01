@@ -4,9 +4,6 @@ import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Instrumentation;
 import android.app.UiAutomation;
 import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.Paint;
 import android.graphics.Rect;
 import android.net.LocalServerSocket;
 import android.net.LocalSocket;
@@ -29,9 +26,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -231,23 +226,11 @@ public final class Bridge extends Instrumentation {
             JSONObject identity = identity(app);
             JSONArray fields = new JSONArray();
             JSONArray elements = new JSONArray();
-            List<Rect> masks = new ArrayList<>();
             phase = "walk";
-            walk(root, root, false, false, bind, window, fields, elements, masks, 0);
-            List<AccessibilityWindowInfo> all = automation.getWindows();
-            for (AccessibilityWindowInfo item : all) {
-                if (item.getId() != root.getWindowId()) {
-                    Rect rect = new Rect(); item.getBoundsInScreen(rect); masks.add(rect);
-                }
-                item.recycle();
-            }
+            walk(root, root, false, bind, window, fields, elements, 0);
             phase = "screenshot";
             bitmap = automation.takeScreenshot();
             if (bitmap == null) throw new IllegalStateException();
-            if (!bitmap.isMutable()) { Bitmap mutable = bitmap.copy(Bitmap.Config.ARGB_8888, true); bitmap.recycle(); bitmap = mutable; }
-            Canvas canvas = new Canvas(bitmap);
-            Paint paint = new Paint(); paint.setColor(Color.rgb(51, 65, 85));
-            for (Rect rect : masks) { Rect padded = new Rect(rect); padded.inset(-4, -4); canvas.drawRect(padded, paint); }
             phase = "fence";
             if (version != events.get() || window != windows.get() || !root.refresh()) throw new IllegalStateException();
             int width = bitmap.getWidth(), height = bitmap.getHeight();
@@ -261,14 +244,12 @@ public final class Bridge extends Instrumentation {
         } finally { root.recycle(); if (bitmap != null) bitmap.recycle(); }
     }
 
-    private void walk(AccessibilityNodeInfo node, AccessibilityNodeInfo root, boolean inWeb, boolean inSensitive, boolean bind, long window, JSONArray fields, JSONArray elements, List<Rect> masks, int depth) throws Exception {
+    private void walk(AccessibilityNodeInfo node, AccessibilityNodeInfo root, boolean inSensitive, boolean bind, long window, JSONArray fields, JSONArray elements, int depth) throws Exception {
         if (depth > 60 || elements.length() > 3000) throw new IllegalStateException();
-        boolean web = inWeb || string(node.getClassName()).contains("WebView");
         boolean sensitive = node.isEditable() || node.isPassword() || node.getInputType() != 0 || string(node.getClassName()).contains("EditText");
         boolean privateField = inSensitive || sensitive;
         Rect rect = bounds(node);
         if (node.isVisibleToUser() && !rect.isEmpty()) {
-            if (privateField || (web && !inWeb)) masks.add(rect);
             String ref = "@a" + targets.size() + "-" + nonce();
             targets.put(ref, new Bound(node, root, window));
             String label = privateField ? string(node.getHintText()) : node.getChildCount() == 0 ? string(node.getContentDescription()) : "";
@@ -282,7 +263,7 @@ public final class Bridge extends Instrumentation {
         }
         for (int i = 0; i < node.getChildCount(); i++) {
             AccessibilityNodeInfo child = node.getChild(i);
-            if (child != null) { try { walk(child, root, web, privateField, bind, window, fields, elements, masks, depth + 1); } finally { child.recycle(); } }
+            if (child != null) { try { walk(child, root, privateField, bind, window, fields, elements, depth + 1); } finally { child.recycle(); } }
         }
     }
 
