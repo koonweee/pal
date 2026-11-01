@@ -13,7 +13,17 @@ Measure when Pal should prefer Android apps, browser automation or desktop compu
 - Task owns coordination and delegates UI work to an interaction worker. Current shared guidance prefers service tools/APIs, then suitable Android apps for UI workflows, with browser/computer available as appropriate. See `backend/src/agent/instructions/interaction-methods.md`.
 - The interaction worker uses `gpt-6.1-terra` at medium effort; Task uses `gpt-6.1-sol` at medium effort. Android controls are configured through the development sidecar; detailed procedures load on demand.
 - [Existing benchmark infrastructure](../backend/scripts/browser-benchmark/README.md) already measures Task/Worker timing, usage, boundaries and fixture results. [Cua comparison findings](cua-driver-comparison.md) identify evidence-loss and interpretation limits to avoid repeating.
-- Android private filling passes new private-entry and saved-login fixture journeys with OTP. Ordinary observations are masked; WebView screenshots are fully masked, so Android Chrome visual verification is unavailable through that path. Preflight identifies account setup, Amazon’s permission screen as remaining live-login prerequisites. Native login surfaces still require verification after setup. Installed apps require no trust mapping; see [secure-fill simplification](android-secure-fill-simplification.md). Existing acceptance evidence does not establish live-app fill capability or benchmark results.
+- Android private filling passes native/WebView acceptance and saved-login fixture journeys with OTP. Ordinary interaction uses Mobile MCP with unmasked observations. Installed apps require no trust registration. Signed-in Amazon retrieval passes the navigation follow-up; see the results report. Live login trials and matched warm-session collection remain separate work.
+
+## Login-first protocol amendment
+
+The user requests all interactive login work before hands-off retrieval. Prepare Amazon and Facebook, then Apple Store last within the assisted setup phase. For a fair login comparison, observe one signed-out login per assigned method using actual private filling; normal UI sign-outs are authorized. Browser and computer share the persistent execution-browser profile, so sign out between their login trials and retain the final authenticated session. Android uses its own app session. Preserve app data and saved credentials.
+
+Record login starting state, method, fill stages, authenticated destination, challenges and user waits separately from retrieval. The initial Amazon browser setup is a normal dev PWA task (`f9f9742e-1e1a-4682-b4f4-cfb86391008a`); it is setup evidence, outside the frozen benchmark dataset. Do not silently pool it with method-inventory-enforced samples.
+
+After setup, run three warm-session retrieval repetitions per method for Amazon products/orders and Facebook event details; Apple uses browser/computer only. Confirm the Facebook event and intended Apple Store URL before those flows. Unexpected reauthentication is queued after independent retrieval work. Fresh-login repetition counts and the old 27-sample assisted manifest are superseded by this split; update the runner/manifest before collecting scored warm-session results. Login trials and warm retrieval must retain separate outcomes.
+
+Current state: Amazon Android is authenticated; Amazon browser setup is in progress in the dev PWA. Facebook and Apple readiness remain to be checked. Current Android navigation uses upstream unmasked observations and the private-fill helper, with no installed-app trust registry. The original preflight and matrix below describe the historical collection.
 
 ## Comparison Protocol
 
