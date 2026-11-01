@@ -5,8 +5,9 @@
   width: min(460px, 100%);
   height: calc(var(--pal-viewport-height, 100dvh) * 0.96);
 }
-.desktop-sheet.phone-sheet > .phone-body {
+.desktop-sheet.phone-sheet > .desktop-body.phone-body {
   height: auto !important;
+  padding: 0 6px max(4px, var(--pal-effective-safe-area-bottom));
 }
 .phone-body {
   flex: 1;
@@ -34,7 +35,17 @@
 .phone-navigation {
   display: flex;
   justify-content: space-around;
-  padding-top: 6px;
+  flex: 0 0 26px;
+  gap: 4px;
+}
+.phone-navigation .pal-icon-action {
+  flex: 1;
+  height: 26px;
+  min-height: 26px;
+}
+.phone-navigation svg {
+  width: 14px;
+  height: 14px;
 }
 .phone-status {
   position: absolute;
