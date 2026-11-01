@@ -1,3 +1,4 @@
+import { compactWorkerResultProcessor } from './compact-worker-result.processor.js';
 import { createMemoryOptions } from './memory-options.js';
 import { loadAgentInstructions } from './agent-instructions.js';
 import { agentSkillPaths } from './agent-skills.js';
@@ -335,7 +336,10 @@ export async function createMainSession(options: {
           inputProcessors: options.task.inputProcessors,
           workspace: taskWorkspace,
           maxProcessorRetries: 1,
-          outputProcessors: [publishTextProcessor(options.task.publish)],
+          outputProcessors: [
+            compactWorkerResultProcessor,
+            publishTextProcessor(options.task.publish),
+          ],
         })
       : undefined;
     if (taskAgent) mastra.addAgent(taskAgent);

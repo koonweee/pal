@@ -15,6 +15,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Compact worker results](compact-worker-results.md) | Done | Compact Task delegation results while retaining worker history. |
 | [Android keyboard policy](android-keyboard.md) | Done | Suppress the Android IME and provide an explicit PWA client-keyboard toggle. |
 | [Android phone viewer](android-phone-viewer.md) | Done | Live scrcpy phone drawer and touch control in the development PWA. |
 | [Computer-first interaction](computer-first-interaction.md) | Complete | Remove browser tools, bind visual navigation to private fill, and deploy the reviewed release. |

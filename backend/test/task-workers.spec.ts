@@ -188,7 +188,10 @@ it('runs native workers concurrently with per-task limits, private output, and f
                 });
                 try {
                   await Promise.race([gates[taskId].promise, aborted.promise]);
-                  return { branch };
+                  return {
+                    branch,
+                    screenshot: 'worker-image-sentinel'.repeat(4096),
+                  };
                 } finally {
                   context?.abortSignal?.removeEventListener('abort', abort);
                 }
@@ -234,6 +237,36 @@ it('runs native workers concurrently with per-task limits, private output, and f
     gates.beta.resolve();
     await Promise.all([alpha.getFullOutput(), beta.getFullOutput()]);
     expect(cleaned).toHaveLength(4);
+    const betaResults = await beta.toolResults;
+    const delegationResult = betaResults.find(
+      (part) => part.payload.toolName === 'agent-worker',
+    )?.payload.result;
+    expect(delegationResult).toMatchObject({
+      text: 'private finding beta-1',
+      subAgentThreadId: expect.any(String),
+      subAgentResourceId: MAIN_RESOURCE_ID + '-worker',
+    });
+    expect(delegationResult).not.toHaveProperty('subAgentToolResults');
+    const inspection = new Pool({ connectionString: databaseUrl });
+    try {
+      const { rows } = await inspection.query(
+        `SELECT thread_id, content FROM "${schema}".mastra_messages
+         WHERE thread_id LIKE 'pal-task:beta%'`,
+      );
+      const parent = JSON.stringify(
+        rows.filter((row) => row.thread_id === 'pal-task:beta'),
+      );
+      const worker = JSON.stringify(
+        rows.filter((row) => row.thread_id !== 'pal-task:beta'),
+      );
+      expect(parent).toContain('private finding beta-1');
+      expect(parent).not.toContain('subAgentToolResults');
+      expect(parent).not.toContain('worker-image-sentinel');
+      expect(worker).toContain('worker-image-sentinel');
+    } finally {
+      await inspection.end();
+    }
+
     expect(workerModel.doStreamCalls.length).toBeGreaterThan(0);
     expect(
       parentResults.some((result) => result.includes('three active workers')),
