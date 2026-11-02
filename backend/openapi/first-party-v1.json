@@ -98,6 +98,12 @@
             },
             "type": "array"
           },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/InteractionResourceResponseDto"
+            },
+            "type": "array"
+          },
           "revision": {
             "minimum": 0,
             "type": "number"
@@ -373,6 +379,37 @@
         },
         "required": [
           "event"
+        ],
+        "type": "object"
+      },
+      "InteractionResourceResponseDto": {
+        "properties": {
+          "ownerTaskId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "resource": {
+            "enum": [
+              "desktop",
+              "android"
+            ],
+            "type": "string"
+          },
+          "unavailable": {
+            "type": "boolean"
+          },
+          "waitingTaskIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "resource",
+          "ownerTaskId",
+          "waitingTaskIds",
+          "unavailable"
         ],
         "type": "object"
       },

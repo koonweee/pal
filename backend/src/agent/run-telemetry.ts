@@ -60,6 +60,8 @@ const metadataKeys = [
   'palParentTaskId',
   'palWorkerId',
   'palParentRunId',
+  'executionId',
+  'resource',
 ];
 const countKeys = [
   'durationMs',
@@ -92,6 +94,10 @@ const palEvents = new Set([
   'pal.publication.failed',
   'pal.output.fallback',
   'pal.schedule.failed',
+  'pal.interaction.queued',
+  'pal.interaction.acquired',
+  'pal.interaction.released',
+  'pal.interaction.unavailable',
 ]);
 
 function object(value: unknown): Record<string, unknown> {

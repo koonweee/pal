@@ -1,4 +1,5 @@
-import type { BrowserService } from '../browser/browser.service.js';
+import type { SharedBrowserService } from '../browser/shared-browser.service.js';
+import type { InteractionCoordinator } from '../interaction/interaction-coordinator.js';
 import type { AndroidService } from '../android/android.service.js';
 import { ApplicationError } from '../application/contracts/errors.js';
 import { LoginBrowser } from './login-browser.js';
@@ -16,8 +17,9 @@ export class LoginDestinations {
   private readonly web = new LoginBrowser();
   private readonly android: LoginAndroid;
   constructor(
-    private readonly browser: BrowserService,
+    private readonly browser: SharedBrowserService,
     android: AndroidService,
+    private readonly coordinator: InteractionCoordinator,
   ) {
     this.android = new LoginAndroid(android);
   }
@@ -27,14 +29,32 @@ export class LoginDestinations {
     surface: 'browser' | 'android',
     website?: string,
   ) {
-    if (surface === 'android')
-      return this.android.inspect(taskId, workerId, website);
-    const page = await this.browser.selectedPage(taskId, workerId);
-    return {
-      ...(await this.web.inspect(page, loginOwner(taskId, workerId))),
-      origin: new URL(page.url()).origin,
-      destination: { kind: 'browser' } as SecureDestination,
-    };
+    return this.coordinator.forSession(
+      surface === 'android' ? 'android' : 'desktop',
+      { taskId, workerId: workerId ?? 'task' },
+      async () => {
+        if (surface === 'android')
+          return this.android.inspect(taskId, workerId, website);
+        const page = await this.browser.selectedPage(taskId, workerId, true);
+        return {
+          ...(await this.web.inspect(page, loginOwner(taskId, workerId))),
+          origin: new URL(page.url()).origin,
+          destination: { kind: 'browser' } as SecureDestination,
+        };
+      },
+    );
+  }
+  withFields<T>(
+    taskId: string,
+    workerId: string | undefined,
+    fields: SecureFields,
+    operation: () => Promise<T>,
+  ) {
+    return this.coordinator.forSession(
+      this.native(fields) ? 'android' : 'desktop',
+      { taskId, workerId: workerId ?? 'task' },
+      operation,
+    );
   }
   native(fields: SecureFields) {
     const refs = selectedFields(fields).map(([, ref]) => this.android.has(ref));
@@ -65,21 +85,23 @@ export class LoginDestinations {
     workerId: string | undefined,
     fields: SecureFields,
   ) {
-    if (this.native(fields))
-      return this.android.select(taskId, workerId, fields);
-    const page = await this.browser.selectedPage(taskId, workerId);
-    const { origin, url, roles, inspectionId } = await this.web.select(
-      page,
-      loginOwner(taskId, workerId),
-      fields,
-    );
-    return {
-      origin,
-      url,
-      roles,
-      inspectionId,
-      destination: { kind: 'browser' } as SecureDestination,
-    };
+    return this.withFields(taskId, workerId, fields, async () => {
+      if (this.native(fields))
+        return this.android.select(taskId, workerId, fields);
+      const page = await this.browser.selectedPage(taskId, workerId);
+      const { origin, url, roles, inspectionId } = await this.web.select(
+        page,
+        loginOwner(taskId, workerId),
+        fields,
+      );
+      return {
+        origin,
+        url,
+        roles,
+        inspectionId,
+        destination: { kind: 'browser' } as SecureDestination,
+      };
+    });
   }
   async fill(
     taskId: string,
@@ -87,13 +109,15 @@ export class LoginDestinations {
     fields: SecureFields,
     values: SecureValues,
   ) {
-    if (this.native(fields))
-      return this.android.fill(taskId, workerId, fields, values);
-    return this.web.fill(
-      await this.browser.selectedPage(taskId, workerId),
-      loginOwner(taskId, workerId),
-      fields,
-      values,
-    );
+    return this.withFields(taskId, workerId, fields, async () => {
+      if (this.native(fields))
+        return this.android.fill(taskId, workerId, fields, values);
+      return this.web.fill(
+        await this.browser.selectedPage(taskId, workerId),
+        loginOwner(taskId, workerId),
+        fields,
+        values,
+      );
+    });
   }
 }

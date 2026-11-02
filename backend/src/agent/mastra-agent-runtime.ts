@@ -45,7 +45,8 @@ import { AgentActivityService } from './agent-activity.service.js';
 import { TaskToolDiscoveryProcessor } from './task-tool-discovery.processor.js';
 import { CodeModeProcessor } from './code-mode.processor.js';
 import { chatgptModel } from './chatgpt-model.js';
-import { BrowserService } from '../browser/browser.service.js';
+import { SharedBrowserService as BrowserService } from '../browser/shared-browser.service.js';
+import { InteractionCoordinator } from '../interaction/interaction-coordinator.js';
 import { PreferencesService } from '../preferences/preferences.service.js';
 import { InstanceSettingsService } from '../instance-settings/instance-settings.service.js';
 import {
@@ -54,7 +55,7 @@ import {
   preferenceWriteTool,
   taskPreferenceActor,
 } from '../preferences/preference-tools.js';
-import { ComputerSessionProcessor } from './computer-session.processor.js';
+import { InteractionToolsProcessor } from './interaction-tools.processor.js';
 import { ExecutionService } from '../execution/execution.service.js';
 import { X11Computer } from './x11-computer.js';
 import { createMainSession, MAIN_RESOURCE_ID } from './main-session.js';
@@ -115,16 +116,20 @@ export class MastraAgentRuntime
     @Inject(InstanceSettingsService)
     private readonly instanceSettings: InstanceSettingsService,
     @Inject(ExecutionService) private readonly execution: ExecutionService,
+    @Inject(InteractionCoordinator)
+    private readonly interactions: InteractionCoordinator = android.coordinator,
   ) {}
 
   async onModuleInit() {
+    this.interactions.events.subscribe(({ event, ...data }) =>
+      this.main?.telemetry.record(
+        'pal.interaction.' + event,
+        data,
+        event === 'unavailable',
+      ),
+    );
     this.login.bindNotifier((taskId, text) =>
       this.sendTask(taskId, text, false),
-    );
-    this.browser.bindActiveTasks(() =>
-      (this.main?.taskAgent?.listActiveThreadRuns() ?? [])
-        .filter((run) => run.threadId.startsWith(TASK_THREAD_PREFIX))
-        .map((run) => taskIdFromThread(run.threadId)),
     );
     this.admission.bind(
       () =>
@@ -165,6 +170,7 @@ export class MastraAgentRuntime
         ? new X11Computer(
             this.execution,
             this.config.get<string>('PAL_DESKTOP_VIEWER_URL'),
+            () => this.interactions.unavailable('desktop'),
           )
         : undefined,
       model: chatgptModel(
@@ -261,6 +267,7 @@ export class MastraAgentRuntime
           new TaskToolDiscoveryProcessor(() => this.mcp.tools()),
         ],
         worker: {
+          coordinator: this.interactions,
           model: chatgptModel(
             'gpt-6.1-terra',
             this.config.getOrThrow<string>('PAL_AGENT_AUTH_PATH'),
@@ -282,8 +289,10 @@ export class MastraAgentRuntime
             ...loginTools(this.login),
           }),
           inputProcessors: [
-            new ComputerSessionProcessor(this.browser, (taskId, workerId) =>
-              this.login.activateSurface(taskId, workerId, 'browser'),
+            new InteractionToolsProcessor(
+              this.interactions,
+              (taskId, workerId, surface) =>
+                this.login.activateSurface(taskId, workerId, surface),
             ),
             new CodeModeProcessor(),
           ],
@@ -291,18 +300,13 @@ export class MastraAgentRuntime
             this.login.resumeWorker(taskId, assignment),
           cleanup: async (taskId, workerId, completed, startedAt) => {
             this.login.clearSurface(taskId, workerId);
-            this.browser.releaseComputer(taskId, workerId);
-            const retain = await this.login
-              .retainWorkerSession(taskId, workerId, completed, startedAt)
+            const retainTarget = await this.login
+              .finishWorker(taskId, workerId, completed, startedAt)
               .catch((error: unknown) => {
                 this.logger.warn(error);
                 return false;
               });
-            await this.android.release(taskId, workerId, retain);
-            if (retain) return;
-            await this.browser
-              .closeSession(taskId, workerId)
-              .catch((error: unknown) => this.logger.warn(error));
+            if (!retainTarget) this.browser.releaseTarget(taskId, workerId);
           },
         },
         publish: (output, context) => this.publishTask(output, context),
@@ -906,6 +910,7 @@ export class MastraAgentRuntime
     await stopping;
     await Promise.all(this.taskRuns);
     await this.main?.close();
+    await this.interactions.shutdown();
     await this.browser.shutdown();
     await Promise.all(this.publications);
     this.activity.reset();

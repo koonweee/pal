@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress. Shared coordination and execution lifecycle are being implemented.
+In Progress. Implementation and automated validation are complete; physical-device development acceptance and final removal review are underway.
 
 ## Goal
 
@@ -12,14 +12,12 @@ Implementation and acceptance are authorized in development. Production deployme
 
 ## Current Behavior
 
-- [ComputerSessionProcessor](../backend/src/agent/computer-session.processor.ts) wraps computer tools with BrowserService ownership checks. Competing workers receive a busy error; calls do not wait.
-- [BrowserService](../backend/src/browser/browser.service.ts) combines desktop ownership, browser setup, task groups, pinned CLI sessions, private-entry page resolution, and tab cleanup. It closes tabs on worker completion, task completion/archive, 15-minute inactivity, and service shutdown.
-- [Worker lifecycle wiring](../backend/src/agent/mastra-agent-runtime.ts) releases desktop ownership before closing worker tabs, allowing cleanup to overlap a later owner.
-- [AndroidService](../backend/src/android/android.service.ts) independently owns reservation, serialization, and helper handoffs. It rejects other workers and can retain ownership for ten minutes while private entry awaits the user.
-- [Delegation hooks](../backend/src/agent/task-workers.ts) track worker assignments and support resuming a private-entry session with the same worker identity. That session identity must not also identify a new execution's resource grant.
-- [Private entry](../backend/src/login/login-destinations.ts) resolves browser pages through group/session ownership. Browser inspection brings pages to the foreground outside the computer guard. Android private refs depend on helper generation and live screen state.
-- Task model requests have explicit timeout settings; interaction workers do not configure equivalent bounds. The X11 adapter does not currently forward per-call cancellation to its subprocess calls.
-- General browser automation remains in production source and dependencies for internal fallback, smoke scripts, and historical benchmarks despite its removal from the worker tool inventory.
+- [InteractionCoordinator](../backend/src/interaction/interaction-coordinator.ts) owns independent desktop and Android FIFO queues, execution binding, operation draining, cancellation and admission fencing.
+- [InteractionToolsProcessor](../backend/src/agent/interaction-tools.processor.ts) coordinates existing device/private tools using trusted execution identity. Lifecycle hooks finalize workers and parent runs.
+- [SharedBrowserService](../backend/src/browser/shared-browser.service.ts) connects the persistent browser and resolves active or retained private-entry targets. Its small extension resolves active Chrome targets; neither component manages task tabs or groups.
+- [AndroidService](../backend/src/android/android.service.ts) retains connection and helper-generation mechanics. Device admission belongs to the shared coordinator.
+- Private-entry submissions take fresh FIFO turns and validate retained targets. Native refs remain subject to screen/helper-generation checks.
+- Worker guidance requires cleanup and on-screen verification before return; Task assigns deferred cleanup and fresh-device fallback.
 
 ## Agreed Behavior
 
@@ -45,9 +43,10 @@ Implementation and acceptance are authorized in development. Production deployme
 
 Implementation progress:
 
-- Shared coordinator foundation and native delegation lifecycle integration implemented. Three focused coordinator tests and the PostgreSQL-backed native worker lifecycle journey pass (four tests total); backend build and type-aware lint/boundary checks pass.
-- Native worker validation covers concurrent delegation, queued calls, failure, parent cancellation, and a resumed session receiving a fresh execution identity. Model response deadlines use Mastra's existing model-stream timeout boundary.
-- Device adapters, transport settlement, private entry, activity, cleanup removal, and development evaluation remain outstanding. Production runtime has not been switched to the new coordinator yet.
+- Milestones 1–4 implemented: shared coordination, adapter/private-entry migration, lifecycle settlement, activity contracts/UI, guidance and architecture. The direct agent-browser dependency, legacy ownership modules, tab management and obsolete executable benchmarks are removed.
+- Automated validation covers FIFO, native worker lifecycle, cancellation/draining, one-device binding, bound browser targets, external private submissions, Android readiness recovery and activity. Backend service suite: 91 passing before the additional readiness regression; focused Android suite: 2 passing. E2E: 42 passing before the lifecycle method rename; the affected login suite passes all 8 tests after its test call was updated. Frontend unit suite: 40 passing; focused Playwright activity test passes. Build, lint, generated contracts, frontend type/ownership checks and unused-code checks pass.
+- Dev desktop adapter acceptance passes: ten queued turns followed by a direct request, retained private entry after an intervening task, preserved existing tabs and exact fixture cleanup. Real Task→Worker contention passes on repeat; an initial cleanup omission motivated explicit on-screen cleanup verification guidance. Physical Android acceptance and a repeat with the strengthened guidance remain.
+- Production is unchanged. Detailed development measurements and final acceptance results belong in the evaluation report.
 
 ### 1. Shared queue and execution lifecycle
 
@@ -147,7 +146,7 @@ Use one parameterized coordinator suite and focused adapter/private-entry regres
 
 ## Validation Commands
 
-Run focused suites during milestones, then the affected full backend suites for development acceptance. Add a bounded `interaction-resources:smoke` command for native queue/device acceptance; it does not exist yet.
+Run focused suites during milestones, then the affected full backend suites for development acceptance. `interaction-resources:smoke` exercises deterministic device admission/private-target behavior; `interaction-native-smoke.mjs` separately evaluates real Task→Worker computer turns.
 
 ```bash
 cd backend

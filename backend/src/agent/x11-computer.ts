@@ -34,16 +34,50 @@ const aliases: Record<string, string> = {
 
 export class X11Computer implements SandboxComputer {
   constructor(
-    private readonly execution: Pick<ExecutionService, 'output'>,
+    private readonly execution: Pick<ExecutionService, 'run'>,
     private readonly viewerUrl?: string,
+    private readonly uncertain?: () => void,
   ) {}
 
-  private run(
+  private async run(
     command: string,
     args: string[],
     input?: string,
   ): Promise<Buffer> {
-    return this.execution.output(command, args, { input });
+    // Drain dispatched subprocesses even when the worker is cancelled. The
+    // coordinator holds the turn until this bounded operation settles.
+    let result;
+    try {
+      // Keep settlement local to execution even if the backend dies. Inherited
+      // flock ownership survives the client; timeout bounds orphaned input.
+      result = await this.execution.run(
+        'flock',
+        [
+          '--exclusive',
+          '--wait',
+          '35',
+          '/home/pal/tmp/pal-desktop-input.lock',
+          'timeout',
+          '--kill-after=2s',
+          '30s',
+          command,
+          ...args,
+        ],
+        { input, timeout: 70_000 },
+      );
+    } catch (error) {
+      this.uncertain?.();
+      throw error;
+    }
+    if (
+      result.timedOut ||
+      result.killed ||
+      [124, 137].includes(result.exitCode)
+    )
+      this.uncertain?.();
+    if (!result.success)
+      throw new Error('Desktop operation failed or could not be confirmed');
+    return Buffer.from(result.stdout);
   }
 
   private xdo(...args: string[]) {

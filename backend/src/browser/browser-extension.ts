@@ -141,6 +141,6 @@ export async function extensionRequest<T>(
 function isExtension(url: string) {
   return (
     url.startsWith('chrome-extension://') &&
-    /\/pal-task-groups(?:\.[a-f0-9]{16})?\.js$/.test(url)
+    /\/pal-browser(?:\.[a-f0-9]{16})?\.js$/.test(url)
   );
 }

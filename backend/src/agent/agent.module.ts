@@ -11,8 +11,10 @@ import { InstanceSettingsModule } from '../instance-settings/instance-settings.m
 import { AGENT_RUNTIME } from './agent-runtime.js';
 import { MastraAgentRuntime } from './mastra-agent-runtime.js';
 import { AgentActivityService } from './agent-activity.service.js';
+import { InteractionModule } from '../interaction/interaction.module.js';
 @Module({
   imports: [
+    InteractionModule,
     DeliveryModule,
     BrowserModule,
     AndroidModule,

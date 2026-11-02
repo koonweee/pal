@@ -1,6 +1,6 @@
 ---
 name: android-interaction
-description: Operate Android apps through the configured phone, inspect screens, navigate, type ordinary text, and recover from busy, disconnected, or login-required states.
+description: Operate Android apps through the configured phone, inspect screens, navigate, type ordinary text, and recover from disconnected or login-required states.
 ---
 # Android interaction
 
@@ -14,7 +14,7 @@ When expected content is absent from inspection, take android_screenshot of that
 
 Host code binds one phone and reserves it for your assignment. A busy result means another worker owns it; return the blocker to Task. After a disconnect or uncertain action, inspect fresh state before deciding whether to retry. Do not assume an action failed merely because its response was lost.
 
-For authentication, load website-authentication for the shared private-entry procedure. Navigate to the native form with Android tools, then call inspect_private_fields with the service's HTTPS account origin. Host code uses the active Android surface and fills inspected nodes privately. Private-field refs are separate from ordinary screen refs. Returning to ordinary tools invalidates them. Yield on awaiting_user; the host reserves the phone for up to ten minutes. On continuation inspect current state before acting. Never enter credentials or codes through android_type.
+For authentication, load website-authentication for the shared private-entry procedure. Navigate to the native form with Android tools, then call inspect_private_fields with the service's HTTPS account origin. Host code uses the active Android surface and fills inspected nodes privately. Private-field refs are separate from ordinary screen refs. Returning to ordinary tools invalidates them. Follow the shared secure-entry continuation policy. Never enter credentials or codes through android_type.
 
 Private payment entry, device unlock, biometrics and unsupported login destinations require a manual phone handoff to Task. Finish that assignment to release ownership. Preserve the user's app data and existing sessions.
 

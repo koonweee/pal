@@ -5,6 +5,7 @@ import {
   type OnApplicationShutdown,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InteractionCoordinator } from '../interaction/interaction-coordinator.js';
 import type { NativeStatus } from './android-native.js';
 import {
   Client,
@@ -28,19 +29,12 @@ export const androidActions = {
 } as const;
 export type AndroidAction = keyof typeof androidActions;
 export type AndroidOwner = { taskId: string; workerId: string };
-type Owner = AndroidOwner & {
-  pending: Promise<void>;
-  closing: boolean;
-  expiry?: ReturnType<typeof setTimeout>;
-  releasing?: Promise<void>;
-};
 
 @Injectable()
 export class AndroidService implements OnApplicationShutdown {
   private readonly logger = new Logger(AndroidService.name);
   private client?: Client;
   private connecting?: Promise<Client>;
-  private owner?: Owner;
   private closing = false;
   private nativeGeneration = 0;
   // Clear an orphaned private session once, then switch only at private boundaries.
@@ -49,7 +43,11 @@ export class AndroidService implements OnApplicationShutdown {
   private readonly token?: string;
   private readonly device?: string;
 
-  constructor(@Inject(ConfigService) config: ConfigService) {
+  constructor(
+    @Inject(ConfigService) config: ConfigService,
+    @Inject(InteractionCoordinator)
+    readonly coordinator: InteractionCoordinator = new InteractionCoordinator(),
+  ) {
     this.endpoint = config.get<string>('PAL_ANDROID_MCP_URL') || undefined;
     this.token = config.get<string>('PAL_ANDROID_MCP_TOKEN');
     this.device = config.get<string>('PAL_ANDROID_DEVICE_ID');
@@ -112,12 +110,10 @@ export class AndroidService implements OnApplicationShutdown {
   }
 
   owns(taskId: string, workerId: string) {
-    return (
-      !!this.owner &&
-      !this.owner.closing &&
-      this.owner.taskId === taskId &&
-      this.owner.workerId === workerId
-    );
+    const owner = this.coordinator
+      .snapshot()
+      .find((entry) => entry.resource === 'android')?.owner;
+    return owner?.taskId === taskId && owner.workerId === workerId;
   }
 
   private async withPhone<T>(
@@ -130,31 +126,7 @@ export class AndroidService implements OnApplicationShutdown {
     if (!identity.taskId || !identity.workerId)
       throw new Error('Android tools require an interaction worker.');
     signal?.throwIfAborted();
-    if (
-      this.owner &&
-      (this.owner.workerId !== identity.workerId ||
-        this.owner.taskId !== identity.taskId ||
-        this.owner.closing)
-    )
-      throw new Error(
-        'The Android phone is busy with another workflow. Wait for that worker to finish.',
-      );
-    const owner = (this.owner ??= {
-      ...identity,
-      pending: Promise.resolve(),
-      closing: false,
-    });
-    if (owner.expiry) this.retain(owner);
-    const operation = owner.pending.then(async () => {
-      signal?.throwIfAborted();
-      // Once dispatched, settle before cleanup; mutations are never retried.
-      return work();
-    });
-    owner.pending = operation.then(
-      () => {},
-      () => {},
-    );
-    return operation;
+    return this.coordinator.forSession('android', identity, work, signal);
   }
 
   private async native<T>(input: object): Promise<T> {
@@ -175,6 +147,10 @@ export class AndroidService implements OnApplicationShutdown {
       return (await response.json()) as T;
     } catch {
       this.nativeGeneration++;
+      // Readiness/inspection failures may retry a fresh observation. Only an
+      // uncertain secret write can leave a mutation running beyond this call.
+      if ('action' in input && input.action === 'fill')
+        this.coordinator.unavailable('android');
       throw new Error(
         'Android private operation unavailable or uncertain. Inspect again; do not replay a fill.',
       );
@@ -253,6 +229,7 @@ export class AndroidService implements OnApplicationShutdown {
           );
           return result;
         } catch {
+          this.coordinator.unavailable('android');
           this.client = undefined;
           await client.close().catch(() => {});
           throw new Error(
@@ -264,41 +241,8 @@ export class AndroidService implements OnApplicationShutdown {
     );
   }
 
-  private retain(owner: Owner) {
-    if (owner.expiry) clearTimeout(owner.expiry);
-    owner.expiry = setTimeout(() => {
-      void this.release(owner.taskId, owner.workerId).catch(() => {});
-    }, 10 * 60_000);
-    owner.expiry.unref();
-  }
-
-  async release(taskId: string, workerId: string, retain = false) {
-    const owner = this.owner;
-    if (!owner || owner.taskId !== taskId || owner.workerId !== workerId)
-      return;
-    if (owner.releasing) return owner.releasing;
-    if (retain && !owner.closing) {
-      await owner.pending;
-      this.retain(owner);
-      return;
-    }
-    if (owner.expiry) clearTimeout(owner.expiry);
-    owner.closing = true;
-    const releasing = owner.pending.then(async () => {
-      await this.pause();
-      if (this.owner === owner) this.owner = undefined;
-    });
-    owner.releasing = releasing;
-    try {
-      await releasing;
-    } finally {
-      owner.releasing = undefined;
-    }
-  }
-
   async onApplicationShutdown() {
     this.closing = true;
-    if (this.owner) await this.release(this.owner.taskId, this.owner.workerId);
     const client =
       this.client ?? (await this.connecting?.catch(() => undefined));
     await client?.close();

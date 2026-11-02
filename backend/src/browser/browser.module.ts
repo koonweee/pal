@@ -1,9 +1,7 @@
 import { Module } from '@nestjs/common';
-import { TasksModule } from '../tasks/tasks.module.js';
-import { BrowserService } from './browser.service.js';
+import { SharedBrowserService } from './shared-browser.service.js';
 @Module({
-  imports: [TasksModule],
-  providers: [BrowserService],
-  exports: [BrowserService],
+  providers: [SharedBrowserService],
+  exports: [SharedBrowserService],
 })
 export class BrowserModule {}

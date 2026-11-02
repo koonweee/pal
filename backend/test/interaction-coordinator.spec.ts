@@ -6,6 +6,29 @@ const begin = (
   parent = 'parent',
 ) => coordinator.begin({ taskId: 'same-task', workerId: id }, parent);
 
+it('queues external private submissions behind existing waiters even when their session still owns the device', async () => {
+  const coordinator = new InteractionCoordinator();
+  const identity = { taskId: 'task', workerId: 'session' };
+  const original = coordinator.begin(identity, 'parent');
+  const next = begin(coordinator, 'next');
+  await coordinator.run('desktop', original, async () => {});
+  const order: string[] = [];
+  const waiting = coordinator.run('desktop', next, async () => {
+    order.push('next');
+  });
+  const submission = coordinator.forSession('desktop', identity, async () => {
+    order.push('submission');
+  });
+  expect(coordinator.snapshot()[0].waiting).toHaveLength(2);
+  await coordinator.finish(original);
+  await waiting;
+  expect(order).toEqual(['next']);
+  await coordinator.finish(next);
+  await submission;
+  expect(order).toEqual(['next', 'submission']);
+  expect(coordinator.snapshot()[0].owner).toBeNull();
+});
+
 it('admits FIFO turns, serializes owner calls, and binds each execution to one device', async () => {
   const coordinator = new InteractionCoordinator();
   const first = begin(coordinator, 'first');

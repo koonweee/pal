@@ -9,7 +9,7 @@ import { loginTools } from '../dist/login/login-tools.js';
 import type { SecureFields } from '../dist/login/login-fields.js';
 import { ChatService } from '../dist/chat/chat.service.js';
 import { chromium } from 'playwright-core';
-import { BrowserService } from '../dist/browser/browser.service.js';
+import { SharedBrowserService as BrowserService } from '../dist/browser/shared-browser.service.js';
 import { LoginService } from '../dist/login/login.service.js';
 import { EventsService } from '../dist/events/events.service.js';
 import { TasksService } from '../dist/tasks/tasks.service.js';
@@ -89,21 +89,8 @@ it('retains secure-entry sessions across fresh worker assignments and cancels in
     undefined,
     workerId,
   );
-  const groups = vi
-    .spyOn(fixture.app.get(BrowserService), 'groups')
-    .mockResolvedValue([
-      {
-        taskId: task.id,
-        groupId: 1,
-        lastActivity: Date.now(),
-        sessions: ['worker-' + workerId],
-        tabs: [],
-      },
-    ]);
   try {
-    expect(await login.retainWorkerSession(task.id, workerId, true, 0)).toBe(
-      true,
-    );
+    expect(await login.finishWorker(task.id, workerId, true, 0)).toBe(true);
     const assignment =
       'Continue secure entry request ' +
       pending.id +
@@ -113,16 +100,10 @@ it('retains secure-entry sessions across fresh worker assignments and cancels in
     expect(
       await login.resumeWorker(task.id, 'secure entry request ' + randomUUID()),
     ).toBeUndefined();
-    groups.mockResolvedValueOnce([]);
-    expect(await login.resumeWorker(task.id, assignment)).toBeUndefined();
-    expect(await login.retainWorkerSession(task.id, workerId, false, 0)).toBe(
-      false,
-    );
+    expect(await login.finishWorker(task.id, workerId, false, 0)).toBe(false);
     expect((await repository.get(pending.id)).status).toBe('cancelled');
     expect(await login.resumeWorker(task.id, assignment)).toBeUndefined();
-    expect(await login.retainWorkerSession(task.id, workerId, true, 0)).toBe(
-      false,
-    );
+    expect(await login.finishWorker(task.id, workerId, true, 0)).toBe(false);
     const submitted = await repository.request(
       task.id,
       'https://resume.example.test',
@@ -136,7 +117,7 @@ it('retains secure-entry sessions across fresh worker assignments and cancels in
       submit: async () => ({ filled: true }),
     });
     expect(
-      await login.retainWorkerSession(
+      await login.finishWorker(
         task.id,
         workerId,
         true,
@@ -144,7 +125,7 @@ it('retains secure-entry sessions across fresh worker assignments and cancels in
       ),
     ).toBe(true);
     expect(
-      await login.retainWorkerSession(
+      await login.finishWorker(
         task.id,
         workerId,
         true,
@@ -152,7 +133,6 @@ it('retains secure-entry sessions across fresh worker assignments and cancels in
       ),
     ).toBe(false);
   } finally {
-    groups.mockRestore();
   }
 });
 
@@ -1110,9 +1090,6 @@ it('inspects the selected page and fills privately without browser navigation co
   const selected = vi
     .spyOn(fixture.app.get(BrowserService), 'selectedPage')
     .mockResolvedValue(page);
-  const command = vi
-    .spyOn(fixture.app.get(BrowserService), 'command')
-    .mockRejectedValue(new Error('Unexpected browser command'));
   const vault = fixture.app.get(BitwardenService);
   const item = {
     id: randomUUID(),
@@ -1155,7 +1132,6 @@ it('inspects the selected page and fills privately without browser navigation co
     );
     expect(JSON.stringify(filled)).not.toContain('SENTINEL');
     expect(await page.locator('button').count()).toBe(1);
-    expect(command).not.toHaveBeenCalled();
     // Navigation is a separate UI operation; fresh inspection follows it.
     await page.locator('button').click();
     const next = await tools.inspect_private_fields.execute!({}, caller);
@@ -1167,10 +1143,8 @@ it('inspects the selected page and fills privately without browser navigation co
       status: 'error',
       code: 'conflict',
     });
-    expect(command).not.toHaveBeenCalled();
   } finally {
     selected.mockRestore();
-    command.mockRestore();
     configured.mockRestore();
     matching.mockRestore();
     await browser.close();

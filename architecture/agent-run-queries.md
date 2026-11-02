@@ -74,6 +74,8 @@ Keep `disableInit: true`; inspection scripts call no initialization, pruning, or
 
 ## Interpretation
 
+- `pal.interaction.queued`, `acquired`, `released`, and `unavailable` record device coordination. Acquired duration is queue wait; released duration is ownership time. Task/worker/execution and parent-run IDs correlate turns; a reused private-entry worker identity can have multiple execution IDs. Missing transitions are unknown, not proof of ownership or cleanup.
+
 - Telemetry retains approximately 30–31 days because PostgreSQL expiry drops whole UTC day partitions. Pruning runs hourly with at most two partitions per signal table per tick; backlogs can take additional ticks. Existing conversations and memory follow their own retention. Collection starts with this release; missing historical telemetry is expected.
 - Native run outcomes describe execution, not fulfillment of the user's request. Missing terminal evidence is unknown. Confirm claims and instruction following against user messages, delegation assignments, tool evidence, and delivered responses; cite exact run/message references.
 - Use model-generation `attributes.usage` for usage accounting. Do not add agent totals and model totals, or count child runs twice. `internalUsage` represents hidden internal model work on its exported ancestor; keep it separate. Missing usage is unknown; no authoritative monetary cost is computed.

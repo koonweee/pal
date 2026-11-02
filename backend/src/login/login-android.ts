@@ -46,7 +46,7 @@ export class LoginAndroid {
     workerId: string | undefined,
     fields: SecureFields | null,
   ) {
-    if (!fields || !workerId || !this.android.owns(taskId, workerId))
+    if (!fields || !workerId)
       return false;
     return selectedFields(fields).every(([, ref]) => {
       const input = this.inputs.get(ref);

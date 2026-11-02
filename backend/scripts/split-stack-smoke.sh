@@ -1,12 +1,12 @@
 #!/bin/sh
 # Isolated Docker Compose integration checks; builds images and removes this test project’s volumes.
-# Requires Docker/Compose. Invoke npm run browser:smoke -- --idle-cleanup for focused lifecycle checks.
+# Requires Docker/Compose. Prefer the existing dev stack for interaction acceptance.
 set -eu
 cd "$(dirname "$0")/.."
 export PAL_EXECUTION_NETWORK_PREFIX=172.30.234
 mode="${1:-all}"
 shift "$(( $# > 0 ? 1 : 0 ))"
-case "$mode" in all|browser|desktop|workers|files|mcp) ;; *) echo "Unknown smoke mode: $mode" >&2; exit 2 ;; esac
+case "$mode" in all|desktop|files|mcp) ;; *) echo "Unknown smoke mode: $mode" >&2; exit 2 ;; esac
 if [ "${1:-}" = --agent ]; then
   test -n "${PAL_SMOKE_AUTH_PATH:-}" || { echo "Set PAL_SMOKE_AUTH_PATH to a private model-login file for model checks" >&2; exit 2; }
 fi
@@ -33,20 +33,16 @@ compose exec -T execution sh -eu -c '
   test ! -d /data/private
   echo "PASS: public HTTPS and private network/filesystem isolation"
 '
-compose exec -T agent-service node --input-type=module < scripts/split-stack/check.mjs
+compose exec -T agent-service node --input-type=module < scripts/split-stack/shared-desktop.mjs
 compose exec -T agent-service node --input-type=module < scripts/split-stack/files.mjs
-# Focused browser lifecycle checks do not require PWA activation or image capture.
-if [ "$mode" != browser ] || [ "${1:-}" != --idle-cleanup ]; then
-  node scripts/split-stack/pwa.mjs
-fi
+node scripts/split-stack/pwa.mjs
 smoke() {
   script="$1"
   shift
   compose exec -T -w /opt/pal -e DOTENV_CONFIG_PATH=/dev/null -e TEST_DATABASE_URL=postgresql://pal:pal@postgres:5432/pal_split_test agent-service node "scripts/$script" "$@"
 }
 case "$mode" in
-  all) smoke browser-smoke.mjs; smoke desktop-smoke.mjs; smoke split-stack/mcp.mjs ;;
-  workers) smoke browser-smoke.mjs --workers "$@" ;;
+  all) smoke desktop-smoke.mjs; smoke split-stack/mcp.mjs ;;
   files) if [ "${1:-}" = --agent ]; then smoke files-smoke.mjs; fi ;;
   mcp) if [ "${1:-}" = --agent ]; then smoke mcp-smoke.mjs; else smoke split-stack/mcp.mjs; fi ;;
   *) smoke "$mode-smoke.mjs" "$@" ;;

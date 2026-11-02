@@ -103,8 +103,7 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
   const task = await fixture.app
     .get(TasksService)
     .create({ title: 'Native entry', goal: 'Verify secure Android login' });
-  const workerId = randomUUID(),
-    owner = { taskId: task.id, workerId };
+  const workerId = randomUUID();
   const items: VaultItem[] = [];
   vi.spyOn(vault, 'configured', 'get').mockReturnValue(true);
   vi.spyOn(vault, 'matching').mockImplementation(async (url) =>
@@ -134,13 +133,12 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
   const outputs: unknown[] = [];
   try {
     await expect(
-      login.inspect(task.id, workerId, undefined, undefined, 'android'),
+      login.inspect(task.id, workerId, undefined, 'android'),
     ).rejects.toMatchObject({ code: 'invalid_input' });
     await expect(
       login.inspect(
         task.id,
         workerId,
-        undefined,
         undefined,
         'android',
         'http://native.example.test',
@@ -162,23 +160,19 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
           : { [role]: inspected.inputs[0].ref };
       const pending = await login.request(task.id, fields, workerId);
       outputs.push(pending);
-      expect(await login.retainWorkerSession(task.id, workerId, true, 0)).toBe(
-        true,
-      );
-      await android.release(task.id, workerId, true);
+      expect(await login.finishWorker(task.id, workerId, true, 0)).toBe(true);
+      expect(android.owns(task.id, workerId)).toBe(false);
       expect(
         await login.resumeWorker(
           task.id,
           'secure entry request ' + pending.requestId,
         ),
       ).toBe(workerId);
-      await expect(
-        android.call(
-          { taskId: 'other', workerId: 'other' },
-          'android_apps',
-          {},
-        ),
-      ).rejects.toThrow('busy');
+      await android.coordinator.forSession(
+        'android',
+        { taskId: 'other', workerId: 'other' },
+        async () => {},
+      );
       if (role === 'code')
         await request(fixture.url)
           .post(`/login/requests/${pending.requestId}/code`)
@@ -212,7 +206,6 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       task.id,
       workerId,
       undefined,
-      undefined,
       'android',
       'https://native.example.test',
     );
@@ -231,7 +224,6 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       task.id,
       workerId,
       undefined,
-      undefined,
       'android',
       'https://native.example.test',
     );
@@ -244,7 +236,6 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       task.id,
       workerId,
       undefined,
-      undefined,
       'android',
       'https://replacement.example.test',
     );
@@ -254,12 +245,11 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       workerId,
     );
     await login.finish(cancelled.requestId);
-    expect(android.owns(task.id, workerId)).toBe(true);
+    expect(android.owns(task.id, workerId)).toBe(false);
     await login.finish(replacement.requestId);
     expect(android.owns(task.id, workerId)).toBe(false);
     const nextOwner = { taskId: randomUUID(), workerId: randomUUID() };
     await android.secure(nextOwner, { action: 'inspect' });
-    await android.release(nextOwner.taskId, nextOwner.workerId);
     const count = fills.length;
     await request(fixture.url)
       .post(`/login/requests/${cancelled.requestId}/save`)
@@ -278,7 +268,6 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       task.id,
       workerId,
       undefined,
-      undefined,
       'android',
       'https://native.example.test',
     );
@@ -287,7 +276,6 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       { password: lateInspection.inputs[0].ref },
       workerId,
     );
-    await android.release(task.id, workerId);
     const other = { taskId: randomUUID(), workerId: randomUUID() };
     await android.secure(other, { action: 'inspect' });
     await request(fixture.url)
@@ -296,7 +284,6 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       .expect(201);
     expect((await login.get(late.requestId)).status).toBe('saved');
     expect(fills).toHaveLength(count);
-    await android.release(other.taskId, other.workerId);
     const rows = await fixture.database.pool.query(
       'SELECT row_to_json(r) AS data FROM login_requests r UNION ALL SELECT row_to_json(i) FROM login_inspections i',
     );
@@ -310,7 +297,6 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
     const uncertain = await login.inspect(
       task.id,
       workerId,
-      undefined,
       undefined,
       'android',
       'https://native.example.test',
@@ -331,11 +317,10 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       { fields: uncertainFields },
       context,
     );
-    expect(replay).toMatchObject({ status: 'error', code: 'conflict' });
+    expect(replay).toMatchObject({ status: 'error', code: 'unavailable' });
     expect(fills.length).toBe(5);
   } finally {
     vi.restoreAllMocks();
-    await android.release(owner.taskId, owner.workerId);
     await fixture.close();
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

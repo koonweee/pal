@@ -15,6 +15,31 @@ const empty: AgentActivity = {
 const task = { id: 'task', title: 'Lunch with Sam', commentary: null };
 
 describe('activity selection', () => {
+  it('shows queue waiting and keeps a task with an owning worker marked as working', () => {
+    const state: AgentActivity = {
+      ...empty,
+      status: 'working',
+      runningTasks: [task],
+      resources: [
+        {
+          resource: 'desktop',
+          ownerTaskId: 'other',
+          waitingTaskIds: [task.id],
+          unavailable: false,
+        },
+      ],
+    };
+    expect(selectBubble(state, online, 0)?.text).toBe('waiting for desktop');
+    state.resources![0]!.resource = 'android';
+    expect(selectBubble(state, online, 0)?.text).toBe('waiting for phone');
+    state.resources![0]!.ownerTaskId = task.id;
+    expect(selectBubble(state, online, 0)?.text).toBe(task.title);
+    state.resources![0]!.ownerTaskId = 'other';
+    state.runningTasks.push({ ...task, id: 'other' });
+    expect(selectBubble(state, online, 0)?.tasks?.[0]?.title).toContain(
+      'waiting for phone',
+    );
+  });
   it('hides activity until the connection is fresh', () => {
     const busy = {
       ...empty,

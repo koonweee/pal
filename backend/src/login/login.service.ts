@@ -1,7 +1,8 @@
 import { ChatService } from '../chat/chat.service.js';
 import { TasksService } from '../tasks/tasks.service.js';
 import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common';
-import { BrowserService } from '../browser/browser.service.js';
+import { SharedBrowserService as BrowserService } from '../browser/shared-browser.service.js';
+import { InteractionCoordinator } from '../interaction/interaction-coordinator.js';
 import { EventsService } from '../events/events.service.js';
 import { ApplicationError } from '../application/contracts/errors.js';
 import { BitwardenService, type CredentialInput } from './bitwarden.service.js';
@@ -34,8 +35,10 @@ export class LoginService implements OnModuleDestroy {
     @Inject(TasksService) private readonly tasks: TasksService,
     @Inject(ChatService) private readonly chat: ChatService,
     @Inject(AndroidService) private readonly android: AndroidService,
+    @Inject(InteractionCoordinator)
+    private readonly coordinator: InteractionCoordinator = android.coordinator,
   ) {
-    this.inspector = new LoginDestinations(browser, android);
+    this.inspector = new LoginDestinations(browser, android, coordinator);
   }
   get androidEnabled() {
     return this.android.enabled;
@@ -75,14 +78,7 @@ export class LoginService implements OnModuleDestroy {
         'invalid_input',
         'accountOrigin applies only to Android private fields',
       );
-    return this.inspect(
-      taskId,
-      workerId,
-      undefined,
-      signal,
-      surface,
-      accountOrigin,
-    );
+    return this.inspect(taskId, workerId, signal, surface, accountOrigin);
   }
   bindNotifier(notify: (taskId: string, text: string) => Promise<void>) {
     this.notify = notify;
@@ -114,17 +110,11 @@ export class LoginService implements OnModuleDestroy {
       Date.now() - row.createdAt.getTime() >= 24 * 3600_000
     )
       return;
-    if (row.destination.kind === 'android')
-      return this.android.owns(taskId, row.workerId) ? row.workerId : undefined;
-    const group = (await this.browser.groups()).find(
-      (group) => group.taskId === taskId,
-    );
-    return group?.sessions?.includes('worker-' + row.workerId)
-      ? row.workerId
-      : undefined;
+    // Continuation reacquires access and recovers when its target is stale.
+    return row.workerId;
   }
 
-  async retainWorkerSession(
+  async finishWorker(
     taskId: string,
     workerId: string,
     completed: boolean,
@@ -152,32 +142,11 @@ export class LoginService implements OnModuleDestroy {
     return false;
   }
 
-  private async releaseCancelledAndroid(row: LoginRequest) {
-    if (
-      row.status !== 'cancelled' ||
-      row.destination.kind !== 'android' ||
-      !row.workerId
-    )
-      return;
-    const requests = await this.repository.workerRequests(
-      row.taskId,
-      row.workerId,
-    );
-    if (
-      requests.some((request) =>
-        ['pending', 'updating', 'failed'].includes(request.status),
-      )
-    )
-      return;
-    await this.android.release(row.taskId, row.workerId);
-  }
-
   async flushNotifications() {
     if (this.notifying || !this.notify) return;
     this.notifying = true;
     try {
       for (const row of await this.repository.cleanup()) {
-        await this.releaseCancelledAndroid(row);
         if (row.status === 'failed')
           await this.tasks.update(row.taskId, { status: 'needs-input' });
         this.events.publish({ event: 'login.updated', taskId: row.taskId });
@@ -185,8 +154,7 @@ export class LoginService implements OnModuleDestroy {
       for (const row of await this.repository.active()) {
         await this.publishCard(row);
         if ((await this.tasks.details(row.taskId)).status === 'completed') {
-          const cancelled = await this.repository.finish(row.id);
-          await this.releaseCancelledAndroid(cancelled);
+          await this.repository.finish(row.id);
           await this.repository.notified(row.id, 'cancelled');
           this.events.publish({ event: 'login.updated', taskId: row.taskId });
           continue;
@@ -245,52 +213,11 @@ export class LoginService implements OnModuleDestroy {
   async inspect(
     taskId: string,
     workerId?: string,
-    action?: string[],
     signal?: AbortSignal,
     surface: 'browser' | 'android' = 'browser',
     website?: string,
   ) {
     try {
-      signal?.throwIfAborted();
-      if (surface === 'android' && action)
-        throw new ApplicationError(
-          'invalid_input',
-          'Browser actions are unavailable for Android private inspection',
-        );
-      if (action) {
-        if (!action.length)
-          throw new ApplicationError(
-            'invalid_input',
-            'Supply a browser action',
-          );
-        // New tabs may be the caller's first owned page. For existing pages,
-        // arm the frame listener before dispatching asynchronous navigation.
-        const before =
-          action[0] === 'tab' && action[1] === 'new'
-            ? undefined
-            : await this.browser.selectedPage(taskId, workerId);
-        const navigation = before
-          ?.waitForEvent('framenavigated', { timeout: 1500 })
-          .catch(() => undefined);
-        const result = await this.browser.command(
-          taskId,
-          action,
-          signal,
-          workerId,
-        );
-        if (!result.success)
-          throw new ApplicationError(
-            'unavailable',
-            'Browser action failed. Inspect again without action before retrying.',
-          );
-        const frame = await navigation;
-        if (frame)
-          await frame.waitForLoadState('domcontentloaded', { timeout: 5000 });
-      }
-      if (action)
-        await (
-          await this.browser.selectedPage(taskId, workerId)
-        ).waitForLoadState('domcontentloaded', { timeout: 5000 });
       signal?.throwIfAborted();
       const result = await this.inspector.inspect(
         taskId,
@@ -415,27 +342,21 @@ export class LoginService implements OnModuleDestroy {
     accountId?: string,
     workerId?: string,
     keepMeSignedIn?: boolean,
-    action?: string[],
     signal?: AbortSignal,
     requestOnMissing = false,
   ) {
     signal?.throwIfAborted();
-    if (action && !action.length)
-      throw new ApplicationError('invalid_input', 'Supply a browser action');
     const target = await this.inspector.select(taskId, workerId, fields);
-    if (
-      target.destination.kind === 'android' &&
-      (action || keepMeSignedIn !== undefined)
-    )
+    if (target.destination.kind === 'android' && keepMeSignedIn !== undefined)
       throw new ApplicationError(
         'invalid_input',
-        'Android filling accepts no browser action or session preference',
+        'Session preferences apply only to browser logins',
       );
     if (fieldKind(fields) === 'card') {
-      if (action || accountId || keepMeSignedIn !== undefined)
+      if (accountId || keepMeSignedIn !== undefined)
         throw new ApplicationError(
           'invalid_input',
-          'Payment filling uses the private card picker; omit action, accountId and login preferences',
+          'Payment filling uses the private card picker; omit accountId and login preferences',
         );
       return this.request(taskId, fields, workerId, undefined, true);
     }
@@ -544,21 +465,7 @@ export class LoginService implements OnModuleDestroy {
         account.login.username = undefined;
       }
     }
-    if (!action) return filled;
-    try {
-      return {
-        ...filled,
-        actionStatus: 'completed' as const,
-        ...(await this.inspect(taskId, workerId, action, signal)),
-      };
-    } catch {
-      return {
-        ...filled,
-        actionStatus: 'failed' as const,
-        message:
-          'Fields were filled, but the browser action or resulting inspection failed. Inspect without action and do not refill.',
-      };
-    }
+    return filled;
   }
   async enter(
     taskId: string,
@@ -591,7 +498,6 @@ export class LoginService implements OnModuleDestroy {
       undefined,
       workerId,
       keepMeSignedIn,
-      undefined,
       signal,
       true,
     );
@@ -878,7 +784,6 @@ export class LoginService implements OnModuleDestroy {
             }
           : undefined,
       );
-      if (!input) await this.releaseCancelledAndroid(row);
       this.events.publish({ event: 'login.updated', taskId: row.taskId });
       void this.flushNotifications();
       return { id: row.id, status: row.status };
@@ -931,6 +836,19 @@ export class LoginService implements OnModuleDestroy {
     return { id: row.id, status: row.status };
   }
   private async fillRequest(
+    row: LoginRequest,
+    values: Parameters<LoginBrowser['fill']>[3],
+    accountId?: string,
+  ) {
+    if (!row.fields) throw new StaleSecureFieldsError();
+    return this.inspector.withFields(
+      row.taskId,
+      row.workerId ?? undefined,
+      row.fields,
+      () => this.fillBoundRequest(row, values, accountId),
+    );
+  }
+  private async fillBoundRequest(
     row: LoginRequest,
     values: Parameters<LoginBrowser['fill']>[3],
     accountId?: string,

@@ -2,6 +2,7 @@ import { AgentActivityService } from '../dist/agent/agent-activity.service.js';
 import { EventsService } from '../dist/events/events.service.js';
 import type { TasksService } from '../dist/tasks/tasks.service.js';
 import type { Task } from '../dist/tasks/tasks.types.js';
+import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
 
 const task = (
   id: string,
@@ -17,6 +18,38 @@ const task = (
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   lastActivityAt: new Date().toISOString(),
+});
+
+it('derives owner and waiters from the queue and clears waiting after cancellation', async () => {
+  const coordinator = new InteractionCoordinator();
+  const activity = new AgentActivityService(
+    new EventsService(),
+    {
+      activityTasks: async () => [task('a'), task('b')],
+    } as unknown as TasksService,
+    coordinator,
+  );
+  await activity.onModuleInit();
+  const first = coordinator.begin({ taskId: 'a', workerId: 'one' });
+  const second = coordinator.begin({ taskId: 'b', workerId: 'two' });
+  await coordinator.run('desktop', first, async () => {});
+  const pending = coordinator.run('desktop', second, async () => {});
+  const rejected = expect(pending).rejects.toThrow('ended');
+  expect(activity.current().resources).toEqual([
+    {
+      resource: 'desktop',
+      ownerTaskId: 'a',
+      waitingTaskIds: ['b'],
+      unavailable: false,
+    },
+  ]);
+  await coordinator.finish(second);
+  await rejected;
+  expect(activity.current().resources?.[0].waitingTaskIds).toEqual([]);
+  await coordinator.finish(first);
+  expect(activity.current().resources).toBeUndefined();
+  expect(activity.current().needsInputTasks).toEqual([]);
+  activity.onModuleDestroy();
 });
 
 it('tracks distinct task runs independently of Main and rejects late commentary', async () => {

@@ -180,8 +180,8 @@ try {
   );
   await assert.rejects(
     new X11Computer({
-      output: (command, args, options) =>
-        execution.output('env', ['DISPLAY=:99', command, ...args], options),
+      run: (command, args, options) =>
+        execution.run('env', ['DISPLAY=:99', command, ...args], options),
     }).screenshot(),
   );
   assert.deepEqual(await computer.getScreenSize(), {

@@ -3,7 +3,7 @@ import { LoginService } from '../dist/login/login.service.js';
 import { ExecutionService } from '../dist/execution/execution.service.js';
 import { DestinationService } from '../dist/delivery/destination.service.js';
 import { FilesService } from '../dist/files/files.service.js';
-import { BrowserService } from '../dist/browser/browser.service.js';
+import { SharedBrowserService as BrowserService } from '../dist/browser/shared-browser.service.js';
 import { TaskSchedulesService } from '../dist/tasks/task-schedules.service.js';
 import { randomUUID } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';

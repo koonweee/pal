@@ -30,7 +30,7 @@ import { FilesService } from '../dist/files/files.service.js';
 import { PreferencesService } from '../dist/preferences/preferences.service.js';
 import { ChatService } from '../dist/chat/chat.service.js';
 import { AgentActivityService } from '../dist/agent/agent-activity.service.js';
-import { BrowserService } from '../dist/browser/browser.service.js';
+import { SharedBrowserService as BrowserService } from '../dist/browser/shared-browser.service.js';
 import { McpService } from '../dist/mcp/mcp.service.js';
 import { AgentAdmissionService } from '../dist/mcp/agent-admission.service.js';
 import type { UserVisibleMessage } from '../dist/chat/chat.types.js';

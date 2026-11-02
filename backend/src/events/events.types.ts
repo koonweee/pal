@@ -17,6 +17,12 @@ export interface AgentActivityState {
   latestCompletion:
     (ActivityTask & { cueId: string; occurredAt: string }) | null;
   status: 'idle' | 'working';
+  resources?: {
+    resource: 'desktop' | 'android';
+    ownerTaskId: string | null;
+    waitingTaskIds: string[];
+    unavailable: boolean;
+  }[];
 }
 export type PalEvent =
   | { event: 'login.updated'; taskId: string }

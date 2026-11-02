@@ -344,6 +344,19 @@ export function decodePalEvent(
     typeof value.state.mainWorking === 'boolean' &&
     Array.isArray(value.state.runningTasks) &&
     Array.isArray(value.state.needsInputTasks) &&
+    (value.state.resources === undefined ||
+      (Array.isArray(value.state.resources) &&
+        value.state.resources.every(
+          (resource) =>
+            record(resource) &&
+            (resource.resource === 'desktop' ||
+              resource.resource === 'android') &&
+            (resource.ownerTaskId === null ||
+              typeof resource.ownerTaskId === 'string') &&
+            Array.isArray(resource.waitingTaskIds) &&
+            resource.waitingTaskIds.every((id) => typeof id === 'string') &&
+            typeof resource.unavailable === 'boolean',
+        ))) &&
     value.state.runningTasks.every(
       (task) =>
         record(task) &&

@@ -5,7 +5,7 @@ import { LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import { DestinationService } from '../dist/delivery/destination.service.js';
 import { FilesService } from '../dist/files/files.service.js';
 import { MAX_FILE_BYTES } from '../dist/files/application-file-storage.js';
-import { BrowserService } from '../dist/browser/browser.service.js';
+import { SharedBrowserService as BrowserService } from '../dist/browser/shared-browser.service.js';
 import { TaskSchedulesService } from '../dist/tasks/task-schedules.service.js';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -516,7 +516,15 @@ it('exposes all supported native workspace tools, keeps results private, and sto
   const outside = join(directory, 'outside.txt');
   const pidFile = join(directory, 'foreground.pid');
   const events: AgentControllerEvent[] = [];
-  const computer = new X11Computer({ output: async () => Buffer.alloc(0) });
+  const computer = new X11Computer({
+    run: async () => ({
+      success: true,
+      stdout: '',
+      stderr: '',
+      exitCode: 0,
+      executionTimeMs: 0,
+    }),
+  });
   const png = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL1sAAAAASUVORK5CYII=',
     'base64',
@@ -715,7 +723,15 @@ it('separates Task local execution from interaction computer tools', async () =>
         workingDirectory: directory,
         isolation: 'none',
       }),
-      computer: new X11Computer({ output: async () => Buffer.alloc(0) }),
+      computer: new X11Computer({
+        run: async () => ({
+          success: true,
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+          executionTimeMs: 0,
+        }),
+      }),
       model,
       onEvent: () => {},
       task: {

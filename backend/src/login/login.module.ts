@@ -6,8 +6,15 @@ import { BrowserModule } from '../browser/browser.module.js';
 import { BitwardenService } from './bitwarden.service.js';
 import { LoginRepository } from './login.repository.js';
 import { LoginService } from './login.service.js';
+import { InteractionModule } from '../interaction/interaction.module.js';
 @Module({
-  imports: [BrowserModule, TasksModule, ChatModule, AndroidModule],
+  imports: [
+    BrowserModule,
+    TasksModule,
+    ChatModule,
+    AndroidModule,
+    InteractionModule,
+  ],
   providers: [BitwardenService, LoginRepository, LoginService],
   exports: [LoginService],
 })

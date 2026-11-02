@@ -46,20 +46,37 @@ export function selectBubble(
       listTitle: 'need your input',
     };
   const running = activity.runningTasks;
+  const waitingFor = (id: string) => {
+    if (activity.resources?.some((resource) => resource.ownerTaskId === id))
+      return undefined;
+    const resource = activity.resources?.find((entry) =>
+      entry.waitingTaskIds.includes(id),
+    );
+    return resource
+      ? `waiting for ${resource.resource === 'desktop' ? 'desktop' : 'phone'}`
+      : undefined;
+  };
   if (running.length > 1)
     return {
       kind: 'multiple',
       text: `working on ${running.length} tasks`,
-      tasks: running,
+      tasks: running.map((task) => ({
+        ...task,
+        title: waitingFor(task.id)
+          ? `${task.title} · ${waitingFor(task.id)}`
+          : task.title,
+      })),
       listTitle: 'working on',
     };
   const task = running[0];
   if (task) {
-    const commentary = task.commentary && compact(task.commentary.text);
+    const waiting = waitingFor(task.id);
+    const commentary =
+      !waiting && task.commentary && compact(task.commentary.text);
     return {
       kind: 'working',
-      text: commentary || compact(task.title) || '…',
-      dots: !commentary && !compact(task.title),
+      text: waiting || commentary || compact(task.title) || '…',
+      dots: !waiting && !commentary && !compact(task.title),
       taskId: task.id,
       messageId: commentary ? task.commentary!.messageId : undefined,
     };

@@ -19,6 +19,7 @@ import { EventsService } from '../dist/events/events.service.js';
 import { TasksService } from '../dist/tasks/tasks.service.js';
 import { TasksRepository } from '../dist/tasks/tasks.repository.js';
 import { AndroidService } from '../dist/android/android.service.js';
+import { InteractionToolsProcessor } from '../dist/agent/interaction-tools.processor.js';
 import { androidTools } from '../dist/android/android-tools.js';
 import { LoginService } from '../dist/login/login.service.js';
 import { LoginRepository } from '../dist/login/login.repository.js';
@@ -89,7 +90,6 @@ const browser = {
   selectedPage: async () => {
     throw new Error('Browser is outside native acceptance');
   },
-  groups: async () => [],
 };
 const channel = new URL(process.env.PAL_ANDROID_MCP_URL);
 channel.pathname = '/secure';
@@ -218,6 +218,7 @@ try {
         console.log(JSON.stringify({ result: output.text }));
       },
       worker: {
+        coordinator: android.coordinator,
         model: chatgptModel(
           'gpt-6.1-terra',
           process.env.PAL_AGENT_AUTH_PATH,
@@ -238,16 +239,18 @@ try {
             'utf8',
           )),
         tools: () => tools,
-        inputProcessors: [new CodeModeProcessor()],
+        inputProcessors: [
+          new InteractionToolsProcessor(
+            android.coordinator,
+            (taskId, workerId, surface) =>
+              login.activateSurface(taskId, workerId, surface),
+          ),
+          new CodeModeProcessor(),
+        ],
         resume: (taskId, assignment) => login.resumeWorker(taskId, assignment),
         cleanup: async (taskId, workerId, completed, startedAt) => {
-          const retain = await login.retainWorkerSession(
-            taskId,
-            workerId,
-            completed,
-            startedAt,
-          );
-          await android.release(taskId, workerId, retain);
+          await login.finishWorker(taskId, workerId, completed, startedAt);
+          login.clearSurface(taskId, workerId);
         },
       },
     },
@@ -275,6 +278,9 @@ try {
         })
       ).accepted;
       assert.equal(delivery.action, 'wake');
+      console.log(
+        JSON.stringify({ flow: label, turn, runId: delivery.output.runId }),
+      );
       const timer = setTimeout(
         () => modelSession.taskAgent.abortRunStream(delivery.output.runId),
         240000,
@@ -293,7 +299,6 @@ try {
           'android_inspect',
           {},
         );
-        await android.release(task.id, 'acceptance-check');
         authenticated = view.content.some(
           (e) => e.type === 'text' && e.text.includes('Authenticated'),
         );
@@ -303,6 +308,10 @@ try {
         );
       }
       assert.equal(pending.length, 1, 'One current private entry');
+      assert.ok(
+        android.coordinator.snapshot().every((resource) => !resource.owner),
+        'Credential wait retained a device turn',
+      );
       const row = pending[0];
       seen.push(
         row.kind === 'code' ? 'code' : Object.keys(row.fields).join(','),
@@ -415,6 +424,7 @@ try {
 } finally {
   login?.onModuleDestroy();
   await modelSession?.close();
+  await android?.coordinator.shutdown();
   await android?.onApplicationShutdown();
   await channelCall({ action: 'pause' }).catch(() => {});
   await app?.close();

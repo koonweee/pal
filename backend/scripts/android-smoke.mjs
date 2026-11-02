@@ -19,6 +19,9 @@ import {
 } from '../dist/agent/main-session.js';
 import { chatgptModel } from '../dist/agent/chatgpt-model.js';
 import { CodeModeProcessor } from '../dist/agent/code-mode.processor.js';
+import { InteractionToolsProcessor } from '../dist/agent/interaction-tools.processor.js';
+import { ExecutionService } from '../dist/execution/execution.service.js';
+import { X11Computer } from '../dist/agent/x11-computer.js';
 
 const connectionString = process.env.TEST_DATABASE_URL;
 assert(
@@ -26,7 +29,14 @@ assert(
   'TEST_DATABASE_URL must select a test database',
 );
 const schemaName = 'pal_android_smoke_' + randomUUID().replaceAll('-', '');
-const android = new AndroidService(new ConfigService(process.env));
+const config = new ConfigService(process.env);
+const android = new AndroidService(config);
+const execution = new ExecutionService(config);
+const computer = new X11Computer(execution, undefined, () =>
+  android.coordinator.unavailable('desktop'),
+);
+const events = [];
+android.coordinator.events.subscribe((event) => events.push(event));
 assert(android.enabled, 'Configure the Android sidecar first');
 const calls = [];
 const invoke = android.call.bind(android);
@@ -34,6 +44,7 @@ android.call = async (owner, action, args, signal) => {
   console.log(JSON.stringify({ tool: action }));
   const result = await invoke(owner, action, args, signal);
   calls.push({
+    taskId: owner.taskId,
     worker: owner.workerId,
     action,
     image: result.content.some((part) => part.type === 'image'),
@@ -42,6 +53,7 @@ android.call = async (owner, action, args, signal) => {
 };
 let session;
 const outputs = [];
+const runs = [];
 try {
   const model = chatgptModel(
     process.env.PAL_AGENT_MODEL,
@@ -52,6 +64,7 @@ try {
     connectionString,
     schemaName,
     model,
+    computer,
     memoryOptions: {
       lastMessages: 20,
       semanticRecall: false,
@@ -64,10 +77,12 @@ try {
       tools: {},
       inputProcessors: [],
       publish: async (output, context) => {
-        if (context.phase !== 'commentary') outputs.push(output.text);
+        if (context.phase !== 'commentary')
+          outputs.push({ threadId: context.threadId, text: output.text });
         console.log(JSON.stringify({ result: output.text }));
       },
       worker: {
+        coordinator: android.coordinator,
         model: chatgptModel(
           'gpt-6.1-terra',
           process.env.PAL_AGENT_AUTH_PATH,
@@ -76,8 +91,11 @@ try {
         instructions:
           (await loadAgentInstructions('worker')) + '\n' + android.instructions,
         tools: () => androidTools(android),
-        inputProcessors: [new CodeModeProcessor()],
-        cleanup: (taskId, workerId) => android.release(taskId, workerId),
+        inputProcessors: [
+          new InteractionToolsProcessor(android.coordinator, () => {}),
+          new CodeModeProcessor(),
+        ],
+        cleanup: async () => {},
       },
     },
   });
@@ -91,67 +109,179 @@ try {
       'Using Android Settings, read the phone model and Android version from About phone and Software information. Change no settings. Take an Android screenshot to verify the Android version.',
     ],
   ];
-  for (const [name, prompt] of flows) {
-    const threadId = 'pal-task:' + randomUUID();
-    const start = calls.length;
-    const before = outputs.length;
-    const requestContext = new RequestContext([
-      [MASTRA_THREAD_ID_KEY, threadId],
-      [MASTRA_RESOURCE_ID_KEY, MAIN_RESOURCE_ID],
-    ]);
-    const delivery = await (
-      await session.taskAgent.sendMessage(
-        'Development acceptance test. Delegate this complete UI workflow to an interaction worker: ' +
-          prompt +
-          ' Report findings and any blocker; no scheduling or task metadata tools exist in this test.',
-        {
-          threadId,
-          resourceId: MAIN_RESOURCE_ID,
-          ifIdle: { streamOptions: { requestContext } },
-        },
-      )
-    ).accepted;
-    assert.equal(delivery.action, 'wake');
-    const timeout = setTimeout(
-      () => session.taskAgent.abortRunStream(delivery.output.runId),
-      240000,
-    );
-    try {
-      await delivery.output.getFullOutput();
-    } finally {
-      clearTimeout(timeout);
-    }
-    assert(
-      calls.slice(start).some((c) => c.action === 'android_launch_app'),
-      name + ' did not launch an app',
-    );
-    assert(
-      calls
-        .slice(start)
-        .some((c) => c.action === 'android_screenshot' && c.image),
-      name + ' did not verify an image',
-    );
-    assert(outputs.length > before, name + ' returned no findings');
-    if (name === 'browser')
-      assert.match(
-        outputs.slice(before).join(' '),
-        /iana\.org/i,
-        'IANA navigation not verified',
+  const outcomes = await Promise.allSettled(
+    flows.map(async ([name, prompt]) => {
+      const threadId = 'pal-task:' + randomUUID();
+      const requestContext = new RequestContext([
+        [MASTRA_THREAD_ID_KEY, threadId],
+        [MASTRA_RESOURCE_ID_KEY, MAIN_RESOURCE_ID],
+      ]);
+      const delivery = await (
+        await session.taskAgent.sendMessage(
+          'Development acceptance test. Delegate this complete UI workflow to an interaction worker: ' +
+            prompt +
+            ' Report findings and any blocker; no scheduling or task metadata tools exist in this test.',
+          {
+            threadId,
+            resourceId: MAIN_RESOURCE_ID,
+            ifIdle: { streamOptions: { requestContext } },
+          },
+        )
+      ).accepted;
+      assert.equal(delivery.action, 'wake');
+      runs.push(delivery.output);
+      console.log(JSON.stringify({ flow: name, runId: delivery.output.runId }));
+      const timeout = setTimeout(
+        () => session.taskAgent.abortRunStream(delivery.output.runId),
+        240000,
       );
-    else
-      assert.match(
-        outputs.slice(before).join(' '),
-        /Android(?:\s+version)?[\s:*]*\d+/i,
-        'Android version not reported',
+      try {
+        await delivery.output.getFullOutput();
+      } finally {
+        clearTimeout(timeout);
+      }
+      const flowCalls = calls.filter(
+        (call) => call.taskId === threadId.slice('pal-task:'.length),
       );
-    console.log('PASS: ' + name + ' Task -> Worker flow');
+      const findings = outputs
+        .filter((output) => output.threadId === threadId)
+        .map((output) => output.text)
+        .join(' ');
+      assert(
+        flowCalls.some(
+          (c) =>
+            c.action === 'android_launch_app' ||
+            (name === 'browser' && c.action === 'android_open_url'),
+        ),
+        name + ' did not open its app',
+      );
+      assert(
+        flowCalls.some((c) => c.action === 'android_screenshot' && c.image),
+        name + ' did not verify an image',
+      );
+      assert(findings, name + ' returned no findings');
+      if (name === 'browser')
+        assert.match(findings, /iana\.org/i, 'IANA navigation not verified');
+      else
+        assert.match(
+          findings,
+          /Android(?:\s+version)?[\s:*]*\d+/i,
+          'Android version not reported',
+        );
+      console.log('PASS: ' + name + ' Task -> Worker flow');
+    }),
+  );
+  for (const outcome of outcomes) {
+    if (outcome.status === 'rejected')
+      console.log(JSON.stringify({ failure: String(outcome.reason) }));
   }
+  assert.ok(
+    outcomes.every((outcome) => outcome.status === 'fulfilled'),
+    'Native Android flows incomplete',
+  );
   assert(
     new Set(calls.map((c) => c.worker)).size >= 2,
     'Flows did not use separate workers',
   );
+  // A cross-device assignment must return to Task for a fresh execution.
+  const fallbackTask = randomUUID();
+  const fallbackThread = 'pal-task:' + fallbackTask;
+  const fallback = await (
+    await session.taskAgent.sendMessage(
+      'Development acceptance: first delegate a computer-only worker to take one desktop screenshot without changing anything, then return to you. After it returns, delegate a fresh Android-only worker to take one phone screenshot without changing anything. This simulates a device fallback; do not ask one worker to switch devices. Report completion after both results. No task metadata tools exist in this fixture.',
+      {
+        threadId: fallbackThread,
+        resourceId: MAIN_RESOURCE_ID,
+        ifIdle: {
+          streamOptions: {
+            requestContext: new RequestContext([
+              [MASTRA_THREAD_ID_KEY, fallbackThread],
+              [MASTRA_RESOURCE_ID_KEY, MAIN_RESOURCE_ID],
+            ]),
+          },
+        },
+      },
+    )
+  ).accepted;
+  runs.push(fallback.output);
+  const timeout = setTimeout(
+    () => session.taskAgent.abortRunStream(fallback.output.runId),
+    240000,
+  );
+  try {
+    await fallback.output.getFullOutput();
+  } finally {
+    clearTimeout(timeout);
+  }
+  const fallbackEvents = events.filter(
+    (event) => event.taskId === fallbackTask,
+  );
+  assert.deepEqual(
+    fallbackEvents
+      .filter((event) => event.event === 'acquired')
+      .map((event) => event.resource),
+    ['desktop', 'android'],
+  );
+  assert.notEqual(
+    fallbackEvents.find((event) => event.resource === 'desktop').workerId,
+    fallbackEvents.find((event) => event.resource === 'android').workerId,
+  );
+  assert.ok(
+    fallbackEvents.findIndex(
+      (event) => event.resource === 'desktop' && event.event === 'released',
+    ) <
+      fallbackEvents.findIndex(
+        (event) => event.resource === 'android' && event.event === 'acquired',
+      ),
+  );
+  console.log(
+    JSON.stringify({
+      passed: true,
+      concurrentPhoneTasks: true,
+      freshWorkerFallback: true,
+      queue: events,
+    }),
+  );
 } finally {
+  for (const run of session?.taskAgent.listActiveThreadRuns() ?? [])
+    session.taskAgent.abortRunStream(run.runId);
+  await Promise.all(runs.map((run) => run.getFullOutput().catch(() => {})));
+  if (session) {
+    const memory = await session.storage.getStore('memory');
+    const workerEvidence = [];
+    for (const run of runs) {
+      for (const result of await run.toolResults) {
+        const threadId = result.payload.result?.subAgentThreadId;
+        if (!threadId) continue;
+        const history = await memory.listMessages({
+          threadId,
+          page: 0,
+          perPage: 100,
+        });
+        workerEvidence.push({
+          threadId,
+          tools: history.messages.flatMap((message) =>
+            (message.content?.parts ?? [])
+              .filter((part) => part.type === 'tool-invocation')
+              .map((part) => ({
+                name: part.toolInvocation.toolName,
+                state: part.toolInvocation.state,
+                error: part.toolInvocation.errorText ?? null,
+              })),
+          ),
+        });
+      }
+    }
+    console.log(
+      JSON.stringify({
+        nativeRuns: runs.map((run) => run.runId),
+        workerEvidence,
+        queue: events,
+      }),
+    );
+  }
   await session?.close();
+  await android.coordinator.shutdown();
   await android.onApplicationShutdown();
   const pool = new Pool({ connectionString });
   try {

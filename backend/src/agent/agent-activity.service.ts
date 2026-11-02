@@ -8,6 +8,7 @@ import {
 import { EventsService } from '../events/events.service.js';
 import { TasksService } from '../tasks/tasks.service.js';
 import type { Task } from '../tasks/tasks.types.js';
+import { InteractionCoordinator } from '../interaction/interaction-coordinator.js';
 import type {
   ActivityCommentary,
   AgentActivityState,
@@ -29,15 +30,21 @@ export class AgentActivityService implements OnModuleInit, OnModuleDestroy {
   private revision = 0;
   private latestCompletion: AgentActivityState['latestCompletion'] = null;
   private readonly subscription;
+  private readonly resourceSubscription;
 
   constructor(
     @Inject(EventsService) private readonly events: EventsService,
     @Inject(TasksService) private readonly taskService: TasksService,
+    @Inject(InteractionCoordinator)
+    private readonly interactions: InteractionCoordinator = new InteractionCoordinator(),
   ) {
     this.subscription = events.changes.subscribe((event) => {
       if (event.event === 'task.added' || event.event === 'task.updated')
         this.observeTask(event.task);
     });
+    this.resourceSubscription = interactions.changes.subscribe(() =>
+      this.publish(),
+    );
   }
 
   async onModuleInit() {
@@ -52,6 +59,7 @@ export class AgentActivityService implements OnModuleInit, OnModuleDestroy {
 
   onModuleDestroy() {
     this.subscription.unsubscribe();
+    this.resourceSubscription.unsubscribe();
   }
 
   current(): AgentActivityState {
@@ -74,6 +82,17 @@ export class AgentActivityService implements OnModuleInit, OnModuleDestroy {
         commentary,
       });
     }
+    const resources = this.interactions
+      .snapshot()
+      .filter(
+        (entry) => entry.owner || entry.waiting.length || entry.unavailable,
+      )
+      .map((entry) => ({
+        resource: entry.resource,
+        ownerTaskId: entry.owner?.taskId ?? null,
+        waitingTaskIds: entry.waiting.map((waiter) => waiter.taskId),
+        unavailable: entry.unavailable,
+      }));
     return {
       revision: this.revision,
       status: this.runs.size ? 'working' : 'idle',
@@ -83,6 +102,7 @@ export class AgentActivityService implements OnModuleInit, OnModuleDestroy {
         .filter((task) => !task.archived && task.status === 'needs-input')
         .map(({ id, title }) => ({ id, title })),
       latestCompletion: this.latestCompletion,
+      ...(resources.length ? { resources } : {}),
     };
   }
 

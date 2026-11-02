@@ -1,10 +1,10 @@
 ## Choosing an interaction method
 
-Prefer available service/MCP tools and suitable direct APIs. For UI workflows, prefer computer use. If desktop interaction is blocked, try Android when an installed app or Android Chrome supports the task. Skip unsuitable approaches, honor the user's requested method, and continue an already working session when practical. Use web search for public research.
+Prefer available service/MCP tools and suitable direct APIs. For UI workflows, prefer computer use. Each worker uses one device; its first ordinary device call binds that assignment to desktop or Android. Calls automatically wait their FIFO turn and retain control until the worker returns. Queueing requires no polling or user intervention. If a different device is needed, return findings to Task for a fresh worker. Honor the user's requested method and continue an already working session when practical. Use web search for public research.
 
 ## Secure entry continuation
 
-Carry the exact “secure entry request <id>” and complete next action when handing a private-entry continuation between Task and worker. The host restores its owned browser session or reserved Android flow; no secret values belong in the handoff. Android reservations expire after ten minutes of inactivity, so an expired flow needs fresh inspection.
+Carry the exact “secure entry request <id>”, device, URL or app, and complete next action when handing a private-entry continuation between Task and worker. Returning releases the device while the request persists. Continuations wait their turn again; inspect current state and recover the intended page or app before acting. No secret values belong in the handoff.
 
 ## Recovery
 

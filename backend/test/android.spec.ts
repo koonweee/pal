@@ -4,10 +4,36 @@ import { RequestContext } from '@mastra/core/request-context';
 import {
   androidActions,
   AndroidService,
+  type AndroidOwner,
 } from '../dist/android/android.service.js';
 import { androidTools } from '../dist/android/android-tools.js';
 import { PARENT_TASK_ID, WORKER_ID } from '../dist/agent/task-workers.js';
 import { CodeModeProcessor } from '../dist/agent/code-mode.processor.js';
+import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
+
+it('allows fresh private inspection after a readiness failure without disabling the phone', async () => {
+  const service = new AndroidService(
+    new ConfigService({ PAL_ANDROID_MCP_URL: 'http://phone.test/mcp' }),
+  );
+  const fetch = vi
+    .spyOn(globalThis, 'fetch')
+    .mockRejectedValueOnce(new Error('No USB phone'))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'ready' })));
+  const owner = { taskId: 'task', workerId: 'worker' };
+  try {
+    await expect(service.secure(owner, { action: 'inspect' })).rejects.toThrow(
+      'unavailable',
+    );
+    expect(service.coordinator.snapshot()[1].unavailable).toBe(false);
+    expect(await service.secure(owner, { action: 'inspect' })).toEqual({
+      status: 'ready',
+    });
+  } finally {
+    fetch.mockRestore();
+    await service.coordinator.shutdown();
+    await service.onApplicationShutdown();
+  }
+});
 
 it('binds device/worker, preserves upstream observations and schemas, serializes private operations and retains ownership through cancellation', async () => {
   const calls: { name: string; arguments: Record<string, unknown> }[] = [];
@@ -119,15 +145,42 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
   const address = server.address();
   if (!address || typeof address === 'string')
     throw new Error('Missing fixture address');
+  const coordinator = new InteractionCoordinator();
   const service = new AndroidService(
     new ConfigService({
       PAL_ANDROID_MCP_URL: `http://127.0.0.1:${address.port}/mcp`,
       PAL_ANDROID_MCP_TOKEN: 'fixture',
       PAL_ANDROID_DEVICE_ID: 'usb-phone',
     }),
+    coordinator,
   );
   const first = { taskId: 'one', workerId: 'one' },
     second = { taskId: 'two', workerId: 'two' };
+  const firstExecution = coordinator.begin(first, 'parent');
+  const secondExecution = coordinator.begin(second, 'parent');
+  // Emulate the production tool processor while exercising the real adapter.
+  const turnId = (owner: AndroidOwner) =>
+    owner.workerId === first.workerId ? firstExecution : secondExecution;
+  const invoke = service.call.bind(service);
+  service.call = (owner, action, args, signal) =>
+    coordinator.run(
+      'android',
+      turnId(owner),
+      () => invoke(owner, action, args, signal),
+      signal,
+    );
+  const secure = service.secure.bind(service);
+  service.secure = <T>(
+    owner: AndroidOwner,
+    input: object,
+    signal?: AbortSignal,
+  ) =>
+    coordinator.run(
+      'android',
+      turnId(owner),
+      () => secure<T>(owner, input, signal),
+      signal,
+    );
   const activateSurface = vi.fn();
   try {
     discoveryFailure = 'initialize';
@@ -180,23 +233,19 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
     expect(processed.tools.android_screenshot).toBeDefined();
     expect(instructions).toContain('android_inspect');
     expect(instructions).not.toContain('android_screenshot');
-    await expect(service.call(second, 'android_apps', {})).rejects.toThrow(
-      'busy',
-    );
     const gate = Promise.withResolvers<void>();
     hold = gate.promise;
     const abort = new AbortController();
     const pending = service.secure(first, { action: 'inspect' }, abort.signal);
     await vi.waitFor(() => expect(native).toHaveLength(2));
     abort.abort();
-    const release = service.release(first.taskId, first.workerId);
-    await expect(service.call(second, 'android_apps', {})).rejects.toThrow(
-      'busy',
-    );
+    const release = coordinator.finish(firstExecution);
+    const next = service.call(second, 'android_apps', {});
     expect(native.filter((action) => action === 'pause')).toHaveLength(1);
     gate.resolve();
     await pending;
     await release;
+    await next;
     hold = undefined;
     expect(native.at(-1)).toBe('pause');
     await tools.android_apps!.execute!(
@@ -209,11 +258,7 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
       },
     );
     expect(activateSurface).toHaveBeenCalledWith('two', 'two');
-    await service.release('two', 'two', true);
     expect(service.owns('two', 'two')).toBe(true);
-    await expect(service.call(first, 'android_apps', {})).rejects.toThrow(
-      'busy',
-    );
     await service.call(second, 'android_batch', {
       steps: [
         {
@@ -246,7 +291,6 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
       content: [{ text: 'PRIVATE_UPSTREAM_DIAGNOSTIC' }],
     });
     fail = false;
-    await service.release('two', 'two');
     const pre = new AbortController();
     pre.abort();
     await expect(
@@ -264,21 +308,15 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
       ref: '@a1',
       device: 'usb-phone',
     });
-    await service.call(second, 'android_apps', {});
-    expect(connections).toBe(3);
-    await service.secure(second, { action: 'inspect' });
-    pauseFail = true;
-    await expect(service.release('two', 'two')).rejects.toThrow(
-      'private operation',
+    await expect(service.call(second, 'android_apps', {})).rejects.toThrow(
+      'unavailable',
     );
-    await expect(service.call(first, 'android_apps', {})).rejects.toThrow(
-      'busy',
-    );
-    pauseFail = false;
-    await service.release('two', 'two');
+    expect(connections).toBe(2);
+    await coordinator.finish(secondExecution);
   } finally {
     pauseFail = false;
     await service.onApplicationShutdown();
+    await coordinator.shutdown();
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }

@@ -39,8 +39,7 @@ export class MessageResponseDto {
   @ApiProperty() notify!: boolean;
   @ApiProperty({ nullable: true }) idempotencyKey!: string | null;
   @ApiProperty({ format: 'uuid', nullable: true }) replyToMessageId!:
-    | string
-    | null;
+    string | null;
   @ApiProperty({ type: MessageReplySummaryResponseDto, nullable: true })
   replyTo!: MessageReplySummaryResponseDto | null;
   @ApiProperty({ enum: ['user', 'assistant'] }) role!: 'user' | 'assistant';
@@ -232,6 +231,14 @@ export class ActivityCompletionResponseDto extends ActivityTaskResponseDto {
   @ApiProperty({ format: 'date-time' }) occurredAt!: string;
 }
 
+export class InteractionResourceResponseDto {
+  @ApiProperty({ enum: ['desktop', 'android'] }) resource!:
+    'desktop' | 'android';
+  @ApiProperty({ type: String, nullable: true }) ownerTaskId!: string | null;
+  @ApiProperty({ type: [String] }) waitingTaskIds!: string[];
+  @ApiProperty() unavailable!: boolean;
+}
+
 export class AgentActivityResponseDto {
   @ApiProperty({ minimum: 0 }) revision!: number;
   @ApiProperty() mainWorking!: boolean;
@@ -242,6 +249,8 @@ export class AgentActivityResponseDto {
   @ApiProperty({ type: ActivityCompletionResponseDto, nullable: true })
   latestCompletion!: ActivityCompletionResponseDto | null;
   @ApiProperty({ enum: ['idle', 'working'] }) status!: 'idle' | 'working';
+  @ApiPropertyOptional({ type: [InteractionResourceResponseDto] })
+  resources?: InteractionResourceResponseDto[];
 }
 
 export class AgentActivityEventResponseDto {

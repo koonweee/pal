@@ -542,6 +542,7 @@ export interface components {
         | null;
       mainWorking: boolean;
       needsInputTasks: components['schemas']['ActivityTaskResponseDto'][];
+      resources?: components['schemas']['InteractionResourceResponseDto'][];
       revision: number;
       runningTasks: components['schemas']['RunningTaskResponseDto'][];
       /** @enum {string} */
@@ -610,6 +611,13 @@ export interface components {
     InstanceSettingsUpdatedEventResponseDto: {
       /** @enum {string} */
       event: 'instance.settings.updated';
+    };
+    InteractionResourceResponseDto: {
+      ownerTaskId: string | null;
+      /** @enum {string} */
+      resource: 'desktop' | 'android';
+      unavailable: boolean;
+      waitingTaskIds: string[];
     };
     LoginAccountDto: {
       id: string;
