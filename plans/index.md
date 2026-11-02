@@ -15,6 +15,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Exclusive interaction resources](exclusive-interaction-resources.md) | Planned | Shared desktop/Android FIFO turns, one device per worker, lifecycle release, private-entry recovery, and agent-directed UI cleanup. |
 | [Production Run Instrumentation](production-run-instrumentation.md) | Done | Native run/tool telemetry, correlation, retention, and agent-written storage queries. |
 | [Compact worker results](compact-worker-results.md) | Done | Compact Task delegation results while retaining worker history. |
 | [Android keyboard policy](android-keyboard.md) | Done | Suppress the Android IME and provide an explicit PWA client-keyboard toggle. |
