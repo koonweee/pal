@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /** Private ADB bridge. No values, requests or exceptions are written to logs. */
 public final class Bridge extends Instrumentation {
+    private static final int PROTOCOL = 1;
     private UiAutomation automation;
     private final String session = UUID.randomUUID().toString();
     private final AtomicLong events = new AtomicLong();
@@ -136,7 +137,7 @@ public final class Bridge extends Instrumentation {
     private JSONObject execute(JSONObject request) throws Exception {
         phase = "request";
         String action = request.getString("action");
-        if (action.equals("ping")) return new JSONObject().put("status", "ready").put("session", session);
+        if (action.equals("ping")) return new JSONObject().put("status", "ready").put("protocol", PROTOCOL).put("session", session);
         if (action.equals("stop")) { stopping = true; return new JSONObject().put("status", "stopped"); }
         phase = "connect";
         connect();

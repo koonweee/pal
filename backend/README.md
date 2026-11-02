@@ -86,7 +86,7 @@ Run `./scripts/dev-local android-smoke` for isolated model-driven acceptance. It
 
 ### Native private entry
 
-Installed apps need no trust registration. See [sidecar setup](../architecture/deployment.md#android-sidecar). Native and embedded WebView fields supporting editable accessibility nodes use private entry. Inaccessible controls, payments, unlock and biometrics require manual phone entry.
+Installed apps need no trust registration. See [sidecar setup](../architecture/deployment.md#android-sidecar). Development and production reuse one protocol-compatible Pal helper when they share a phone; changing environments does not require matching APK signing keys. Native and embedded WebView fields supporting editable accessibility nodes use private entry. Inaccessible controls, payments, unlock and biometrics require manual phone entry.
 
 The interaction worker uses `login_inspect({target:"android",website:"https://service.example"})` and the existing private-entry/vault tools. The account website selects shared vault accounts; it is not a verified embedded-page origin. Android screenshots and private-entry previews are unmasked; structured metadata omits editable values; private fields are filled through a rootless helper on authenticated ADB. Browser and native flows share account selection, private cards, staged credential storage and transient OTP handling. Native entry omits browser persistence controls.
 

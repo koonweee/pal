@@ -4,6 +4,14 @@ import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 const exec = promisify(execFile);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const helperPackage = 'dev.pal.secureentry';
+const helperProtocol = 1;
+
+function compatible(result, allowLegacy = false) {
+  return result?.status === 'ready' &&
+    (result.protocol === helperProtocol ||
+      (allowLegacy && result.protocol === undefined));
+}
 
 /** Calls are serialized by the sidecar. This transport never retries a write. */
 export class HelperClient {
@@ -21,6 +29,21 @@ export class HelperClient {
   }
   async start() {
     if (this.process && this.process.exitCode === null) return;
+    const installed = this.installed ||
+      (await this.adb('shell', 'pm', 'path', helperPackage)).startsWith('package:');
+    if (installed) {
+      this.installed = true;
+      try {
+        const ready = await this.launch(true);
+        if (compatible(ready, true)) {
+          this.installed = true;
+          return;
+        }
+      } catch { /* Replace an unusable Pal-owned helper below. */ }
+      await this.stop().catch(() => {});
+      await this.adb('uninstall', helperPackage);
+      this.installed = false;
+    }
     try { await this.launch(); }
     catch {
       await this.stop().catch(() => {});
@@ -36,12 +59,12 @@ export class HelperClient {
     this.port = undefined;
     this.socketName = undefined;
   }
-  async launch() {
+  async launch(allowLegacy = false) {
     // Android has one UI Automation connection. Mobile CLI has no public
     // Android stop command; release its exact pinned DeviceServer process.
     await this.adb('shell', "pkill -f 'com.mobilenext.mobilecli.[D]eviceServer' || [ $? -eq 1 ]");
     if (!this.installed) {
-      await this.adb('install', '-r', this.directory + '/helper.apk');
+      await this.adb('install', this.directory + '/helper.apk');
       this.installed = true;
     }
     await this.removeForward();
@@ -65,7 +88,12 @@ export class HelperClient {
     this.process = spawn('adb', ['-s', this.device, 'shell', 'am', 'instrument', '-e', 'socket', socketName, '-w', 'dev.pal.secureentry/.Bridge'], { stdio: 'ignore' });
     this.process.on('error', () => {});
     for (let attempt = 0; attempt < 50; attempt++) {
-      try { await this.request({ action: 'ping' }, 1000); return; }
+      try {
+        const ready = await this.request({ action: 'ping' }, 1000);
+        if (!compatible(ready, allowLegacy))
+          throw new Error('Android helper protocol mismatch');
+        return ready;
+      }
       catch { await wait(100); }
     }
     throw new Error('Android helper could not start');
@@ -126,10 +154,10 @@ export class HelperClient {
       }
       // Also settles an orphan from a killed/replaced sidecar. This package is
       // owned solely by Pal; installed user apps and logins are untouched.
-      const installed = this.installed || await this.adb('shell', 'pm', 'path', 'dev.pal.secureentry');
+      const installed = this.installed || await this.adb('shell', 'pm', 'path', helperPackage);
       if (installed) {
-        await this.adb('shell', 'am', 'force-stop', 'dev.pal.secureentry');
-        await this.adb('shell', 'run-as', 'dev.pal.secureentry', 'rm', '-f', 'cache/bridge-key');
+        await this.adb('shell', 'am', 'force-stop', helperPackage);
+        await this.adb('shell', 'run-as', helperPackage, 'rm', '-f', 'cache/bridge-key');
       }
     } finally {
       this.process?.kill(); this.process = undefined;

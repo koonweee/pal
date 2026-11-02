@@ -18,6 +18,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 | [Production Run Instrumentation](production-run-instrumentation.md) | Done | Native run/tool telemetry, correlation, retention, and agent-written storage queries. |
 | [Compact worker results](compact-worker-results.md) | Done | Compact Task delegation results while retaining worker history. |
 | [Android keyboard policy](android-keyboard.md) | Done | Suppress the Android IME and provide an explicit PWA client-keyboard toggle. |
+| [Shared Android secure-entry helper](android-shared-helper.md) | In Progress | Reuse one protocol-compatible private-fill helper across development and production on the shared phone. |
 | [Android phone viewer](android-phone-viewer.md) | Done | Live scrcpy phone drawer and touch control in the development PWA. |
 | [Computer-first interaction](computer-first-interaction.md) | Complete | Remove browser tools, bind visual navigation to private fill, and deploy the reviewed release. |
 | [Android upstream interaction](android-upstream-interaction.md) | Done | Upstream navigation and private-fill handoff verified; friction follow-up completes 3/3 product runs and order lookup, with batch-null regression fixed. |

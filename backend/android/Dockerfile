@@ -12,7 +12,7 @@ RUN curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-1
     && /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager 'platforms;android-35' 'build-tools;35.0.0' >/dev/null
 WORKDIR /build
 COPY helper/ ./
-RUN --mount=type=cache,target=/root/.gradle --mount=type=cache,id=pal-android-signing,target=/root/.android gradle --no-daemon --console=plain :bridge:assembleDebug :fixture:assembleDebug
+RUN --mount=type=cache,target=/root/.gradle gradle --no-daemon --console=plain :bridge:assembleDebug :fixture:assembleDebug
 
 FROM node:24.15.0-trixie-slim@sha256:291be77873bc04731968cacf82f0fcef17cee8cf200c6b6951e2bcab41560eb7
 RUN apt-get update && apt-get install -y --no-install-recommends adb ca-certificates \

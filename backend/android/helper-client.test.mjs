@@ -4,6 +4,78 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { HelperClient } from './helper-client.mjs';
 
+class LifecycleClient extends HelperClient {
+  constructor({ installed, launches }) {
+    super('test-device');
+    this.packageInstalled = installed;
+    this.launches = [...launches];
+    this.commands = [];
+  }
+  async adb(...args) {
+    this.commands.push(args);
+    if (args[0] === 'shell' && args[1] === 'pm' && args[2] === 'path')
+      return this.packageInstalled ? 'package:/data/app/helper/base.apk' : '';
+    if (args[0] === 'uninstall') {
+      this.packageInstalled = false;
+      return 'Success';
+    }
+    if (args[0] === 'install') {
+      this.packageInstalled = true;
+      this.installed = true;
+      return 'Success';
+    }
+    return '';
+  }
+  async launch() {
+    if (!this.installed && !this.packageInstalled)
+      await this.adb('install', this.directory + '/helper.apk');
+    const next = this.launches.shift();
+    if (next instanceof Error) throw next;
+    return next;
+  }
+  async stop() {
+    this.commands.push(['stop']);
+  }
+  async removeForward() {}
+}
+
+test('reuses one compatible helper installation across environments', async () => {
+  const client = new LifecycleClient({
+    installed: true,
+    launches: [{ status: 'ready' }],
+  });
+  await client.start();
+  assert.equal(client.installed, true);
+  assert.equal(client.commands.some(([name]) => name === 'install'), false);
+  assert.equal(client.commands.some(([name]) => name === 'uninstall'), false);
+});
+
+test('installs a missing helper and replaces an incompatible helper', async () => {
+  const missing = new LifecycleClient({
+    installed: false,
+    launches: [{ status: 'ready', protocol: 1 }],
+  });
+  await missing.start();
+  assert.equal(missing.commands.filter(([name]) => name === 'install').length, 1);
+
+  const incompatible = new LifecycleClient({
+    installed: true,
+    launches: [
+      { status: 'ready', protocol: 2 },
+      { status: 'ready', protocol: 1 },
+    ],
+  });
+  await incompatible.start();
+  assert.equal(
+    incompatible.commands.filter(([name]) => name === 'uninstall').length,
+    1,
+  );
+  assert.equal(
+    incompatible.commands.filter(([name]) => name === 'install').length,
+    1,
+  );
+});
+
 test('authenticates every connection before sending a fill and never retries a lost write', async () => {
   const key = randomBytes(32);
   let mode = 'spoof', requests = 0;
