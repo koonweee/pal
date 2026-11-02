@@ -168,6 +168,7 @@ function useWorkbenchChat(
       return true;
     },
     online: conversationScene !== 'offline',
+    outbox: new Map(),
     outgoing: new Map(),
     pendingFiles: {
       add() {},

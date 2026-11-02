@@ -240,6 +240,8 @@ REQUEST
 
 A committed user message means Read. `message.added` exposes it over SSE before native agent acceptance; history snapshots retain the same receipt. The nullable `idempotencyKey` matches an optimistic client bubble to its persisted message. Read derives from persistence, including older user messages and messages whose agent handoff fails.
 
+The PWA accepts ordinary composer sends after history has loaded even when its event stream is disconnected. A versioned local outbox keeps the optimistic message, destination, uploaded attachment references, optional quote and original idempotency key across reloads. Queued entries drain in creation order after the stream reconnects and authoritative history synchronizes; history and SSE reconcile already-persisted entries before another attempt. Automatic delivery expires after 24 hours. Expired messages stay visible for explicit retry or dismissal, and an explicit retry starts a new 24-hour window. Suggested replies still require current connected history.
+
 Explicit replies can target user or assistant messages visible in the selected chat. The API rejects a missing or out-of-chat target with 400 before persistence and agent delivery. The normalized reply ID participates in idempotency checks. History and `message.added`/`message.updated` include the stored `replyToMessageId` and a bounded, nonrecursive target summary. SSE events carry the same canonical message to both chat views; clients show a quote only when its target belongs to the displayed chat, using the target's role, task ID, and phase. Loaded pagination does not affect this check. Clients map their own platform reply IDs to Pal message IDs.
 
 #### Reply references absent from a client

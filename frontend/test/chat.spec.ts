@@ -1371,6 +1371,76 @@ test('keeps a failed submission in the conversation for retry or dismissal', asy
   await expect(page.locator('#send-error')).toHaveCount(0);
 });
 
+test('keeps a disconnected send across reload and delivers it after reconnect', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await expect(page.locator('#connection')).toHaveText('Connected');
+  await page.route('**/api/stream**', (route) => route.abort());
+  for (const stream of backend.streams) stream.destroy();
+  backend.streams.clear();
+  await expect(page.locator('#connection')).toHaveText('Reconnecting…');
+
+  const composer = page.getByRole('textbox', { name: 'Message pal' });
+  const send = page.getByRole('button', {
+    name: 'Send message',
+    exact: true,
+  });
+  await composer.fill('Send this when you are back');
+  await expect(send).toBeEnabled();
+  await send.click();
+  await expect(composer).toHaveValue('');
+  await expect(
+    page.getByText('Send this when you are back', { exact: true }),
+  ).toBeVisible();
+  expect(backend.submissions).toHaveLength(0);
+  const { expiredKey, originalKey } = await page.evaluate(() => {
+    const stored = localStorage.getItem('pal-message-outbox-v1');
+    if (!stored) throw new Error('Expected a persisted message outbox.');
+    const outbox = JSON.parse(stored);
+    const current = outbox.entries[0];
+    const expiredKey = 'expired-send-key';
+    outbox.entries.unshift({
+      ...current,
+      createdAt: '2026-10-30T00:00:00.000Z',
+      expiresAt: '2026-10-31T00:00:00.000Z',
+      idempotencyKey: expiredKey,
+      text: 'This send is too old',
+    });
+    localStorage.setItem('pal-message-outbox-v1', JSON.stringify(outbox));
+    return {
+      expiredKey,
+      originalKey: current.idempotencyKey as string,
+    };
+  });
+
+  await page.reload();
+  await expect(
+    page.getByText('Send this when you are back', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('This send is too old', { exact: true }),
+  ).toBeVisible();
+  expect(backend.submissions).toHaveLength(0);
+
+  await page.unroute('**/api/stream**');
+  await expect(page.locator('#connection')).toHaveText('Connected');
+  await expect.poll(() => backend.submissions.length).toBe(1);
+  expect(backend.submissions[0]!.idempotencyKey).toBe(originalKey);
+  expect(backend.submissions[0]!.idempotencyKey).not.toBe(expiredKey);
+  await expect(page.locator('article.user')).toHaveCount(2);
+  const expired = page
+    .locator(`[data-message-id="local-${expiredKey}"]`)
+    .filter({ hasText: 'This send is too old' });
+  await expect(expired).toContainText('Send expired');
+  await expired.getByRole('button', { name: 'Dismiss failed message' }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => localStorage.getItem('pal-message-outbox-v1')),
+    )
+    .toBeNull();
+});
+
 test('shows one attached agent reaction and restores its replacement after reload', async ({
   page,
 }) => {

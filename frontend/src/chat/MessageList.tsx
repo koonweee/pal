@@ -44,6 +44,7 @@ const MessageRow = memo(
     const { settings } = useInstanceSettings();
     const {
       failed,
+      failureReason,
       message,
       persisted,
       receiptSlot,
@@ -146,7 +147,13 @@ const MessageRow = memo(
             )}
             {failed && message.idempotencyKey && (
               <div className="message-failure" role="status">
-                <span>{retrying ? 'Sending…' : 'Couldn’t send'}</span>
+                <span>
+                  {retrying
+                    ? 'Sending…'
+                    : failureReason === 'expired'
+                      ? 'Send expired'
+                      : 'Couldn’t send'}
+                </span>
                 <IconAction
                   type="button"
                   className={`message-failure-action${retrying ? ' is-retrying' : ''}`}
@@ -228,6 +235,7 @@ const MessageRow = memo(
   (previous, next) =>
     previous.view.message === next.view.message &&
     previous.view.failed === next.view.failed &&
+    previous.view.failureReason === next.view.failureReason &&
     previous.view.persisted === next.view.persisted &&
     previous.view.receiptSlot === next.view.receiptSlot &&
     previous.view.retrying === next.view.retrying &&

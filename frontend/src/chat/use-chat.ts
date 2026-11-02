@@ -28,12 +28,20 @@ import {
 } from './sync';
 import { useConversationPacing } from './use-conversation-pacing';
 import { readMainHistoryCache, writeMainHistoryCache } from './history-cache';
+import {
+  maxMessageOutboxEntries,
+  messageOutboxExpiresAt,
+  readMessageOutbox,
+  writeMessageOutbox,
+  type MessageOutboxEntry,
+} from './message-outbox';
 
 type OutgoingMessage = Message & { suggestedReply?: SuggestedReplySelection };
 
 export interface MessageView {
   suggestedReplies?: string[];
   failed: boolean;
+  failureReason?: 'failed' | 'expired';
   message: Message;
   persisted: boolean;
   receiptSlot: boolean;
@@ -57,6 +65,7 @@ interface ChatState {
   opened: boolean;
   latestNavigationKey?: number;
   online: boolean;
+  outbox: Map<string, MessageOutboxEntry>;
   outgoing: Map<string, OutgoingMessage>;
   retryingSendKey?: string;
   selectedDetails?: TaskDetails;
@@ -75,18 +84,62 @@ interface ChatState {
   taskSyncing: boolean;
 }
 
+function outgoingMessage(entry: MessageOutboxEntry): OutgoingMessage {
+  return {
+    ...(entry.suggestedReply ? { suggestedReply: entry.suggestedReply } : {}),
+    source: 'web',
+    originDestinationId: 'web',
+    mainVisible: false,
+    reaction: null,
+    deliveryDestinationIds: [],
+    notificationDestinationIds: [],
+    notify: false,
+    id: `local-${entry.idempotencyKey}`,
+    idempotencyKey: entry.idempotencyKey,
+    replyToMessageId: entry.replyToMessageId,
+    replyTo: entry.replyTo,
+    version: 0,
+    sequence: Number.MAX_SAFE_INTEGER,
+    createdAt: entry.createdAt,
+    updatedAt: entry.createdAt,
+    role: 'user',
+    text: entry.text,
+    metadata: {
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    },
+    taskId: entry.taskId,
+    phase: null,
+    attachments: entry.attachments,
+    suggestedReplies: [],
+  };
+}
+
 function createInitialState(): ChatState {
+  const entries = readMessageOutbox();
+  const outgoing = new Map(
+    entries.map((entry) => [entry.idempotencyKey, outgoingMessage(entry)]),
+  );
   return {
     before: null,
     connected: false,
     draft: '',
-    failedSends: new Map(),
+    failedSends: new Map(
+      entries
+        .filter(
+          (entry) => entry.status === 'failed' || entry.status === 'expired',
+        )
+        .map((entry) => [
+          entry.idempotencyKey,
+          outgoing.get(entry.idempotencyKey)!,
+        ]),
+    ),
     hiddenMessageKeys: new Set(),
     loaded: false,
     loadingOlder: false,
     opened: false,
     online: navigator.onLine,
-    outgoing: new Map(),
+    outbox: new Map(entries.map((entry) => [entry.idempotencyKey, entry])),
+    outgoing,
     stored: new Map(
       readMainHistoryCache().map((message) => [message.id, message]),
     ),
@@ -160,12 +213,15 @@ export function useChat() {
   const taskBuffered = useRef<Task[]>([]);
   const taskDrafts = useRef(new Map<string, string>());
   const chatReplies = useRef(new Map<string, Message | undefined>());
+  const outboxDraining = useRef(false);
   const mounted = useRef(true);
   const controller = useRef<{
+    flushOutbox(): Promise<void>;
     synchronize(): Promise<void>;
     synchronizeTasks(): Promise<void>;
     refreshTaskDetails(): Promise<void>;
   }>({
+    flushOutbox: async () => undefined,
     synchronize: async () => undefined,
     synchronizeTasks: async () => undefined,
     refreshTaskDetails: async () => undefined,
@@ -186,6 +242,8 @@ export function useChat() {
         typeof update === 'function'
           ? update(current.current)
           : { ...current.current, ...update };
+      if (next.outbox !== current.current.outbox)
+        writeMessageOutbox(next.outbox.values());
       current.current = next;
       if (mounted.current) setState(next);
     },
@@ -342,15 +400,31 @@ export function useChat() {
       if (oldest !== undefined)
         for (const [id, message] of fresh)
           if (message.sequence < oldest) fresh.delete(id);
+      let outbox = current.current.outbox;
+      let failedSends = current.current.failedSends;
+      for (const message of fresh.values()) {
+        if (!message.idempotencyKey) continue;
+        const entry = outbox.get(message.idempotencyKey);
+        if (entry?.status !== 'queued') continue;
+        if (outbox === current.current.outbox)
+          outbox = new Map(current.current.outbox);
+        if (failedSends === current.current.failedSends)
+          failedSends = new Map(current.current.failedSends);
+        outbox.delete(message.idempotencyKey);
+        failedSends.delete(message.idempotencyKey);
+      }
       historyRetry.current.cancel(true);
       commit({
         badge: selectedTaskId ? undefined : badge,
         before: crossedBoundary && oldest !== undefined ? oldest : page.before,
         historyError: undefined,
+        failedSends,
         loaded: true,
+        outbox,
         stored: fresh,
         syncing: false,
       });
+      void controller.current.flushOutbox();
     } catch (error) {
       if (read !== generation.current) return;
       const stored = new Map(current.current.stored);
@@ -365,12 +439,6 @@ export function useChat() {
       historyRetry.current.schedule();
     }
   }, [commit]);
-
-  controller.current = {
-    refreshTaskDetails,
-    synchronize,
-    synchronizeTasks,
-  };
 
   const selectChat = useCallback(
     (id?: string) => {
@@ -458,11 +526,16 @@ export function useChat() {
   );
 
   const deliverMessage = useCallback(
-    async (message: OutgoingMessage, assistantSequence: number) => {
+    async (message: OutgoingMessage) => {
       const idempotencyKey = message.idempotencyKey;
-      if (!idempotencyKey) return;
+      if (!idempotencyKey) return 'failed' as const;
       const destination = message.taskId ?? undefined;
-      messageSubmitted(idempotencyKey, assistantSequence);
+      const visible = destination === current.current.selectedTaskId;
+      if (visible)
+        messageSubmitted(
+          idempotencyKey,
+          latestAssistantSequence(current.current.stored, destination),
+        );
       try {
         await sendMessage({
           text: message.suggestedReply ? '' : message.text,
@@ -472,15 +545,20 @@ export function useChat() {
           replyToMessageId: message.replyToMessageId ?? undefined,
           attachmentIds: message.attachments.map((file) => file.id),
         });
-        messageAccepted(idempotencyKey);
-        assistantArrived(
-          latestAssistantSequence(current.current.stored, destination),
-        );
+        if (visible) {
+          messageAccepted(idempotencyKey);
+          assistantArrived(
+            latestAssistantSequence(current.current.stored, destination),
+          );
+        }
+        const outbox = new Map(current.current.outbox);
+        const failedSends = new Map(current.current.failedSends);
+        outbox.delete(idempotencyKey);
+        failedSends.delete(idempotencyKey);
+        commit({ failedSends, outbox });
         if (current.current.outgoing.has(idempotencyKey))
           await controller.current.synchronize();
-        const failedSends = new Map(current.current.failedSends);
-        failedSends.delete(idempotencyKey);
-        commit({ failedSends });
+        return 'sent' as const;
       } catch (error) {
         if (
           message.suggestedReply &&
@@ -489,20 +567,38 @@ export function useChat() {
         ) {
           const outgoing = new Map(current.current.outgoing);
           const failedSends = new Map(current.current.failedSends);
+          const outbox = new Map(current.current.outbox);
           outgoing.delete(idempotencyKey);
           failedSends.delete(idempotencyKey);
-          commit({ outgoing, failedSends });
-          messageFailed(idempotencyKey);
+          outbox.delete(idempotencyKey);
+          commit({ outgoing, failedSends, outbox });
+          if (visible) messageFailed(idempotencyKey);
           void controller.current.synchronize();
-          return;
+          return 'failed' as const;
         }
-        messageFailed(idempotencyKey);
+        if (visible) messageFailed(idempotencyKey);
+        if (!(error instanceof RequestError)) {
+          const entry = current.current.outbox.get(idempotencyKey);
+          if (entry?.status !== 'queued') {
+            const outbox = new Map(current.current.outbox);
+            if (entry)
+              outbox.set(idempotencyKey, { ...entry, status: 'queued' });
+            commit({ outbox });
+          }
+          void controller.current.synchronize();
+          return 'queued' as const;
+        }
         const failedSends = new Map(current.current.failedSends);
+        const outbox = new Map(current.current.outbox);
+        const entry = outbox.get(idempotencyKey);
+        if (entry) outbox.set(idempotencyKey, { ...entry, status: 'failed' });
         failedSends.set(idempotencyKey, message);
-        commit({ failedSends });
+        commit({ failedSends, outbox });
         void controller.current.synchronize();
+        return 'failed' as const;
       } finally {
         commit({ retryingSendKey: undefined, submitting: false });
+        void controller.current.flushOutbox();
       }
     },
     [
@@ -518,10 +614,11 @@ export function useChat() {
     async (suggestedReply?: SuggestedReplySelection) => {
       const value = current.current;
       if (
-        !value.connected ||
         !value.loaded ||
         value.syncing ||
         value.submitting ||
+        value.outbox.size >= maxMessageOutboxEntries ||
+        (suggestedReply && !value.connected) ||
         (!suggestedReply &&
           (pendingFiles.blocked ||
             (!value.draft.trim() && !pendingFiles.count)))
@@ -544,24 +641,13 @@ export function useChat() {
           : value.draft;
       const attachments = suggestedReply ? [] : pendingFiles.attachments;
       const destination = value.selectedTaskId;
-      const assistantSequence = latestAssistantSequence(
-        value.stored,
-        destination,
-      );
       const idempotencyKey = crypto.randomUUID();
       const reply = suggestedReply ? undefined : value.selectedReply;
       const createdAt = new Date().toISOString();
-      const outgoing = new Map(value.outgoing);
-      const message: OutgoingMessage = {
-        ...(suggestedReply ? { suggestedReply } : {}),
-        source: 'web',
-        originDestinationId: 'web',
-        mainVisible: false,
-        reaction: null,
-        deliveryDestinationIds: [],
-        notificationDestinationIds: [],
-        notify: false,
-        id: `local-${idempotencyKey}`,
+      const entry: MessageOutboxEntry = {
+        attachments,
+        createdAt,
+        expiresAt: messageOutboxExpiresAt(createdAt),
         idempotencyKey,
         replyToMessageId: reply?.id ?? null,
         replyTo: reply
@@ -575,32 +661,75 @@ export function useChat() {
               mainVisible: reply.mainVisible,
             }
           : null,
-        version: 0,
-        sequence: Number.MAX_SAFE_INTEGER,
-        createdAt,
-        updatedAt: createdAt,
-        role: 'user',
-        text,
-        metadata: {
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        },
+        status: value.connected ? 'retrying' : 'queued',
+        ...(suggestedReply ? { suggestedReply } : {}),
         taskId: destination ?? null,
-        phase: null,
-        attachments,
-        suggestedReplies: [],
+        text,
       };
+      const outgoing = new Map(value.outgoing);
+      const outbox = new Map(value.outbox);
+      const message = outgoingMessage(entry);
       outgoing.set(idempotencyKey, message);
+      outbox.set(idempotencyKey, entry);
       commit({
         ...(!suggestedReply ? { draft: '', selectedReply: undefined } : {}),
         localSendKey: idempotencyKey,
+        outbox,
         outgoing,
-        submitting: true,
+        submitting: value.connected,
       });
       if (!suggestedReply) pendingFiles.clear(destination ?? 'main');
-      await deliverMessage(message, assistantSequence);
+      if (value.connected) await deliverMessage(message);
     },
     [commit, deliverMessage, pendingFiles],
   );
+
+  const flushOutbox = useCallback(async () => {
+    if (outboxDraining.current) return;
+    outboxDraining.current = true;
+    try {
+      while (true) {
+        const value = current.current;
+        if (
+          !value.connected ||
+          !value.loaded ||
+          value.syncing ||
+          value.submitting
+        )
+          return;
+        const entry = Array.from(value.outbox.values()).find(
+          (candidate) =>
+            candidate.status === 'queued' || candidate.status === 'retrying',
+        );
+        if (!entry) return;
+        if (Date.parse(entry.expiresAt) <= Date.now()) {
+          const outbox = new Map(value.outbox);
+          const failedSends = new Map(value.failedSends);
+          const message =
+            value.outgoing.get(entry.idempotencyKey) ?? outgoingMessage(entry);
+          outbox.set(entry.idempotencyKey, { ...entry, status: 'expired' });
+          failedSends.set(entry.idempotencyKey, message);
+          commit({ failedSends, outbox });
+          continue;
+        }
+        const outgoing = new Map(value.outgoing);
+        const message =
+          outgoing.get(entry.idempotencyKey) ?? outgoingMessage(entry);
+        outgoing.set(entry.idempotencyKey, message);
+        commit({ outgoing, submitting: true });
+        if ((await deliverMessage(message)) === 'queued') return;
+      }
+    } finally {
+      outboxDraining.current = false;
+    }
+  }, [commit, deliverMessage]);
+
+  controller.current = {
+    flushOutbox,
+    refreshTaskDetails,
+    synchronize,
+    synchronizeTasks,
+  };
 
   const selectSuggestedReply = useCallback(
     (messageId: string, index: number) => {
@@ -727,13 +856,22 @@ export function useChat() {
           else {
             const stored = new Map(current.current.stored);
             const outgoing = new Map(current.current.outgoing);
+            let outbox = current.current.outbox;
+            let failedSends = current.current.failedSends;
             mergeMessage(
               stored,
               event.message,
               current.current.selectedTaskId,
               outgoing,
             );
-            commit({ outgoing, stored });
+            const key = event.message.idempotencyKey;
+            if (key && outbox.get(key)?.status === 'queued') {
+              outbox = new Map(outbox);
+              failedSends = new Map(failedSends);
+              outbox.delete(key);
+              failedSends.delete(key);
+            }
+            commit({ failedSends, outbox, outgoing, stored });
           }
           return;
         }
@@ -828,6 +966,12 @@ export function useChat() {
         suggestedReplies:
           message === latest ? message.suggestedReplies : undefined,
         failed: state.failedSends.has(messageKey),
+        failureReason:
+          state.outbox.get(messageKey)?.status === 'expired'
+            ? 'expired'
+            : state.failedSends.has(messageKey)
+              ? 'failed'
+              : undefined,
         message,
         persisted,
         receiptSlot,
@@ -846,6 +990,7 @@ export function useChat() {
     receiptMessageKey,
     state.failedSends,
     state.hiddenMessageKeys,
+    state.outbox,
     state.outgoing,
     state.retryingSendKey,
     state.loaded,
@@ -856,10 +1001,10 @@ export function useChat() {
     ? state.taskRows.get(state.selectedTaskId)
     : undefined;
   const canSend =
-    state.connected &&
     state.loaded &&
     !state.syncing &&
     !state.submitting &&
+    state.outbox.size < maxMessageOutboxEntries &&
     !pendingFiles.blocked &&
     (!!state.draft.trim() || !!pendingFiles.count);
 
@@ -906,30 +1051,39 @@ export function useChat() {
     async retryFailedMessage(idempotencyKey: string) {
       const value = current.current;
       const message = value.failedSends.get(idempotencyKey);
-      if (
-        !message ||
-        !value.connected ||
-        !value.loaded ||
-        value.syncing ||
-        value.submitting
-      )
-        return;
-      commit({ retryingSendKey: idempotencyKey, submitting: true });
-      await deliverMessage(
-        message,
-        latestAssistantSequence(value.stored, message.taskId ?? undefined),
-      );
+      if (!message || !value.loaded || value.submitting) return;
+      const failedSends = new Map(value.failedSends);
+      const outbox = new Map(value.outbox);
+      const existing = outbox.get(idempotencyKey);
+      if (!existing) return;
+      const retriedAt = new Date().toISOString();
+      failedSends.delete(idempotencyKey);
+      outbox.set(idempotencyKey, {
+        ...existing,
+        expiresAt: messageOutboxExpiresAt(retriedAt),
+        status: 'retrying',
+      });
+      const canDeliver = value.connected && !value.syncing;
+      commit({
+        failedSends,
+        outbox,
+        retryingSendKey: canDeliver ? idempotencyKey : undefined,
+        submitting: canDeliver,
+      });
+      if (canDeliver) await deliverMessage(message);
     },
     dismissFailedMessage(idempotencyKey: string) {
       const value = current.current;
       if (!value.failedSends.has(idempotencyKey)) return;
       const failedSends = new Map(value.failedSends);
       const hiddenMessageKeys = new Set(value.hiddenMessageKeys);
+      const outbox = new Map(value.outbox);
       const outgoing = new Map(value.outgoing);
       failedSends.delete(idempotencyKey);
       hiddenMessageKeys.add(idempotencyKey);
+      outbox.delete(idempotencyKey);
       outgoing.delete(idempotencyKey);
-      commit({ failedSends, hiddenMessageKeys, outgoing });
+      commit({ failedSends, hiddenMessageKeys, outbox, outgoing });
     },
     clearNavigationTarget() {
       commit({ navigationTarget: undefined });
