@@ -23,7 +23,12 @@ import {
   type WorkspaceFilesystem,
 } from '@mastra/core/workspace';
 import { MAX_FILE_BYTES } from '../files/application-file-storage.js';
-import { taskWorkerDelegation, WORKER_ID } from './task-workers.js';
+import {
+  taskWorkerDelegation,
+  WORKER_ID,
+  INTERACTION_EXECUTION_ID,
+} from './task-workers.js';
+import type { InteractionCoordinator } from '../interaction/interaction-coordinator.js';
 import { TaskSchedulerWorker } from './task-scheduler.worker.js';
 import {
   publishTextProcessor,
@@ -55,6 +60,7 @@ export async function createMainSession(options: {
     inputProcessors?: ConstructorParameters<typeof Agent>[0]['inputProcessors'];
     publish: (output: PublicOutput, context: TextContext) => Promise<void>;
     worker?: {
+      coordinator?: InteractionCoordinator;
       model: Agent['model'];
       instructions: ConstructorParameters<typeof Agent>[0]['instructions'];
       tools: NonNullable<ConstructorParameters<typeof Agent>[0]['tools']>;
@@ -259,15 +265,27 @@ export async function createMainSession(options: {
               workingMemory: { enabled: false },
             },
           }),
-          defaultOptions: ({ requestContext }) => ({
-            maxSteps: 0,
-            stopWhen: () => false,
-            modelSettings: {
-              headers: {
-                'session-id': 'pal-worker:' + requestContext.get(WORKER_ID),
+          defaultOptions: ({ requestContext }) => {
+            const executionId = requestContext.get(INTERACTION_EXECUTION_ID);
+            const finish = async () => {
+              if (typeof executionId === 'string')
+                await options.task?.worker?.coordinator?.finish(executionId);
+            };
+            return {
+              maxSteps: 0,
+              stopWhen: () => false,
+              modelSettings: {
+                timeout: { firstChunkMs: 120_000, stepMs: 300_000 },
+                maxRetries: 1,
+                headers: {
+                  'session-id': 'pal-worker:' + requestContext.get(WORKER_ID),
+                },
               },
-            },
-          }),
+              onFinish: finish,
+              onAbort: finish,
+              onError: finish,
+            };
+          },
           tools: options.task.worker.tools,
           inputProcessors: options.task.worker.inputProcessors,
           workspace: interactionWorkspace,
@@ -277,6 +295,7 @@ export async function createMainSession(options: {
       ? taskWorkerDelegation(
           options.task.worker.cleanup,
           options.task.worker.resume,
+          options.task.worker.coordinator,
         )
       : undefined;
     const taskAgent = options.task
@@ -289,7 +308,9 @@ export async function createMainSession(options: {
           defaultOptions: ({ requestContext }) => {
             const threadId = requestContext.get(MASTRA_THREAD_ID_KEY);
             let runId: string | undefined;
-            const clear = (interrupted = false) => {
+            const clear = async (interrupted = false) => {
+              if (runId)
+                await options.task?.worker?.coordinator?.finishParent(runId);
               if (runId)
                 options.onTaskActivity?.(
                   runId,
@@ -331,7 +352,7 @@ export async function createMainSession(options: {
               onFinish: ({ finishReason }) => clear(finishReason === 'error'),
               onAbort: () => clear(true),
               onError: async () => {
-                clear(true);
+                await clear(true);
                 if (requestContext.get('palScheduledExecution')) {
                   const thread: unknown =
                     requestContext.get(MASTRA_THREAD_ID_KEY);

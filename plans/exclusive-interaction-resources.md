@@ -2,13 +2,13 @@
 
 ## Status
 
-Planned. Alignment and code audit complete; implementation and validation have not started.
+In Progress. Shared coordination and execution lifecycle are being implemented.
 
 ## Goal
 
 Replace separate desktop and Android ownership mechanisms with one small host-owned coordinator. Workers take FIFO turns on a device through their existing tools. Preserve browser/app state between turns and make cleanup part of the worker's assignment.
 
-This document authorizes no rollout. The current task is to write and commit this plan only. Future implementation acceptance is in development; production deployment is separate.
+Implementation and acceptance are authorized in development. Production deployment is separate.
 
 ## Current Behavior
 
@@ -42,6 +42,12 @@ This document authorizes no rollout. The current task is to write and commit thi
 - Retain current private-entry records and notifications where possible. No durable job queue or automatic restart replay. If target persistence requires a schema change, document the exact requirement and migration before implementing it.
 
 ## Milestones
+
+Implementation progress:
+
+- Shared coordinator foundation and native delegation lifecycle integration implemented. Three focused coordinator tests and the PostgreSQL-backed native worker lifecycle journey pass (four tests total); backend build and type-aware lint/boundary checks pass.
+- Native worker validation covers concurrent delegation, queued calls, failure, parent cancellation, and a resumed session receiving a fresh execution identity. Model response deadlines use Mastra's existing model-stream timeout boundary.
+- Device adapters, transport settlement, private entry, activity, cleanup removal, and development evaluation remain outstanding. Production runtime has not been switched to the new coordinator yet.
 
 ### 1. Shared queue and execution lifecycle
 

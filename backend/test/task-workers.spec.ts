@@ -11,7 +11,12 @@ import {
   createMainSession,
   MAIN_RESOURCE_ID,
 } from '../dist/agent/main-session.js';
-import { PARENT_TASK_ID, WORKER_ID } from '../dist/agent/task-workers.js';
+import {
+  PARENT_TASK_ID,
+  WORKER_ID,
+  INTERACTION_EXECUTION_ID,
+} from '../dist/agent/task-workers.js';
+import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
 import { CodeModeProcessor } from '../dist/agent/code-mode.processor.js';
 import { TaskToolDiscoveryProcessor } from '../dist/agent/task-tool-discovery.processor.js';
 import { until } from './helpers.js';
@@ -46,6 +51,8 @@ it('runs native workers concurrently with per-task limits, private output, and f
   );
   const started: { taskId: string; workerId: string; branch: string }[] = [];
   const cleaned: string[] = [];
+  const coordinator = new InteractionCoordinator();
+  const executionIds: string[] = [];
   const publications: string[] = [];
   const calls = new Map<string, number>();
   const toolSets: string[][] = [];
@@ -153,6 +160,7 @@ it('runs native workers concurrently with per-task limits, private output, and f
           publications.push(output.text);
         },
         worker: {
+          coordinator,
           model: workerModel,
           resume: async (_, assignment) =>
             assignment.includes('branch:alpha-5')
@@ -180,6 +188,10 @@ it('runs native workers concurrently with per-task limits, private output, and f
                   context!.requestContext!.get(MASTRA_THREAD_ID_KEY),
                 ).not.toBe('pal-task:' + taskId);
                 started.push({ taskId, workerId, branch });
+                const executionId = context!.requestContext!.get(
+                  INTERACTION_EXECUTION_ID,
+                ) as string;
+                executionIds.push(executionId);
                 const aborted = Promise.withResolvers<void>();
                 const abort = () =>
                   aborted.reject(new Error('Fixture aborted'));
@@ -187,7 +199,15 @@ it('runs native workers concurrently with per-task limits, private output, and f
                   once: true,
                 });
                 try {
-                  await Promise.race([gates[taskId].promise, aborted.promise]);
+                  // Cancellation may happen before this worker gets its turn.
+                  void aborted.promise.catch(() => {});
+                  await coordinator.run(
+                    'desktop',
+                    executionId,
+                    () =>
+                      Promise.race([gates[taskId].promise, aborted.promise]),
+                    context?.abortSignal,
+                  );
                   return {
                     branch,
                     screenshot: 'worker-image-sentinel'.repeat(4096),
@@ -293,11 +313,17 @@ it('runs native workers concurrently with per-task limits, private output, and f
       started.find((run) => run.taskId === 'alpha')?.workerId,
     );
     expect(cleaned).toHaveLength(7);
+    expect(new Set(executionIds).size).toBe(7);
     const cancelled = await run('cancel');
     await until(() => started.length === 10, 10000);
     main.taskAgent!.abortRunStream(cancelled.runId);
     await cancelled.getFullOutput().catch(() => {});
     await until(() => cleaned.length === 10, 10000);
+    expect(
+      coordinator
+        .snapshot()
+        .every((entry) => !entry.owner && !entry.waiting.length),
+    ).toBe(true);
     expect(
       publications.some((value) => value.includes('private finding')),
     ).toBe(false);
