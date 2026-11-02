@@ -13,7 +13,12 @@ import { TasksService } from '../dist/tasks/tasks.service.js';
 import { loginTools } from '../dist/login/login-tools.js';
 import { RequestContext } from '@mastra/core/request-context';
 import { noopObserve } from '@mastra/core/tools';
-import { PARENT_TASK_ID, WORKER_ID } from '../dist/agent/task-workers.js';
+import {
+  INTERACTION_EXECUTION_ID,
+  PARENT_TASK_ID,
+  WORKER_ID,
+} from '../dist/agent/task-workers.js';
+import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
 
 it('uses shared private HTTP entry, staged vault reuse and transient codes with bound Android identity and cancellation', async () => {
   const packageName = 'dev.pal.fixture';
@@ -104,6 +109,7 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
     .get(TasksService)
     .create({ title: 'Native entry', goal: 'Verify secure Android login' });
   const workerId = randomUUID();
+  const coordinator = fixture.app.get(InteractionCoordinator);
   const items: VaultItem[] = [];
   vi.spyOn(vault, 'configured', 'get').mockReturnValue(true);
   vi.spyOn(vault, 'matching').mockImplementation(async (url) =>
@@ -144,13 +150,20 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
         'http://native.example.test',
       ),
     ).rejects.toMatchObject({ code: 'invalid_input' });
-    login.activateSurface(task.id, workerId, 'android');
     for (const [index, role] of ['username', 'password', 'code'].entries()) {
       stage = index;
-      const inspected = await tools.inspect_private_fields.execute!(
-        { accountOrigin: 'https://native.example.test/login' },
-        context,
+      const executionId = coordinator.begin(
+        { taskId: task.id, workerId },
+        'private-fixture',
       );
+      context.requestContext.set(INTERACTION_EXECUTION_ID, executionId);
+      const inspected = await coordinator.run('android', executionId, () =>
+        tools.inspect_private_fields.execute!(
+          { accountOrigin: 'https://native.example.test/login' },
+          context,
+        ),
+      );
+      await coordinator.finish(executionId);
       outputs.push(inspected);
       expect(inspected).toHaveProperty('app', packageName);
       if (!('inputs' in inspected)) throw new Error('Expected native fields');
@@ -161,14 +174,14 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       const pending = await login.request(task.id, fields, workerId);
       outputs.push(pending);
       expect(await login.finishWorker(task.id, workerId, true, 0)).toBe(true);
-      expect(android.owns(task.id, workerId)).toBe(false);
+      expect(coordinator.snapshot()[1].owner).toBeNull();
       expect(
         await login.resumeWorker(
           task.id,
           'secure entry request ' + pending.requestId,
         ),
       ).toBe(workerId);
-      await android.coordinator.forSession(
+      await coordinator.forSession(
         'android',
         { taskId: 'other', workerId: 'other' },
         async () => {},
@@ -245,9 +258,9 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       workerId,
     );
     await login.finish(cancelled.requestId);
-    expect(android.owns(task.id, workerId)).toBe(false);
+    expect(coordinator.snapshot()[1].owner).toBeNull();
     await login.finish(replacement.requestId);
-    expect(android.owns(task.id, workerId)).toBe(false);
+    expect(coordinator.snapshot()[1].owner).toBeNull();
     const nextOwner = { taskId: randomUUID(), workerId: randomUUID() };
     await android.secure(nextOwner, { action: 'inspect' });
     const count = fills.length;

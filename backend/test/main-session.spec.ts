@@ -1,3 +1,4 @@
+import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
 import { AndroidService } from '../dist/android/android.service.js';
 import { LoginService } from '../dist/login/login.service.js';
 import { ExecutionService } from '../dist/execution/execution.service.js';
@@ -463,13 +464,17 @@ it('keeps generation failures private, and shuts down silently', async () => {
     fixture.app.get(McpService),
     fixture.app.get(AgentAdmissionService),
     fixture.app.get(BrowserService),
-    new AndroidService(new ConfigService()),
+    new AndroidService(
+      new ConfigService(),
+      fixture.app.get(InteractionCoordinator),
+    ),
     fixture.app.get(LoginService),
     fixture.app.get(FilesService),
     fixture.app.get(PreferencesService),
     fixture.app.get(DestinationService),
     fixture.app.get(InstanceSettingsService),
     fixture.app.get(ExecutionService),
+    fixture.app.get(InteractionCoordinator),
   );
   try {
     await runtime.onModuleInit();
@@ -739,6 +744,7 @@ it('separates Task local execution from interaction computer tools', async () =>
         tools: {},
         publish: async () => {},
         worker: {
+          coordinator: new InteractionCoordinator(),
           model,
           instructions: 'Do UI work.',
           tools: {},

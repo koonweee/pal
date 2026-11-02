@@ -83,7 +83,11 @@ export class SharedBrowserService {
   ): Promise<Page> {
     const key = taskId + ':' + (workerId ?? 'task');
     const previous = this.targets.get(key);
-    if (!fresh && previous) {
+    if (!fresh) {
+      if (!previous)
+        throw new Error(
+          'Private-entry browser target is unavailable; inspect again',
+        );
       if (previous.isClosed())
         throw new Error('Private-entry browser tab was closed; inspect again');
       return previous;

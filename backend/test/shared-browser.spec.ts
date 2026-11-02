@@ -39,7 +39,9 @@ it('binds private inspection to the active tab, retains its target, and disconne
     connect(): Promise<Browser>;
     endpoint(): Promise<string>;
   };
-  vi.spyOn(internal, 'connect').mockResolvedValue(browser);
+  const connect = vi.spyOn(internal, 'connect').mockResolvedValue(browser);
+  await expect(service.selectedPage('task', 'worker')).rejects.toThrow();
+  expect(connect).not.toHaveBeenCalled();
   vi.spyOn(internal, 'endpoint').mockResolvedValue('ws://fixture');
   vi.mocked(extensionRequest).mockResolvedValue({ targetId: 'first' });
   expect(await service.selectedPage('task', 'worker', true)).toBe(first);
@@ -57,32 +59,42 @@ it('binds private inspection to the active tab, retains its target, and disconne
   expect(closeTab).not.toHaveBeenCalled();
 });
 
-it('bounds unresponsive private browser calls and fences handoff until device recovery', async () => {
-  vi.useFakeTimers();
-  const coordinator = new InteractionCoordinator();
-  try {
-    const destinations = new LoginDestinations(
-      {
-        selectedPage: () => new Promise(() => {}),
-      } as unknown as SharedBrowserService,
-      {} as AndroidService,
-      coordinator,
-    );
-    const failed = expect(
-      destinations.inspect('task', 'worker', 'browser'),
-    ).rejects.toMatchObject({ code: 'unavailable' });
-    await vi.advanceTimersByTimeAsync(30_000);
-    await failed;
-    expect(coordinator.snapshot()[0].unavailable).toBe(true);
-    await expect(
-      coordinator.forSession(
+it.each(['inspect', 'select'] as const)(
+  'bounds private browser %s and fences only potentially late UI interaction',
+  async (operation) => {
+    vi.useFakeTimers();
+    const coordinator = new InteractionCoordinator();
+    try {
+      const destinations = new LoginDestinations(
+        {
+          selectedPage: () => new Promise(() => {}),
+        } as unknown as SharedBrowserService,
+        {} as AndroidService,
+        coordinator,
+      );
+      const failed = expect(
+        operation === 'inspect'
+          ? destinations.inspect('task', 'worker', 'browser')
+          : destinations.select('task', 'worker', {
+              password: 'i1-abcdefghijklmnop',
+            }),
+      ).rejects.toMatchObject({ code: 'unavailable' });
+      await vi.advanceTimersByTimeAsync(30_000);
+      await failed;
+      expect(coordinator.snapshot()[0].unavailable).toBe(
+        operation === 'inspect',
+      );
+      const next = coordinator.forSession(
         'desktop',
         { taskId: 'next', workerId: 'next' },
         async () => {},
-      ),
-    ).rejects.toThrow('uncertain');
-  } finally {
-    await coordinator.shutdown();
-    vi.useRealTimers();
-  }
-});
+      );
+      if (operation === 'inspect')
+        await expect(next).rejects.toThrow('uncertain');
+      else await next;
+    } finally {
+      await coordinator.shutdown();
+      vi.useRealTimers();
+    }
+  },
+);

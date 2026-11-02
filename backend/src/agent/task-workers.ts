@@ -16,8 +16,8 @@ export function taskWorkerDelegation(
     completed: boolean,
     startedAt: number,
   ) => Promise<void>,
+  coordinator: InteractionCoordinator,
   resume?: (taskId: string, assignment: string) => Promise<string | undefined>,
-  coordinator?: InteractionCoordinator,
 ): DelegationConfig {
   const active = new Map<
     string,
@@ -72,14 +72,13 @@ export function taskWorkerDelegation(
           };
         }
         run.workerId = workerId;
-        run.executionId = coordinator?.begin(
+        run.executionId = coordinator.begin(
           { taskId, workerId },
           context.runId,
         );
         context.requestContext.set(PARENT_TASK_ID, taskId);
         context.requestContext.set(WORKER_ID, workerId);
-        if (run.executionId)
-          context.requestContext.set(INTERACTION_EXECUTION_ID, run.executionId);
+        context.requestContext.set(INTERACTION_EXECUTION_ID, run.executionId);
         context.requestContext.set('palParentRunId', context.runId);
         return { modifiedMaxSteps: 0 };
       } catch (error) {
@@ -94,7 +93,7 @@ export function taskWorkerDelegation(
       try {
         await cleanup(run.taskId, run.workerId, context.success, run.startedAt);
       } finally {
-        if (run.executionId) await coordinator?.finish(run.executionId);
+        if (run.executionId) await coordinator.finish(run.executionId);
         active.delete(id);
       }
     },

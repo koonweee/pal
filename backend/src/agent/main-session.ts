@@ -60,7 +60,7 @@ export async function createMainSession(options: {
     inputProcessors?: ConstructorParameters<typeof Agent>[0]['inputProcessors'];
     publish: (output: PublicOutput, context: TextContext) => Promise<void>;
     worker?: {
-      coordinator?: InteractionCoordinator;
+      coordinator: InteractionCoordinator;
       model: Agent['model'];
       instructions: ConstructorParameters<typeof Agent>[0]['instructions'];
       tools: NonNullable<ConstructorParameters<typeof Agent>[0]['tools']>;
@@ -269,7 +269,7 @@ export async function createMainSession(options: {
             const executionId = requestContext.get(INTERACTION_EXECUTION_ID);
             const finish = async () => {
               if (typeof executionId === 'string')
-                await options.task?.worker?.coordinator?.finish(executionId);
+                await options.task?.worker?.coordinator.finish(executionId);
             };
             return {
               maxSteps: 0,
@@ -294,8 +294,8 @@ export async function createMainSession(options: {
     const delegation = options.task?.worker
       ? taskWorkerDelegation(
           options.task.worker.cleanup,
-          options.task.worker.resume,
           options.task.worker.coordinator,
+          options.task.worker.resume,
         )
       : undefined;
     const taskAgent = options.task
@@ -310,7 +310,7 @@ export async function createMainSession(options: {
             let runId: string | undefined;
             const clear = async (interrupted = false) => {
               if (runId)
-                await options.task?.worker?.coordinator?.finishParent(runId);
+                await options.task?.worker?.coordinator.finishParent(runId);
               if (runId)
                 options.onTaskActivity?.(
                   runId,

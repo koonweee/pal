@@ -1,7 +1,5 @@
 import { AndroidService } from '../android/android.service.js';
-import { androidTools } from '../android/android-tools.js';
 import { LoginService } from '../login/login.service.js';
-import { loginTools } from '../login/login-tools.js';
 import { webSearchTool } from './web-search.js';
 import {
   isMastraSignalMessage,
@@ -43,7 +41,6 @@ import { messageVisibleInChat } from '../chat/chat.types.js';
 import { AgentHandoffError, type AgentRuntime } from './agent-runtime.js';
 import { AgentActivityService } from './agent-activity.service.js';
 import { TaskToolDiscoveryProcessor } from './task-tool-discovery.processor.js';
-import { CodeModeProcessor } from './code-mode.processor.js';
 import { chatgptModel } from './chatgpt-model.js';
 import { SharedBrowserService as BrowserService } from '../browser/shared-browser.service.js';
 import { InteractionCoordinator } from '../interaction/interaction-coordinator.js';
@@ -55,9 +52,8 @@ import {
   preferenceWriteTool,
   taskPreferenceActor,
 } from '../preferences/preference-tools.js';
-import { InteractionToolsProcessor } from './interaction-tools.processor.js';
 import { ExecutionService } from '../execution/execution.service.js';
-import { X11Computer } from './x11-computer.js';
+import { interactionSession } from './interaction-session.js';
 import { createMainSession, MAIN_RESOURCE_ID } from './main-session.js';
 import type { TextContext } from './publish-text.processor.js';
 import {
@@ -117,7 +113,7 @@ export class MastraAgentRuntime
     private readonly instanceSettings: InstanceSettingsService,
     @Inject(ExecutionService) private readonly execution: ExecutionService,
     @Inject(InteractionCoordinator)
-    private readonly interactions: InteractionCoordinator = android.coordinator,
+    private readonly interactions: InteractionCoordinator,
   ) {}
 
   async onModuleInit() {
@@ -139,10 +135,15 @@ export class MastraAgentRuntime
         this.taskRuns.size > 0,
     );
     await this.mcp.loadAtStartup();
-    const [taskInstructions, workerInstructions] = await Promise.all([
-      loadAgentInstructions('task'),
-      loadAgentInstructions('worker'),
-    ]);
+    const taskInstructions = await loadAgentInstructions('task');
+    const { worker, ...workspace } = await interactionSession(
+      this.config,
+      this.execution,
+      this.browser,
+      this.android,
+      this.login,
+      this.interactions,
+    );
     this.main = await createMainSession({
       releaseId: this.config.get<string>('PAL_RELEASE_ID'),
       mainContext: async () => {
@@ -163,16 +164,7 @@ export class MastraAgentRuntime
         );
       },
       connectionString: this.config.getOrThrow<string>('DATABASE_URL'),
-      workingDirectory: this.execution.home,
-      sandbox: this.execution.sandbox,
-      filesystem: this.execution.filesystem,
-      computer: this.config.get<boolean>('PAL_DESKTOP_ENABLED')
-        ? new X11Computer(
-            this.execution,
-            this.config.get<string>('PAL_DESKTOP_VIEWER_URL'),
-            () => this.interactions.unavailable('desktop'),
-          )
-        : undefined,
+      ...workspace,
       model: chatgptModel(
         this.config.getOrThrow<string>('PAL_AGENT_MODEL'),
         this.config.getOrThrow<string>('PAL_AGENT_AUTH_PATH'),
@@ -266,49 +258,7 @@ export class MastraAgentRuntime
         inputProcessors: [
           new TaskToolDiscoveryProcessor(() => this.mcp.tools()),
         ],
-        worker: {
-          coordinator: this.interactions,
-          model: chatgptModel(
-            'gpt-6.1-terra',
-            this.config.getOrThrow<string>('PAL_AGENT_AUTH_PATH'),
-            'medium',
-          ),
-          instructions: () =>
-            workerInstructions +
-            '\n' +
-            this.android.instructions +
-            '\nCurrent time (UTC): ' +
-            new Date().toISOString(),
-          tools: async () => ({
-            ...(await androidTools(
-              this.android,
-              undefined,
-              (taskId, workerId) =>
-                this.login.activateSurface(taskId, workerId, 'android'),
-            )),
-            ...loginTools(this.login),
-          }),
-          inputProcessors: [
-            new InteractionToolsProcessor(
-              this.interactions,
-              (taskId, workerId, surface) =>
-                this.login.activateSurface(taskId, workerId, surface),
-            ),
-            new CodeModeProcessor(),
-          ],
-          resume: (taskId, assignment) =>
-            this.login.resumeWorker(taskId, assignment),
-          cleanup: async (taskId, workerId, completed, startedAt) => {
-            this.login.clearSurface(taskId, workerId);
-            const retainTarget = await this.login
-              .finishWorker(taskId, workerId, completed, startedAt)
-              .catch((error: unknown) => {
-                this.logger.warn(error);
-                return false;
-              });
-            if (!retainTarget) this.browser.releaseTarget(taskId, workerId);
-          },
-        },
+        worker,
         publish: (output, context) => this.publishTask(output, context),
       },
       onTaskActivity: (runId, working, threadId, interrupted) =>

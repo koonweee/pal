@@ -82,7 +82,7 @@ Reconnect resolves a changed Linux USB node and replaces only the Android contai
 
 The optional `compose.android.yaml` overlay builds the image from `android/`, maps the selected USB device, and adds private MCP configuration to agent-service. `PAL_ANDROID_USB_DEVICE` is a device node on the Docker Linux host. Linux deployments supply it directly. No host ports are published.
 
-Run `./scripts/dev-local android-smoke` for isolated model-driven acceptance. It temporarily copies the runner into the existing development service and creates a disposable test database; both are removed on exit. The runner delegates Chrome and Settings flows to interaction workers, verifies native screenshots, and drops its scratch schema. It publishes no application chat messages.
+Run `./scripts/dev-local android-smoke` for isolated model-driven acceptance. It checks dev activity, stops the idle backend for exclusive device access, runs a disposable container/database, then restores the backend on exit. The runner uses production worker wiring, delegates Chrome and Settings flows, and verifies native screenshots. It publishes no application chat messages. `./scripts/dev-local interaction-smoke` covers desktop contention, private-target handoff and native temporary-tab cleanup.
 
 ### Native private entry
 
@@ -90,7 +90,7 @@ Installed apps need no trust registration. See [sidecar setup](../architecture/d
 
 The interaction worker navigates with Android tools, then uses `inspect_private_fields({accountOrigin:"https://service.example"})` and `enter_private_fields`. The account origin selects shared vault accounts; it is not a verified embedded-page origin. Android screenshots and private-entry previews are unmasked; structured metadata omits editable values; private fields are filled through a rootless helper on authenticated ADB. Browser and native flows share account selection, staged credential storage and transient OTP handling. Native entry omits payment and browser persistence controls.
 
-Run `./scripts/dev-local android-secure-smoke` while the dev phone/agent are idle. It proves direct native/WebView filling and structured-value redaction, then runs real Task/Worker journeys for new staged credentials and saved-vault reuse, including actual private HTTP OTP submission. It uses synthetic accounts, removes its fixture/test database/scripts, restores USB stay-awake, and keeps unmasked synthetic proof images under `.local/android-secure-fill/last-proof`.
+Run `./scripts/dev-local android-secure-smoke` while the dev phone/agent are idle. It takes the same exclusive acceptance window, proves direct native/WebView filling and structured-value redaction, then runs real Task/Worker journeys for new staged credentials and saved-vault reuse, including actual private HTTP OTP submission. It uses synthetic accounts, removes its fixture, test database, runner and proof images, and restores USB stay-awake.
 
 ## Configuration
 

@@ -4,7 +4,11 @@ import {
   MASTRA_THREAD_ID_KEY,
 } from '@mastra/core/request-context';
 import { noopObserve } from '@mastra/core/tools';
-import { PARENT_TASK_ID, WORKER_ID } from '../dist/agent/task-workers.js';
+import {
+  INTERACTION_EXECUTION_ID,
+  PARENT_TASK_ID,
+  WORKER_ID,
+} from '../dist/agent/task-workers.js';
 import { loginTools } from '../dist/login/login-tools.js';
 import type { SecureFields } from '../dist/login/login-fields.js';
 import { ChatService } from '../dist/chat/chat.service.js';
@@ -755,6 +759,7 @@ it('remembers verified accounts and session intent across callers and restarts w
       tasks,
       fixture.app.get(ChatService),
       fixture.app.get(AndroidService),
+      fixture.app.get(InteractionCoordinator),
     );
   const fields = (
     inspection: Awaited<ReturnType<LoginService['inspect']>>,
@@ -1029,6 +1034,7 @@ it('recovers code requests after restart, bounds attempts, times out, and resume
       fixture.app.get(TasksService),
       fixture.app.get(ChatService),
       fixture.app.get(AndroidService),
+      fixture.app.get(InteractionCoordinator),
     );
     restarted.bindNotifier(async (_id, text) => {
       notifications.push(text);
@@ -1172,40 +1178,54 @@ it('inspects the selected page and fills privately without browser navigation co
       status: 'error',
       code: 'conflict',
     });
-    fixture.app.get(LoginService).activateSurface(task.id, workerId, 'browser');
-    expect(
-      await tools.inspect_private_fields.execute!(
-        { accountOrigin: 'https://example.test' },
-        caller,
-      ),
-    ).toMatchObject({ status: 'error', code: 'invalid_input' });
-    const inspected = await tools.inspect_private_fields.execute!({}, caller);
-    if (!('inputs' in inspected)) throw Error('Expected inspected fields');
-    const fields = {
-      username: inspected.inputs[0].ref,
-      password: inspected.inputs[1].ref,
-    };
-    const filled = await tools.enter_private_fields.execute!(
-      { fields },
-      caller,
+    const coordinator = fixture.app.get(InteractionCoordinator);
+    const activeExecution = coordinator.begin(
+      { taskId: task.id, workerId },
+      'private-fixture',
     );
-    expect(filled).toMatchObject({ status: 'filled', accountId: item.id });
-    expect(await page.locator('input[type=password]').inputValue()).toBe(
-      'SENTINEL_PASSWORD',
-    );
-    expect(JSON.stringify(filled)).not.toContain('SENTINEL');
-    expect(await page.locator('button').count()).toBe(1);
-    // Navigation is a separate UI operation; fresh inspection follows it.
-    await page.locator('button').click();
-    const next = await tools.inspect_private_fields.execute!({}, caller);
-    if (!('inputs' in next)) throw Error('Expected code inspection');
-    expect(next.inputs[0].autocomplete).toBe('one-time-code');
-    expect(
-      await tools.enter_private_fields.execute!({ fields }, caller),
-    ).toMatchObject({
-      status: 'error',
-      code: 'conflict',
-    });
+    caller.requestContext.set(INTERACTION_EXECUTION_ID, activeExecution);
+    try {
+      await coordinator.run('desktop', activeExecution, async () => {
+        expect(
+          await tools.inspect_private_fields.execute!(
+            { accountOrigin: 'https://example.test' },
+            caller,
+          ),
+        ).toMatchObject({ status: 'error', code: 'invalid_input' });
+        const inspected = await tools.inspect_private_fields.execute!(
+          {},
+          caller,
+        );
+        if (!('inputs' in inspected)) throw Error('Expected inspected fields');
+        const fields = {
+          username: inspected.inputs[0].ref,
+          password: inspected.inputs[1].ref,
+        };
+        const filled = await tools.enter_private_fields.execute!(
+          { fields },
+          caller,
+        );
+        expect(filled).toMatchObject({ status: 'filled', accountId: item.id });
+        expect(await page.locator('input[type=password]').inputValue()).toBe(
+          'SENTINEL_PASSWORD',
+        );
+        expect(JSON.stringify(filled)).not.toContain('SENTINEL');
+        expect(await page.locator('button').count()).toBe(1);
+        // Navigation is a separate UI operation; fresh inspection follows it.
+        await page.locator('button').click();
+        const next = await tools.inspect_private_fields.execute!({}, caller);
+        if (!('inputs' in next)) throw Error('Expected code inspection');
+        expect(next.inputs[0].autocomplete).toBe('one-time-code');
+        expect(
+          await tools.enter_private_fields.execute!({ fields }, caller),
+        ).toMatchObject({
+          status: 'error',
+          code: 'conflict',
+        });
+      });
+    } finally {
+      await coordinator.finish(activeExecution);
+    }
   } finally {
     selected.mockRestore();
     configured.mockRestore();

@@ -2,7 +2,11 @@ import { createTool } from '@mastra/core/tools';
 import { MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
 import { jsonSchema } from 'ai';
 import { taskIdFromThread } from '../agent/task-tools.js';
-import { WORKER_ID, PARENT_TASK_ID } from '../agent/task-workers.js';
+import {
+  WORKER_ID,
+  PARENT_TASK_ID,
+  INTERACTION_EXECUTION_ID,
+} from '../agent/task-workers.js';
 import type { LoginService } from './login.service.js';
 import {
   cardRoles,
@@ -24,6 +28,7 @@ export function loginTools(service: LoginService) {
   ) => {
     const workerId = context?.requestContext?.get(WORKER_ID);
     const parent = context?.requestContext?.get(PARENT_TASK_ID);
+    const executionId = context?.requestContext?.get(INTERACTION_EXECUTION_ID);
     return {
       taskId:
         typeof parent === 'string'
@@ -32,6 +37,7 @@ export function loginTools(service: LoginService) {
               context?.requestContext?.get(MASTRA_THREAD_ID_KEY),
             ),
       workerId: typeof workerId === 'string' ? workerId : undefined,
+      executionId: typeof executionId === 'string' ? executionId : undefined,
     };
   };
   const safe = async <T>(work: () => Promise<T>) => {
@@ -138,11 +144,12 @@ export function loginTools(service: LoginService) {
         additionalProperties: false,
       }),
       execute: ({ accountOrigin }, context) => {
-        const { taskId, workerId } = identity(context);
+        const { taskId, workerId, executionId } = identity(context);
         return safe(() =>
           service.inspectActive(
             taskId,
             workerId,
+            executionId,
             accountOrigin ?? undefined,
             context?.abortSignal,
           ),

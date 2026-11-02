@@ -1,4 +1,3 @@
-import { AndroidService } from '../dist/android/android.service.js';
 import { randomUUID } from 'node:crypto';
 import { writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -244,6 +243,8 @@ it('carries file paths through native input/delegation and publishes file-only o
         destinations,
         instanceSettings,
         execution,
+        android,
+        interactions,
       }) =>
         new MastraAgentRuntime(
           new ConfigService({
@@ -260,13 +261,14 @@ it('carries file paths through native input/delegation and publishes file-only o
           mcp,
           admission,
           browser,
-          new AndroidService(new ConfigService()),
+          android,
           login,
           files,
           preferences,
           destinations,
           instanceSettings,
           execution,
+          interactions,
         ),
     });
     const uploaded = await request(fixture.url)

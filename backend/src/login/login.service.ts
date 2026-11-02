@@ -23,7 +23,6 @@ import {
 @Injectable()
 export class LoginService implements OnModuleDestroy {
   private readonly inspector: LoginDestinations;
-  private readonly surfaces = new Map<string, 'browser' | 'android'>();
   private notify?: (taskId: string, text: string) => Promise<void>;
   private timer?: ReturnType<typeof setInterval>;
   private notifying = false;
@@ -36,43 +35,27 @@ export class LoginService implements OnModuleDestroy {
     @Inject(ChatService) private readonly chat: ChatService,
     @Inject(AndroidService) private readonly android: AndroidService,
     @Inject(InteractionCoordinator)
-    private readonly coordinator: InteractionCoordinator = android.coordinator,
+    private readonly coordinator: InteractionCoordinator,
   ) {
     this.inspector = new LoginDestinations(browser, android, coordinator);
   }
   get androidEnabled() {
     return this.android.enabled;
   }
-  private surfaceOwner(taskId: string, workerId?: string) {
-    if (!workerId)
-      throw new ApplicationError(
-        'invalid_input',
-        'Private fields require an interaction worker',
-      );
-    return `${taskId}:${workerId}`;
-  }
-  activateSurface(
-    taskId: string,
-    workerId: string,
-    surface: 'browser' | 'android',
-  ) {
-    this.surfaces.set(this.surfaceOwner(taskId, workerId), surface);
-  }
-  clearSurface(taskId: string, workerId: string) {
-    this.surfaces.delete(this.surfaceOwner(taskId, workerId));
-  }
   async inspectActive(
     taskId: string,
-    workerId?: string,
+    workerId: string | undefined,
+    executionId: string | undefined,
     accountOrigin?: string,
     signal?: AbortSignal,
   ) {
-    const surface = this.surfaces.get(this.surfaceOwner(taskId, workerId));
-    if (!surface)
+    const resource = executionId && this.coordinator.resourceFor(executionId);
+    if (!workerId || !resource)
       throw new ApplicationError(
         'conflict',
         'Use an ordinary computer or Android tool to establish the active surface, then inspect private fields',
       );
+    const surface = resource === 'desktop' ? 'browser' : 'android';
     if (surface === 'browser' && accountOrigin)
       throw new ApplicationError(
         'invalid_input',

@@ -1,3 +1,5 @@
+import { AndroidService } from '../dist/android/android.service.js';
+import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
 import { LoginService } from '../dist/login/login.service.js';
 import {
   ExecutionService,
@@ -50,6 +52,8 @@ interface TestRuntimeDependencies {
   destinations: DestinationService;
   instanceSettings: InstanceSettingsService;
   execution: ExecutionService;
+  android: AndroidService;
+  interactions: InteractionCoordinator;
 }
 
 export async function startTestApp(
@@ -122,6 +126,8 @@ export async function startTestApp(
         PreferencesService,
         DestinationService,
         InstanceSettingsService,
+        AndroidService,
+        InteractionCoordinator,
       ],
       factory: (
         chat: ChatService,
@@ -135,6 +141,8 @@ export async function startTestApp(
         preferences: PreferencesService,
         destinations: DestinationService,
         instanceSettings: InstanceSettingsService,
+        android: AndroidService,
+        interactions: InteractionCoordinator,
       ) =>
         options.runtimeFactory
           ? options.runtimeFactory({
@@ -154,6 +162,8 @@ export async function startTestApp(
               destinations,
               instanceSettings,
               execution,
+              android,
+              interactions,
             })
           : {
               async submit(message: UserVisibleMessage) {

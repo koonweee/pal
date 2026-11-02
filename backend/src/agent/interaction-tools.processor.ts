@@ -19,14 +19,7 @@ const privateTools = new Set([
 /** All device tools share admission; schemas and media results remain native. */
 export class InteractionToolsProcessor implements Processor {
   readonly id = 'pal-interaction-tools';
-  constructor(
-    private readonly coordinator: InteractionCoordinator,
-    private readonly activateSurface: (
-      taskId: string,
-      workerId: string,
-      surface: 'browser' | 'android',
-    ) => void,
-  ) {}
+  constructor(private readonly coordinator: InteractionCoordinator) {}
 
   processInputStep({ tools }: ProcessInputStepArgs) {
     const wrapped = { ...tools } as ToolsInput;
@@ -67,15 +60,7 @@ export class InteractionToolsProcessor implements Processor {
         return this.coordinator.run(
           resource,
           executionId,
-          async () => {
-            if (isComputer || isAndroid)
-              this.activateSurface(
-                taskId,
-                workerId,
-                resource === 'desktop' ? 'browser' : 'android',
-              );
-            return execute(input, context);
-          },
+          () => execute(input, context),
           context?.abortSignal,
         );
       };

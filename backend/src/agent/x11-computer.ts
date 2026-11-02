@@ -1,5 +1,8 @@
 import type { SandboxComputer } from '@mastra/core/workspace';
-import type { ExecutionService } from '../execution/execution.service.js';
+import {
+  ExecutionUnavailableError,
+  type ExecutionService,
+} from '../execution/execution.service.js';
 
 const aliases: Record<string, string> = {
   ctrl: 'Control_L',
@@ -43,6 +46,7 @@ export class X11Computer implements SandboxComputer {
     command: string,
     args: string[],
     input?: string,
+    mutates = true,
   ): Promise<Buffer> {
     // Drain dispatched subprocesses even when the worker is cancelled. The
     // coordinator holds the turn until this bounded operation settles.
@@ -66,13 +70,13 @@ export class X11Computer implements SandboxComputer {
         { input, timeout: 70_000 },
       );
     } catch (error) {
-      this.uncertain?.();
+      if (mutates && !(error instanceof ExecutionUnavailableError))
+        this.uncertain?.();
       throw error;
     }
     if (
-      result.timedOut ||
-      result.killed ||
-      [124, 137].includes(result.exitCode)
+      mutates &&
+      (result.timedOut || result.killed || [124, 137].includes(result.exitCode))
     )
       this.uncertain?.();
     if (!result.success)
@@ -81,14 +85,24 @@ export class X11Computer implements SandboxComputer {
   }
 
   private xdo(...args: string[]) {
-    return this.run('xdotool', args);
+    return this.run(
+      'xdotool',
+      args,
+      undefined,
+      !['getdisplaygeometry', 'getmouselocation'].includes(args[0]),
+    );
   }
 
   async screenshot() {
-    const encoded = await this.run('python3', [
-      '-c',
-      "import os,io,base64; from PIL import ImageGrab; data=io.BytesIO(); ImageGrab.grab(xdisplay=os.environ['DISPLAY']).save(data, format='PNG'); print(base64.b64encode(data.getvalue()).decode())",
-    ]);
+    const encoded = await this.run(
+      'python3',
+      [
+        '-c',
+        "import os,io,base64; from PIL import ImageGrab; data=io.BytesIO(); ImageGrab.grab(xdisplay=os.environ['DISPLAY']).save(data, format='PNG'); print(base64.b64encode(data.getvalue()).decode())",
+      ],
+      undefined,
+      false,
+    );
     return {
       data: Buffer.from(encoded.toString().trim(), 'base64'),
       mediaType: 'image/png' as const,

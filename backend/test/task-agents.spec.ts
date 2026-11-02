@@ -1,3 +1,4 @@
+import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
 import { AndroidService } from '../dist/android/android.service.js';
 import { LoginService } from '../dist/login/login.service.js';
 import { ExecutionService } from '../dist/execution/execution.service.js';
@@ -315,6 +316,8 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
         destinations,
         instanceSettings,
         execution,
+        android,
+        interactions,
       }) =>
         new MastraAgentRuntime(
           new ConfigService({
@@ -331,13 +334,14 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
           mcp,
           admission,
           browser,
-          new AndroidService(new ConfigService()),
+          android,
           login,
           files,
           preferences,
           destinations,
           instanceSettings,
           execution,
+          interactions,
         ),
     });
     const chat = fixture.app.get(ChatService);
@@ -788,6 +792,7 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
     quietCheck = true;
     // Recreate against the same storage without waking tasks.
     const calls = model.doStreamCalls.length;
+    const replacementInteractions = new InteractionCoordinator();
     const replacement = new MastraAgentRuntime(
       new ConfigService({
         DATABASE_URL: process.env.DATABASE_URL,
@@ -803,13 +808,14 @@ it('delegates, steers isolated tasks, reports local finals to Main, and recalls 
       fixture.app.get(McpService),
       fixture.app.get(AgentAdmissionService),
       fixture.app.get(BrowserService),
-      new AndroidService(new ConfigService()),
+      new AndroidService(new ConfigService(), replacementInteractions),
       fixture.app.get(LoginService),
       fixture.app.get(FilesService),
       fixture.app.get(PreferencesService),
       fixture.app.get(DestinationService),
       fixture.app.get(InstanceSettingsService),
       fixture.app.get(ExecutionService),
+      replacementInteractions,
     );
     try {
       await replacement.onModuleInit();

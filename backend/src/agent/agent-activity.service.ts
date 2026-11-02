@@ -36,7 +36,7 @@ export class AgentActivityService implements OnModuleInit, OnModuleDestroy {
     @Inject(EventsService) private readonly events: EventsService,
     @Inject(TasksService) private readonly taskService: TasksService,
     @Inject(InteractionCoordinator)
-    private readonly interactions: InteractionCoordinator = new InteractionCoordinator(),
+    private readonly interactions: InteractionCoordinator,
   ) {
     this.subscription = events.changes.subscribe((event) => {
       if (event.event === 'task.added' || event.event === 'task.updated')

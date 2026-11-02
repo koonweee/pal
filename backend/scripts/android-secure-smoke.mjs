@@ -1,46 +1,24 @@
 // Real Task -> Worker + private HTTP -> shared Bitwarden workflow -> USB phone.
-// Runs inside agent-service with a disposable *_test database and owned fixture APK.
+// Run through scripts/dev-local with an exclusive device window and owned fixture APK.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { ConfigService } from '@nestjs/config';
-import { migrate } from 'drizzle-orm/node-postgres/migrator';
-import { Pool } from 'pg';
 import {
   RequestContext,
   MASTRA_THREAD_ID_KEY,
   MASTRA_RESOURCE_ID_KEY,
 } from '@mastra/core/request-context';
-import { DatabaseService } from '../dist/database/database.service.js';
-import { EventsService } from '../dist/events/events.service.js';
-import { TasksService } from '../dist/tasks/tasks.service.js';
-import { TasksRepository } from '../dist/tasks/tasks.repository.js';
-import { AndroidService } from '../dist/android/android.service.js';
-import { InteractionToolsProcessor } from '../dist/agent/interaction-tools.processor.js';
-import { androidTools } from '../dist/android/android-tools.js';
 import { LoginService } from '../dist/login/login.service.js';
-import { LoginRepository } from '../dist/login/login.repository.js';
 import { BitwardenService } from '../dist/login/bitwarden.service.js';
-import { loginTools } from '../dist/login/login-tools.js';
 import { FirstPartyLoginController } from '../dist/adapters/first-party/login.controller.js';
 import { configureApp } from '../dist/config/configure-app.js';
-import { loadAgentInstructions } from '../dist/agent/agent-instructions.js';
-import {
-  createMainSession,
-  MAIN_RESOURCE_ID,
-} from '../dist/agent/main-session.js';
-import { chatgptModel } from '../dist/agent/chatgpt-model.js';
-import { CodeModeProcessor } from '../dist/agent/code-mode.processor.js';
+import { MAIN_RESOURCE_ID } from '../dist/agent/main-session.js';
+import { interactionSmokeFixture } from './interaction-smoke-fixture.mjs';
 
-const connectionString = process.env.TEST_DATABASE_URL;
-assert(
-  connectionString && new URL(connectionString).pathname.endsWith('_test'),
-  'Use an isolated test database',
-);
-const schemaName = 'pal_android_private_' + randomUUID().replaceAll('-', '');
+assert.equal(process.env.PAL_INTERACTION_SMOKE_EXCLUSIVE, '1');
+
 const secret = {
   username: 'pal-user-É漢字',
   password: 'pal-password-É漢字!72',
@@ -51,7 +29,7 @@ const seen = [],
   items = [],
   outputs = [],
   privateFills = [];
-let modelSession, app, login, android, vault;
+let modelSession, app, fixture;
 const vaultServer = createServer(async (req, res) => {
   let data;
   if (req.url === '/sync') data = {};
@@ -78,19 +56,6 @@ const vaultServer = createServer(async (req, res) => {
   res.end(JSON.stringify({ success: true, data }));
 });
 await new Promise((resolve) => vaultServer.listen(0, '127.0.0.1', resolve));
-const config = new ConfigService({
-  ...process.env,
-  DATABASE_URL: connectionString,
-});
-const db = new DatabaseService(config);
-const events = new EventsService();
-const tasks = new TasksService(db, new TasksRepository(db), events);
-const repository = new LoginRepository(db);
-const browser = {
-  selectedPage: async () => {
-    throw new Error('Browser is outside native acceptance');
-  },
-};
 const channel = new URL(process.env.PAL_ANDROID_MCP_URL);
 channel.pathname = '/secure';
 const headers = {
@@ -118,7 +83,6 @@ const noSecrets = (value) => {
     assert(!text.includes(item), 'Secret escaped into model/public metadata');
 };
 try {
-  await migrate(db.db, { migrationsFolder: './migrations' });
   const initial = await channelCall({ action: 'inspect' });
   assert.equal(initial.status, 'ready', 'Native fixture readiness');
   assert.equal(
@@ -126,7 +90,18 @@ try {
     'dev.pal.securefixture',
     'Launch only the owned fixture before acceptance',
   );
-  android = new AndroidService(config);
+  class FixtureVault extends BitwardenService {
+    get configured() {
+      return true;
+    }
+    get endpoint() {
+      return 'http://127.0.0.1:' + vaultServer.address().port;
+    }
+    async ensureReady() {}
+  }
+  fixture = await interactionSmokeFixture((config) => new FixtureVault(config));
+  const { db, android, login, tasks, repository, coordinator, worker } =
+    fixture;
   const privateCall = android.secure.bind(android);
   android.secure = async (owner, input, signal) => {
     const result = await privateCall(owner, input, signal);
@@ -139,29 +114,6 @@ try {
     noSecrets(result);
     return result;
   };
-  class FixtureVault extends BitwardenService {
-    get configured() {
-      return true;
-    }
-    get endpoint() {
-      return 'http://127.0.0.1:' + vaultServer.address().port;
-    }
-    async ensureReady() {}
-  }
-  vault = new FixtureVault(config);
-  login = new LoginService(
-    browser,
-    vault,
-    repository,
-    events,
-    tasks,
-    {
-      publish: async (message) => {
-        noSecrets(message);
-      },
-    },
-    android,
-  );
   login.bindNotifier(async (taskId, text) => {
     noSecrets(text);
     notifications.push({ taskId, text });
@@ -176,12 +128,7 @@ try {
   await app.listen(0, '127.0.0.1');
   const privateUrl = await app.getUrl();
   const vaultFills = [];
-  const tools = {
-    ...(await androidTools(android, undefined, (taskId, workerId) =>
-      login.activateSurface(taskId, workerId, 'android'),
-    )),
-    ...loginTools(login),
-  };
+  const tools = await worker.tools();
   for (const [name, tool] of Object.entries(tools)) {
     const execute = tool.execute.bind(tool);
     tool.execute = async (args, context) => {
@@ -194,66 +141,11 @@ try {
       return result;
     };
   }
-  modelSession = await createMainSession({
-    connectionString,
-    schemaName,
-    model: chatgptModel(
-      'gpt-6.1-sol',
-      process.env.PAL_AGENT_AUTH_PATH,
-      'medium',
-    ),
-    memoryOptions: {
-      lastMessages: 20,
-      semanticRecall: false,
-      workingMemory: { enabled: false },
-    },
-    onEvent: () => {},
-    task: {
-      instructions: await loadAgentInstructions('task'),
-      tools: {},
-      inputProcessors: [],
-      publish: async (output) => {
-        noSecrets(output.text);
-        outputs.push(output.text);
-        console.log(JSON.stringify({ result: output.text }));
-      },
-      worker: {
-        coordinator: android.coordinator,
-        model: chatgptModel(
-          'gpt-6.1-terra',
-          process.env.PAL_AGENT_AUTH_PATH,
-          'medium',
-        ),
-        // This isolated smoke preloads the same on-demand skill bodies; role
-        // discovery is covered by the existing agent-skills suite.
-        instructions:
-          (await loadAgentInstructions('worker')) +
-          '\n' +
-          (await readFile(
-            'dist/agent/skills/website-authentication/SKILL.md',
-            'utf8',
-          )) +
-          '\n' +
-          (await readFile(
-            'dist/agent/skills/android-interaction/SKILL.md',
-            'utf8',
-          )),
-        tools: () => tools,
-        inputProcessors: [
-          new InteractionToolsProcessor(
-            android.coordinator,
-            (taskId, workerId, surface) =>
-              login.activateSurface(taskId, workerId, surface),
-          ),
-          new CodeModeProcessor(),
-        ],
-        resume: (taskId, assignment) => login.resumeWorker(taskId, assignment),
-        cleanup: async (taskId, workerId, completed, startedAt) => {
-          await login.finishWorker(taskId, workerId, completed, startedAt);
-          login.clearSurface(taskId, workerId);
-        },
-      },
-    },
+  worker.tools = () => tools;
+  modelSession = await fixture.createSession(async (output) => {
+    noSecrets(output.text);
+    outputs.push(output.text);
+    console.log(JSON.stringify({ result: output.text }));
   });
   async function runFlow(label, initialMessage) {
     const task = await tasks.create({
@@ -309,7 +201,7 @@ try {
       }
       assert.equal(pending.length, 1, 'One current private entry');
       assert.ok(
-        android.coordinator.snapshot().every((resource) => !resource.owner),
+        coordinator.snapshot().every((resource) => !resource.owner),
         'Credential wait retained a device turn',
       );
       const row = pending[0];
@@ -417,25 +309,14 @@ try {
       sharedVault: true,
       authenticated: true,
       model: 'gpt-6.1-terra',
-      skillLoading: 'preloaded',
+      skillLoading: 'production discovery',
       realAccountsTouched: false,
     }),
   );
 } finally {
-  login?.onModuleDestroy();
-  await modelSession?.close();
-  await android?.coordinator.shutdown();
-  await android?.onApplicationShutdown();
+  await fixture?.close();
   await channelCall({ action: 'pause' }).catch(() => {});
   await app?.close();
-  vault?.onModuleDestroy();
   vaultServer.closeAllConnections();
   await new Promise((resolve) => vaultServer.close(resolve));
-  await db.onApplicationShutdown();
-  const pool = new Pool({ connectionString });
-  try {
-    await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-  } finally {
-    await pool.end();
-  }
 }

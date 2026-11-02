@@ -43,6 +43,7 @@ Run the integrated local development stack from the repository root with `./scri
 - `pwa-up`: rebuild the staged production PWA after frontend-only changes and notify connected clients that an update is available.
 - `status`, `logs`, and `down`: inspect or stop the stack.
 - `android-up`, `android-status`, `android-reconnect`, `android-smoke`, `android-secure-smoke`, and `android-down`: manage the optional Android sidecar and run app/private-fill acceptance flows with container ADB.
+- `interaction-smoke`: run exclusive desktop contention, private-target and native worker acceptance; the idle dev backend stops for the test window and restarts on exit. Android smoke commands use the same exclusive window.
 
 Use `pwa-up` only after `serve` has configured the staged PWA and the running backend supports the current frontend update contract. Use `rebuild` when backend or API changes are part of the update.
 

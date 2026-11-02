@@ -29,6 +29,12 @@ export const androidActions = {
 } as const;
 export type AndroidAction = keyof typeof androidActions;
 export type AndroidOwner = { taskId: string; workerId: string };
+const observations = new Set<AndroidAction>([
+  'android_apps',
+  'android_foreground_app',
+  'android_inspect',
+  'android_screenshot',
+]);
 
 @Injectable()
 export class AndroidService implements OnApplicationShutdown {
@@ -46,7 +52,7 @@ export class AndroidService implements OnApplicationShutdown {
   constructor(
     @Inject(ConfigService) config: ConfigService,
     @Inject(InteractionCoordinator)
-    readonly coordinator: InteractionCoordinator = new InteractionCoordinator(),
+    private readonly coordinator: InteractionCoordinator,
   ) {
     this.endpoint = config.get<string>('PAL_ANDROID_MCP_URL') || undefined;
     this.token = config.get<string>('PAL_ANDROID_MCP_TOKEN');
@@ -107,13 +113,6 @@ export class AndroidService implements OnApplicationShutdown {
 
   get generation() {
     return this.nativeGeneration;
-  }
-
-  owns(taskId: string, workerId: string) {
-    const owner = this.coordinator
-      .snapshot()
-      .find((entry) => entry.resource === 'android')?.owner;
-    return owner?.taskId === taskId && owner.workerId === workerId;
   }
 
   private async withPhone<T>(
@@ -229,11 +228,19 @@ export class AndroidService implements OnApplicationShutdown {
           );
           return result;
         } catch {
-          this.coordinator.unavailable('android');
+          const readOnly =
+            observations.has(action) ||
+            (action === 'android_batch' &&
+              (args.steps as { name: AndroidAction }[]).every((step) =>
+                observations.has(step.name),
+              ));
+          if (!readOnly) this.coordinator.unavailable('android');
           this.client = undefined;
           await client.close().catch(() => {});
           throw new Error(
-            'Android connection failed. Reconnect and inspect the screen before retrying an action.',
+            readOnly
+              ? 'Android connection failed. Reconnect and inspect the screen before continuing.'
+              : 'Android connection failed after an action. Do not replay it; recover the phone and restart the backend before continuing.',
           );
         }
       },

@@ -11,9 +11,8 @@ import {
 // Keep Pal aliases while using the dependency's schemas, semantics and results.
 export async function androidTools(
   android: AndroidService,
-  actions = Object.keys(androidActions) as AndroidAction[],
-  activateSurface?: (taskId: string, workerId: string) => void,
 ): Promise<ToolsInput> {
+  const actions = Object.keys(androidActions) as AndroidAction[];
   if (!android.enabled) return {};
   const upstream = await android.toolDefinitions();
   if (!upstream) return {};
@@ -63,20 +62,12 @@ export async function androidTools(
             const workerId = context?.requestContext?.get(WORKER_ID);
             if (typeof taskId !== 'string' || typeof workerId !== 'string')
               throw new Error('Android tools require an interaction worker.');
-            if (action === 'android_batch') {
-              const steps = args.steps as { name: AndroidAction }[];
-              if (steps.some((step) => !actions.includes(step.name)))
-                throw new Error(
-                  'Android batch step is unavailable in this workflow.',
-                );
-            }
             const output = await android.call(
               { taskId, workerId },
               action,
               args,
               context?.abortSignal,
             );
-            activateSurface?.(taskId, workerId);
             if (action === 'android_inspect')
               output.content.push({
                 type: 'text',

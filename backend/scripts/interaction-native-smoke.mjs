@@ -1,37 +1,16 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { Pool } from 'pg';
-import { ConfigService } from '@nestjs/config';
 import {
   RequestContext,
   MASTRA_THREAD_ID_KEY,
   MASTRA_RESOURCE_ID_KEY,
 } from '@mastra/core/request-context';
-import {
-  createMainSession,
-  MAIN_RESOURCE_ID,
-} from '../dist/agent/main-session.js';
-import { chatgptModel } from '../dist/agent/chatgpt-model.js';
-import { loadAgentInstructions } from '../dist/agent/agent-instructions.js';
-import { CodeModeProcessor } from '../dist/agent/code-mode.processor.js';
-import { InteractionToolsProcessor } from '../dist/agent/interaction-tools.processor.js';
-import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
-import { SharedBrowserService } from '../dist/browser/shared-browser.service.js';
-import { ExecutionService } from '../dist/execution/execution.service.js';
-import { X11Computer } from '../dist/agent/x11-computer.js';
+import { MAIN_RESOURCE_ID } from '../dist/agent/main-session.js';
+import { interactionSmokeFixture } from './interaction-smoke-fixture.mjs';
 
-assert.equal(process.env.PAL_EXECUTION_ID, 'pal-dev-split-execution');
-const connection = new URL(process.env.TEST_DATABASE_URL);
-assert.ok(connection.pathname.endsWith('_test'));
-const schemaName = 'pal_interaction_native_' + randomUUID().replaceAll('-', '');
-const config = new ConfigService({ ...process.env, PAL_DESKTOP_ENABLED: true });
-const execution = new ExecutionService(config);
-const browser = new SharedBrowserService(config, execution);
-const coordinator = new InteractionCoordinator();
-const computer = new X11Computer(execution, undefined, () =>
-  coordinator.unavailable('desktop'),
-);
+const fixture = await interactionSmokeFixture();
+const { browser, coordinator } = fixture;
 const events = [];
 coordinator.events.subscribe((event) =>
   events.push({ ...event, at: Date.now() }),
@@ -49,40 +28,8 @@ try {
   context = initial.context();
   existing = context.pages();
   context.on('page', track);
-  const model = (name) =>
-    chatgptModel(name, process.env.PAL_AGENT_AUTH_PATH, 'medium');
-  native = await createMainSession({
-    connectionString: connection.href,
-    schemaName,
-    model: model('gpt-6.1-sol'),
-    workingDirectory: execution.home,
-    sandbox: execution.sandbox,
-    filesystem: execution.filesystem,
-    computer,
-    memoryOptions: {
-      lastMessages: 20,
-      semanticRecall: false,
-      workingMemory: { enabled: false },
-    },
-    onEvent: () => {},
-    task: {
-      instructions: await loadAgentInstructions('task'),
-      tools: {},
-      publish: async (output, state) => {
-        if (state.phase !== 'commentary') outputs.push(output.text);
-      },
-      worker: {
-        coordinator,
-        model: model('gpt-6.1-terra'),
-        instructions: await loadAgentInstructions('worker'),
-        tools: {},
-        inputProcessors: [
-          new InteractionToolsProcessor(coordinator, () => {}),
-          new CodeModeProcessor(),
-        ],
-        cleanup: async () => {},
-      },
-    },
+  native = await fixture.createSession(async (output, state) => {
+    if (state.phase !== 'commentary') outputs.push(output.text);
   });
   for (const label of ['Amber', 'Cobalt']) {
     const threadId = 'pal-task:' + randomUUID();
@@ -220,14 +167,5 @@ try {
           await page.close().catch(() => {});
     },
   );
-  await coordinator.shutdown();
-  await native?.close();
-  await browser.shutdown();
-  await execution.sandbox._stop();
-  const pool = new Pool({ connectionString: connection.href });
-  try {
-    await pool.query('DROP SCHEMA IF EXISTS "' + schemaName + '" CASCADE');
-  } finally {
-    await pool.end();
-  }
+  await fixture.close();
 }

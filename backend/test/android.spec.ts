@@ -12,8 +12,10 @@ import { CodeModeProcessor } from '../dist/agent/code-mode.processor.js';
 import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
 
 it('allows fresh private inspection after a readiness failure without disabling the phone', async () => {
+  const coordinator = new InteractionCoordinator();
   const service = new AndroidService(
     new ConfigService({ PAL_ANDROID_MCP_URL: 'http://phone.test/mcp' }),
+    coordinator,
   );
   const fetch = vi
     .spyOn(globalThis, 'fetch')
@@ -24,13 +26,13 @@ it('allows fresh private inspection after a readiness failure without disabling 
     await expect(service.secure(owner, { action: 'inspect' })).rejects.toThrow(
       'unavailable',
     );
-    expect(service.coordinator.snapshot()[1].unavailable).toBe(false);
+    expect(coordinator.snapshot()[1].unavailable).toBe(false);
     expect(await service.secure(owner, { action: 'inspect' })).toEqual({
       status: 'ready',
     });
   } finally {
     fetch.mockRestore();
-    await service.coordinator.shutdown();
+    await coordinator.shutdown();
     await service.onApplicationShutdown();
   }
 });
@@ -181,12 +183,11 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
       () => secure<T>(owner, input, signal),
       signal,
     );
-  const activateSurface = vi.fn();
   try {
     discoveryFailure = 'initialize';
     expect(await androidTools(service)).toEqual({});
     discoveryFailure = undefined;
-    const tools = await androidTools(service, undefined, activateSurface);
+    const tools = await androidTools(service);
     expect(connections).toBe(1);
     discoveryFailure = 'tools/list';
     const discoveryStarted = Date.now();
@@ -198,7 +199,11 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
     );
     expect(connections).toBe(2);
     expect(
-      Object.keys(await androidTools(new AndroidService(new ConfigService()))),
+      Object.keys(
+        await androidTools(
+          new AndroidService(new ConfigService(), coordinator),
+        ),
+      ),
     ).toEqual([]);
     expect(Object.keys(tools)).not.toContain('mobile_clear_app_data');
     await service.call(first, 'android_apps', { device: 'wrong' });
@@ -257,8 +262,7 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
         ]),
       },
     );
-    expect(activateSurface).toHaveBeenCalledWith('two', 'two');
-    expect(service.owns('two', 'two')).toBe(true);
+    expect(coordinator.resourceFor(secondExecution)).toBe('android');
     await service.call(second, 'android_batch', {
       steps: [
         {
@@ -296,8 +300,14 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
     await expect(
       service.call(first, 'android_apps', {}, pre.signal),
     ).rejects.toThrow();
-    expect(service.owns('one', 'one')).toBe(false);
+    expect(coordinator.snapshot()[1].owner?.workerId).toBe('two');
     await service.call(second, 'android_apps', {});
+    loseResponse = true;
+    await expect(
+      service.call(second, 'android_screenshot', {}),
+    ).rejects.toThrow('Android connection failed');
+    expect(coordinator.snapshot()[1].unavailable).toBe(false);
+    await service.call(second, 'android_screenshot', {});
     const dispatched = calls.length;
     loseResponse = true;
     await expect(
@@ -311,7 +321,7 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
     await expect(service.call(second, 'android_apps', {})).rejects.toThrow(
       'unavailable',
     );
-    expect(connections).toBe(2);
+    expect(connections).toBe(3);
     await coordinator.finish(secondExecution);
   } finally {
     pauseFail = false;

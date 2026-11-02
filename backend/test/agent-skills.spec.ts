@@ -1,3 +1,4 @@
+import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
@@ -84,6 +85,7 @@ it('loads authentication skills only on interaction and starts fresh after resta
       inputProcessors: [new TaskToolDiscoveryProcessor(() => ({}))],
       publish: async () => {},
       worker: {
+        coordinator: new InteractionCoordinator(),
         model,
         instructions: await loadAgentInstructions('worker'),
         tools: {},

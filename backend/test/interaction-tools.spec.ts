@@ -5,6 +5,7 @@ import type { ProcessInputStepArgs } from '@mastra/core/processors';
 import { InteractionToolsProcessor } from '../dist/agent/interaction-tools.processor.js';
 import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
 import { X11Computer } from '../dist/agent/x11-computer.js';
+import { ExecutionUnavailableError } from '../dist/execution/execution.service.js';
 import {
   INTERACTION_EXECUTION_ID,
   PARENT_TASK_ID,
@@ -13,8 +14,7 @@ import {
 
 it('coordinates native device/private tools without changing media and rejects device switching and late calls', async () => {
   const coordinator = new InteractionCoordinator();
-  const activate = vi.fn();
-  const processor = new InteractionToolsProcessor(coordinator, activate);
+  const processor = new InteractionToolsProcessor(coordinator);
   const media = { data: 'image', mediaType: 'image/png' };
   const screenshot = Object.values(WORKSPACE_TOOLS.COMPUTER)[0];
   const tools = Object.fromEntries(
@@ -48,7 +48,7 @@ it('coordinates native device/private tools without changing media and rejects d
     'ordinary device',
   );
   expect(await call(screenshot)).toBe(media);
-  expect(activate).toHaveBeenCalledWith('task', 'worker', 'browser');
+  expect(coordinator.resourceFor(executionId)).toBe('desktop');
   expect(await call('inspect_private_fields')).toBe(media);
   await expect(call('android_inspect')).rejects.toThrow('fresh worker');
   await coordinator.finish(executionId);
@@ -104,5 +104,14 @@ it('guards desktop commands in execution and fences both native and client timeo
   }
   run.mockRejectedValueOnce(new Error('connection lost'));
   await expect(computer.press('Return')).rejects.toThrow('connection lost');
+  expect(uncertain).toHaveBeenCalledTimes(3);
+  run.mockRejectedValueOnce(new Error('screenshot connection lost'));
+  await expect(computer.screenshot()).rejects.toThrow(
+    'screenshot connection lost',
+  );
+  run.mockRejectedValueOnce(new ExecutionUnavailableError());
+  await expect(computer.press('Return')).rejects.toThrow(
+    'before command dispatch',
+  );
   expect(uncertain).toHaveBeenCalledTimes(3);
 });

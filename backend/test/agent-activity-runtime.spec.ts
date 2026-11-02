@@ -1,3 +1,4 @@
+import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
@@ -37,9 +38,13 @@ it('disarms completion when native generation fails after marking the task compl
     updatedAt: now,
     lastActivityAt: now,
   };
-  const activity = new AgentActivityService(events, {
-    activityTasks: async () => [task],
-  } as unknown as TasksService);
+  const activity = new AgentActivityService(
+    events,
+    {
+      activityTasks: async () => [task],
+    } as unknown as TasksService,
+    new InteractionCoordinator(),
+  );
   await activity.onModuleInit();
   let calls = 0;
   let interrupted = false;

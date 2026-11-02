@@ -1,43 +1,20 @@
 // Run two read-only Android workflows through real Task -> Worker model delegation.
-// Execute inside the dev agent-service after creating an isolated *_test database.
-// The scratch schema is always dropped. No public chat messages are published.
+// Execute through scripts/dev-local in its exclusive acceptance window.
+// The wrapper drops the scratch database. No public chat messages are published.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { ConfigService } from '@nestjs/config';
-import { Pool } from 'pg';
 import {
   RequestContext,
   MASTRA_THREAD_ID_KEY,
   MASTRA_RESOURCE_ID_KEY,
 } from '@mastra/core/request-context';
-import { AndroidService } from '../dist/android/android.service.js';
-import { androidTools } from '../dist/android/android-tools.js';
-import { loadAgentInstructions } from '../dist/agent/agent-instructions.js';
-import {
-  createMainSession,
-  MAIN_RESOURCE_ID,
-} from '../dist/agent/main-session.js';
-import { chatgptModel } from '../dist/agent/chatgpt-model.js';
-import { CodeModeProcessor } from '../dist/agent/code-mode.processor.js';
-import { InteractionToolsProcessor } from '../dist/agent/interaction-tools.processor.js';
-import { ExecutionService } from '../dist/execution/execution.service.js';
-import { X11Computer } from '../dist/agent/x11-computer.js';
+import { MAIN_RESOURCE_ID } from '../dist/agent/main-session.js';
+import { interactionSmokeFixture } from './interaction-smoke-fixture.mjs';
 
-const connectionString = process.env.TEST_DATABASE_URL;
-assert.equal(process.env.PAL_EXECUTION_ID, 'pal-dev-split-execution');
-assert(
-  connectionString && new URL(connectionString).pathname.endsWith('_test'),
-  'TEST_DATABASE_URL must select a test database',
-);
-const schemaName = 'pal_android_smoke_' + randomUUID().replaceAll('-', '');
-const config = new ConfigService(process.env);
-const android = new AndroidService(config);
-const execution = new ExecutionService(config);
-const computer = new X11Computer(execution, undefined, () =>
-  android.coordinator.unavailable('desktop'),
-);
+const fixture = await interactionSmokeFixture();
+const { android, coordinator } = fixture;
 const events = [];
-android.coordinator.events.subscribe((event) => events.push(event));
+coordinator.events.subscribe((event) => events.push(event));
 assert(android.enabled, 'Configure the Android sidecar first');
 const calls = [];
 const invoke = android.call.bind(android);
@@ -56,65 +33,21 @@ let session;
 const outputs = [];
 const runs = [];
 try {
-  const model = chatgptModel(
-    process.env.PAL_AGENT_MODEL,
-    process.env.PAL_AGENT_AUTH_PATH,
-    process.env.PAL_AGENT_THINKING_EFFORT || 'medium',
-  );
-  session = await createMainSession({
-    connectionString,
-    schemaName,
-    model,
-    computer,
-    workingDirectory: execution.home,
-    sandbox: execution.sandbox,
-    filesystem: execution.filesystem,
-    memoryOptions: {
-      lastMessages: 20,
-      semanticRecall: false,
-      workingMemory: { enabled: false },
-    },
-    onEvent: () => {},
-    task: {
-      instructions:
-        (await loadAgentInstructions('task')) + '\n' + android.instructions,
-      tools: {},
-      inputProcessors: [],
-      publish: async (output, context) => {
-        if (context.phase !== 'commentary')
-          outputs.push({ threadId: context.threadId, text: output.text });
-        console.log(JSON.stringify({ result: output.text }));
-      },
-      worker: {
-        coordinator: android.coordinator,
-        model: chatgptModel(
-          'gpt-6.1-terra',
-          process.env.PAL_AGENT_AUTH_PATH,
-          'medium',
-        ),
-        instructions:
-          (await loadAgentInstructions('worker')) + '\n' + android.instructions,
-        tools: () => androidTools(android),
-        inputProcessors: [
-          new InteractionToolsProcessor(android.coordinator, () => {}),
-          new CodeModeProcessor(),
-        ],
-        cleanup: async () => {},
-      },
-    },
+  session = await fixture.createSession(async (output, context) => {
+    if (context.phase !== 'commentary')
+      outputs.push({ threadId: context.threadId, text: output.text });
+    console.log(JSON.stringify({ result: output.text }));
   });
-  const flows = process.argv.includes('--fallback-only')
-    ? []
-    : [
-        [
-          'browser',
-          'Using Android Chrome, open https://example.com, follow its informational link to IANA, and report the destination URL and visible destination heading. Stop once the destination is verified. Take an Android screenshot to visually verify the destination page. Do not read personal tabs or change account controls.',
-        ],
-        [
-          'settings',
-          'Using Android Settings, read the phone model and Android version from About phone and Software information. Change no settings. Take an Android screenshot to verify the Android version.',
-        ],
-      ];
+  const flows = [
+    [
+      'browser',
+      'Using Android Chrome, open https://example.com, follow its informational link to IANA, and report the destination URL and visible destination heading. Stop once the destination is verified. Take an Android screenshot to visually verify the destination page. Do not read personal tabs or change account controls.',
+    ],
+    [
+      'settings',
+      'Using Android Settings, read the phone model and Android version from About phone and Software information. Change no settings. Take an Android screenshot to verify the Android version.',
+    ],
+  ];
   const outcomes = await Promise.allSettled(
     flows.map(async ([name, prompt]) => {
       const threadId = 'pal-task:' + randomUUID();
@@ -181,11 +114,10 @@ try {
     if (outcome.status === 'rejected')
       console.log(JSON.stringify({ failure: String(outcome.reason) }));
   }
-  if (flows.length)
-    assert(
-      new Set(calls.map((c) => c.worker)).size >= 2,
-      'Flows did not use separate workers',
-    );
+  assert(
+    new Set(calls.map((c) => c.worker)).size >= 2,
+    'Flows did not use separate workers',
+  );
   // A cross-device assignment must return to Task for a fresh execution.
   const fallbackTask = randomUUID();
   const fallbackThread = 'pal-task:' + fallbackTask;
@@ -240,8 +172,7 @@ try {
   console.log(
     JSON.stringify({
       passed: outcomes.every((outcome) => outcome.status === 'fulfilled'),
-      scope: flows.length ? 'all' : 'fallback-only',
-      concurrentPhoneTasks: flows.length > 0,
+      concurrentPhoneTasks: true,
       freshWorkerFallback: true,
       queue: events,
     }),
@@ -288,14 +219,5 @@ try {
       }),
     );
   }
-  await session?.close();
-  await android.coordinator.shutdown();
-  await android.onApplicationShutdown();
-  await execution.sandbox._stop();
-  const pool = new Pool({ connectionString });
-  try {
-    await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-  } finally {
-    await pool.end();
-  }
+  await fixture.close();
 }

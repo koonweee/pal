@@ -9,9 +9,10 @@ import { X11Computer } from '../dist/agent/x11-computer.js';
 import { AndroidService } from '../dist/android/android.service.js';
 import { LoginDestinations } from '../dist/login/login-destinations.js';
 
-// Run in the existing, idle development service. This is deterministic adapter
+// Run through scripts/dev-local's exclusive window. This is deterministic adapter
 // acceptance; native model behavior is evaluated separately through dev Tasks.
 assert.equal(process.env.PAL_EXECUTION_ID, 'pal-dev-split-execution');
+assert.equal(process.env.PAL_INTERACTION_SMOKE_EXCLUSIVE, '1');
 const config = new ConfigService({ ...process.env, PAL_DESKTOP_ENABLED: true });
 const coordinator = new InteractionCoordinator();
 const execution = new ExecutionService(config);
@@ -47,36 +48,6 @@ const track = (page) => {
     created.add(page);
 };
 try {
-  // Do not contend with the actual dev backend using a separate smoke coordinator.
-  const response = await fetch('http://127.0.0.1:3000/stream', {
-    signal: AbortSignal.timeout(5000),
-  });
-  assert.ok(response.ok);
-  const reader = response.body.getReader();
-  let data = '';
-  try {
-    for (;;) {
-      const chunk = await reader.read();
-      if (chunk.done) throw new Error('Missing dev activity snapshot');
-      data += new TextDecoder().decode(chunk.value);
-      const line = data
-        .split('\n')
-        .find(
-          (line) => line.startsWith('data:') && line.includes('agent.activity'),
-        );
-      if (line) {
-        assert.equal(
-          JSON.parse(line.slice(5)).state.status,
-          'idle',
-          'Wait for existing dev agent work to settle',
-        );
-        break;
-      }
-    }
-  } finally {
-    await reader.cancel();
-  }
-
   const baseline = begin('single-worker-baseline');
   const start = Date.now();
   await turn(baseline, () => computer.screenshot());

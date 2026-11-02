@@ -54,9 +54,13 @@ it('derives owner and waiters from the queue and clears waiting after cancellati
 
 it('tracks distinct task runs independently of Main and rejects late commentary', async () => {
   const events = new EventsService();
-  const activity = new AgentActivityService(events, {
-    activityTasks: async () => [task('a'), task('b')],
-  } as unknown as TasksService);
+  const activity = new AgentActivityService(
+    events,
+    {
+      activityTasks: async () => [task('a'), task('b')],
+    } as unknown as TasksService,
+    new InteractionCoordinator(),
+  );
   await activity.onModuleInit();
   const snapshots: unknown[] = [];
   const sub = events.changes.subscribe((event) => {
@@ -101,12 +105,16 @@ it('tracks distinct task runs independently of Main and rejects late commentary'
 it('rebuilds complete pending-input state without replaying completion and newer events beat startup reads', async () => {
   const events = new EventsService();
   let resolve!: (rows: Task[]) => void;
-  const activity = new AgentActivityService(events, {
-    activityTasks: () =>
-      new Promise<Task[]>((done) => {
-        resolve = done;
-      }),
-  } as unknown as TasksService);
+  const activity = new AgentActivityService(
+    events,
+    {
+      activityTasks: () =>
+        new Promise<Task[]>((done) => {
+          resolve = done;
+        }),
+    } as unknown as TasksService,
+    new InteractionCoordinator(),
+  );
   const loading = activity.onModuleInit();
   events.publish({
     event: 'task.updated',
@@ -150,9 +158,13 @@ it('starts completion when the last completed task run settles while other work 
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-10-19T20:00:00Z'));
   const events = new EventsService();
-  const activity = new AgentActivityService(events, {
-    activityTasks: async () => [task('a'), task('b')],
-  } as unknown as TasksService);
+  const activity = new AgentActivityService(
+    events,
+    {
+      activityTasks: async () => [task('a'), task('b')],
+    } as unknown as TasksService,
+    new InteractionCoordinator(),
+  );
   try {
     await activity.onModuleInit();
     activity.setWorking(true);
@@ -186,9 +198,13 @@ it('starts completion when the last completed task run settles while other work 
 
 it('discards armed completion when work is interrupted, reopened, or archived', async () => {
   const events = new EventsService();
-  const activity = new AgentActivityService(events, {
-    activityTasks: async () => [task('a'), task('b'), task('c')],
-  } as unknown as TasksService);
+  const activity = new AgentActivityService(
+    events,
+    {
+      activityTasks: async () => [task('a'), task('b'), task('c')],
+    } as unknown as TasksService,
+    new InteractionCoordinator(),
+  );
   await activity.onModuleInit();
   try {
     for (const id of ['a', 'b', 'c']) {

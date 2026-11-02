@@ -11,6 +11,13 @@ export class ExecutionFileError extends Error {
   }
 }
 
+/** No remote command was dispatched, so callers can safely retry readiness. */
+export class ExecutionUnavailableError extends Error {
+  constructor() {
+    super('Execution desktop is unavailable before command dispatch');
+  }
+}
+
 @Injectable()
 export class ExecutionService {
   readonly sandbox: ComposeSandbox;
@@ -35,7 +42,11 @@ export class ExecutionService {
     } = {},
   ) {
     options.signal?.throwIfAborted();
-    await this.sandbox._start();
+    try {
+      await this.sandbox._start();
+    } catch {
+      throw new ExecutionUnavailableError();
+    }
     const handle = await this.sandbox.processes.spawn(
       [command, ...args]
         .map((value) => "'" + value.replaceAll("'", "'\\''") + "'")

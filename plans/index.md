@@ -15,6 +15,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Interaction coordination cleanup](interaction-simplification.md) | Done | Required coordinator, execution-derived private device, proportionate fences and production-wired exclusive dev acceptance; automated and native checks pass. |
 | [Exclusive interaction resources](exclusive-interaction-resources.md) | Done | Shared desktop/Android FIFO turns, lifecycle release, safe private entry and agent-directed cleanup; automated and native dev acceptance validated. |
 | [Production Run Instrumentation](production-run-instrumentation.md) | Done | Native run/tool telemetry, correlation, retention, and agent-written storage queries. |
 | [Compact worker results](compact-worker-results.md) | Done | Compact Task delegation results while retaining worker history. |
