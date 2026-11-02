@@ -100,7 +100,7 @@ services:
         interface_name: palwan0
         gw_priority: 1
     healthcheck:
-      test: ["CMD-SHELL", "test -f /run/gateway-ready && nft list table inet pal_gateway >/dev/null"]
+      test: ["CMD", "sh", "/opt/pal-egress/health.sh"]
       interval: 2s
       timeout: 3s
       retries: 30

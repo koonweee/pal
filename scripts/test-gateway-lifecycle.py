@@ -16,7 +16,8 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
-PRIVATE = ["10.77.0.3", "100.64.77.3", "169.254.77.3", "192.168.77.3", "172.20.77.3"]
+PRIVATE = ["10.77.0.3", "100.64.88.3", "169.254.77.3", "192.168.77.3", "172.20.77.3"]
+TAILNET = "100.64.77.3"
 
 
 def run(*args, check=True, env=None, timeout=120):
@@ -62,9 +63,13 @@ def main():
             (path / filename).write_bytes((ROOT / "network-gateway/test" / filename).read_bytes())
         fixture = dict(image=fixture_image, build=str(path), cap_add=["NET_ADMIN"],
                        command=["python3", "/test/fixture.py"], stop_grace_period="1s",
-                       networks={"egress": {"ipv4_address": "203.0.114.3"}})
+                       networks={"egress": {"ipv4_address": "203.0.114.3"},
+                                 "tailnet": {"ipv4_address": TAILNET}})
+        router["networks"]["tailnet"] = {"interface_name": "tailscale0"}
         definition = dict(services=dict(egress=router, execution=client, fixture=fixture), networks={
-            "execution": transit, "egress": {"ipam": {"config": [{"subnet": "203.0.114.0/24"}]}}
+            "execution": transit,
+            "egress": {"ipam": {"config": [{"subnet": "203.0.114.0/24"}]}},
+            "tailnet": {"ipam": {"config": [{"subnet": "100.64.77.0/24"}]}}
         })
         compose_file = path / "compose.json"
         compose_file.write_text(json.dumps(definition))
@@ -91,6 +96,11 @@ def main():
             result = json.loads(execute("execution", "python3", "/test/probe.py").stdout)
             assert all(result[address] == "blocked" for address in PRIVATE), result
             assert result["203.0.114.3"] == 200 and result["raw_tcp"] == "connected" and result["udp"] == "udp-ok", result
+            assert result["tailnet_https"] == 200, result
+            assert result["tailnet_other_tcp"] == "blocked", result
+            assert result["tailnet_dns_tcp"] == "dns-ok", result
+            assert result["tailnet_dns_udp"] == "dns-ok", result
+            assert result["tailnet_other_udp"] == "blocked", result
 
         def denied(address):
             result = execute("execution", "curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "1",
@@ -118,7 +128,7 @@ def main():
             for address in PRIVATE:
                 assert execute("egress", "wget", "-T", "2", "-qO-", "http://" + address + ":8443/").stdout == "gateway-fixture-ok"
             probe()
-            print("PASS proxy-unaware HTTP, raw TCP/UDP, custom ports, private/Tailnet/link-local policy and delayed bootstrap", flush=True)
+            print("PASS proxy-unaware public traffic, Tailnet HTTPS/DNS, denied Tailnet ports, private/link-local policy and delayed bootstrap", flush=True)
             for command in [
                 ["ip", "route", "replace", "default", "via", args.network_prefix + ".2"],
                 ["nft", "flush", "ruleset"],
