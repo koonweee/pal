@@ -92,7 +92,15 @@ it('keeps discovery contextual and runs core/workspace tools with native media k
         { code },
         { workspace, requestContext, observe: noopObserve },
       );
-    const initialInstructions = JSON.stringify(messageList.getSystemMessages());
+    const initialInstructions = JSON.stringify(
+      messageList.getAllSystemMessages(),
+    );
+    expect(initialInstructions).toContain(
+      'search_tools searches connected-service tools only',
+    );
+    expect(initial.tools.search_tools.description).toContain(
+      'Search connected-service tools',
+    );
     expect(initial.tools.web_search).toBe(tools.web_search);
     expect(initial.tools.secure_fill).toBe(tools.secure_fill);
     for (const name of ['skill', 'skill_read', 'skill_search']) {
@@ -154,6 +162,14 @@ it('keeps discovery contextual and runs core/workspace tools with native media k
       result: { thread: 'task-a' },
     });
     expect(JSON.stringify(result)).toContain('hello');
+    await expect(
+      initial.tools.search_tools.execute!({ query: 'filesystem workspace' }),
+    ).resolves.toMatchObject({
+      results: [],
+      message: expect.stringContaining(
+        'use the tools already listed in this turn instead of searching again',
+      ),
+    });
     const loaded = await initial.tools.search_tools.execute!({
       query: 'fixture balance',
     });
@@ -201,7 +217,7 @@ it('keeps discovery contextual and runs core/workspace tools with native media k
     messageList.removeByIds(['search-result']);
     const expired = await processor.processInputStep(step());
     expect(expired.tools).not.toHaveProperty('fixture_lookup');
-    expect(JSON.stringify(messageList.getSystemMessages())).not.toContain(
+    expect(JSON.stringify(messageList.getAllSystemMessages())).not.toContain(
       'external_fixture_lookup',
     );
   } finally {
