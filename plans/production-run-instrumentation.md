@@ -115,7 +115,7 @@ npm run lint
 npx vitest run test/run-telemetry.spec.ts test/main-session.spec.ts test/task-agents.spec.ts test/task-workers.spec.ts
 ```
 
-Run against the existing development test database with isolated schemas. The telemetry fixture executes the guide's example and removes its temporary SELECT-only role and schema. Use `./scripts/dev-local rebuild` for integrated development acceptance when needed. Production deployment and access verification require a separately requested rollout.
+Run against the existing development test database with isolated schemas. The telemetry fixture executes the guide's example and removes its temporary SELECT-only role and schema. Use `./scripts/dev-local rebuild` for integrated development acceptance when needed. Production acceptance uses an explicitly authorized rollout and bounded read-only Mastra queries.
 
 ## Overall Exit Criteria
 
@@ -127,7 +127,7 @@ Run against the existing development test database with isolated schemas. The te
 
 ## Deferred Work
 
-- Daily automation setup, production deployment, and live production audit acceptance.
+- Daily automation setup and live production audit review.
 - Reusable audit tooling, report storage, dashboards, automated semantic scoring, and automatic repairs.
 - Full task-state revision history, exact per-step context snapshots, and historical telemetry reconstruction.
 - System RAM/container monitoring. This slice covers agent context and observational memory; backend RSS/heap and whole-stack resource history can be added if operational evidence warrants them.
@@ -139,6 +139,8 @@ Run against the existing development test database with isolated schemas. The te
 - UTC day partitions are refreshed daily and pruned hourly, at two expired partitions per signal table per tick. Effective retention is 30–31 days plus any pruning backlog.
 - Mastra closes storage before exporter shutdown. Pal drains telemetry first and ignores late emissions after exporter closure; native Main restart/cancellation coverage asserts there are no storage-write failures.
 - Build, type-aware lint/boundaries, and the four focused suites pass (10 tests). Acceptance covers native Main/Task/scheduled/Interaction execution, active-run input, publication references, memory history/events, private payload filtering, export failure recovery, SELECT-only access, and scoped retention. The documented standalone query example executes successfully.
-- The rebuilt development service is healthy. An isolated synthetic Main run in the running image retains its completed trace and 10 input / 5 output tokens after shutdown, readable with initialization disabled and read-only transactions. The fixture schema is removed. Production deployment and unattended production access are deferred.
+- The rebuilt development service is healthy. An isolated synthetic Main run in the running image retains its completed trace and 10 input / 5 output tokens after shutdown, readable with initialization disabled and read-only transactions. The fixture schema is removed. Production `7ff2c0d` is deployed and healthy. A mock-only Main run in an isolated production schema retains four spans, usage, and release metadata after shutdown; read-only Mastra APIs access live history successfully. The temporary schema is removed. Unattended production access remains deferred.
 - Routing ownership was coordinated with thread `01a19591-9eb1-73b0-ae03-f5861da725dd`; additive hooks preserve commit `bc2a0f6` and its `explicitDestinationIds` contract.
 - Temporary fixture schemas and query roles are removed. No task containers or superseded images remain; the current development service image is approximately 2.17 GB and existing shared build cache is retained.
+
+- Production rollout acceptance confirms matching backend/web release identity, HTTPS/SSE/desktop connectivity, migration exit 0, preserved public/private history and memory counts, and unchanged dependency containers during service replacement. Normal deployment arguments are restored. Two superseded runtime images are removed, reclaiming approximately 2.27 GB; shared build cache and the regular encrypted backup follow their existing retention.
