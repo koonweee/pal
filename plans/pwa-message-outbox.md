@@ -10,9 +10,9 @@ Let the PWA accept ordinary composer messages during a connection outage, keep t
 
 ## Current Behavior
 
-- The composer disables Send whenever the event stream is disconnected.
-- Optimistic messages and failed-send retries exist only in React memory.
-- Every message submission already carries a client-generated idempotency key, and the backend returns the original result for an identical retry.
+- Ordinary messages can be composed and queued while the event stream is disconnected.
+- Optimistic messages and their original idempotency keys persist across reloads.
+- The browser retries queued entries after reconnect, and the backend returns the original result for an identical retry.
 
 ## Target Data Shape
 
@@ -26,7 +26,7 @@ Implementation tasks:
 
 - Add validated local outbox storage with a 24-hour automatic-delivery window.
 - Restore queued and failed optimistic messages on startup.
-- Reconcile persisted messages by idempotency key.
+- Keep queued entries until their POST succeeds.
 
 Exit criteria:
 
@@ -44,7 +44,7 @@ Implementation tasks:
 Exit criteria:
 
 - Offline sends render optimistically and clear the composer immediately.
-- Reconnect or refresh followed by reconnect sends each queued message once through the idempotent API contract.
+- Reconnect or refresh followed by reconnect creates one canonical message through the idempotent API contract.
 
 ## Tests
 

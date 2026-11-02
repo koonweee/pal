@@ -9,7 +9,7 @@ export const messageOutboxValidityMs = 24 * 60 * 60 * 1000;
 export const maxMessageOutboxEntries = 20;
 const maxSerializedCharacters = 2_500_000;
 
-export type MessageOutboxStatus = 'queued' | 'retrying' | 'failed' | 'expired';
+export type MessageOutboxStatus = 'queued' | 'failed' | 'expired';
 
 export interface MessageOutboxEntry {
   attachments: Attachment[];
@@ -89,7 +89,6 @@ function validEntry(value: unknown): value is MessageOutboxEntry {
     validDate(value.createdAt) &&
     validDate(value.expiresAt) &&
     (value.status === 'queued' ||
-      value.status === 'retrying' ||
       value.status === 'failed' ||
       value.status === 'expired') &&
     (value.suggestedReply === undefined ||
@@ -125,8 +124,7 @@ export function readMessageOutbox(now = Date.now()): MessageOutboxEntry[] {
     )
       return value.entries
         .map((entry) =>
-          (entry.status === 'queued' || entry.status === 'retrying') &&
-          Date.parse(entry.expiresAt) <= now
+          entry.status === 'queued' && Date.parse(entry.expiresAt) <= now
             ? { ...entry, status: 'expired' as const }
             : entry,
         )

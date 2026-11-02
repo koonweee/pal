@@ -400,27 +400,12 @@ export function useChat() {
       if (oldest !== undefined)
         for (const [id, message] of fresh)
           if (message.sequence < oldest) fresh.delete(id);
-      let outbox = current.current.outbox;
-      let failedSends = current.current.failedSends;
-      for (const message of fresh.values()) {
-        if (!message.idempotencyKey) continue;
-        const entry = outbox.get(message.idempotencyKey);
-        if (entry?.status !== 'queued') continue;
-        if (outbox === current.current.outbox)
-          outbox = new Map(current.current.outbox);
-        if (failedSends === current.current.failedSends)
-          failedSends = new Map(current.current.failedSends);
-        outbox.delete(message.idempotencyKey);
-        failedSends.delete(message.idempotencyKey);
-      }
       historyRetry.current.cancel(true);
       commit({
         badge: selectedTaskId ? undefined : badge,
         before: crossedBoundary && oldest !== undefined ? oldest : page.before,
         historyError: undefined,
-        failedSends,
         loaded: true,
-        outbox,
         stored: fresh,
         syncing: false,
       });
@@ -578,13 +563,6 @@ export function useChat() {
         }
         if (visible) messageFailed(idempotencyKey);
         if (!(error instanceof RequestError)) {
-          const entry = current.current.outbox.get(idempotencyKey);
-          if (entry?.status !== 'queued') {
-            const outbox = new Map(current.current.outbox);
-            if (entry)
-              outbox.set(idempotencyKey, { ...entry, status: 'queued' });
-            commit({ outbox });
-          }
           void controller.current.synchronize();
           return 'queued' as const;
         }
@@ -661,7 +639,7 @@ export function useChat() {
               mainVisible: reply.mainVisible,
             }
           : null,
-        status: value.connected ? 'retrying' : 'queued',
+        status: 'queued',
         ...(suggestedReply ? { suggestedReply } : {}),
         taskId: destination ?? null,
         text,
@@ -698,8 +676,7 @@ export function useChat() {
         )
           return;
         const entry = Array.from(value.outbox.values()).find(
-          (candidate) =>
-            candidate.status === 'queued' || candidate.status === 'retrying',
+          (candidate) => candidate.status === 'queued',
         );
         if (!entry) return;
         if (Date.parse(entry.expiresAt) <= Date.now()) {
@@ -712,11 +689,9 @@ export function useChat() {
           commit({ failedSends, outbox });
           continue;
         }
-        const outgoing = new Map(value.outgoing);
         const message =
-          outgoing.get(entry.idempotencyKey) ?? outgoingMessage(entry);
-        outgoing.set(entry.idempotencyKey, message);
-        commit({ outgoing, submitting: true });
+          value.outgoing.get(entry.idempotencyKey) ?? outgoingMessage(entry);
+        commit({ submitting: true });
         if ((await deliverMessage(message)) === 'queued') return;
       }
     } finally {
@@ -856,22 +831,13 @@ export function useChat() {
           else {
             const stored = new Map(current.current.stored);
             const outgoing = new Map(current.current.outgoing);
-            let outbox = current.current.outbox;
-            let failedSends = current.current.failedSends;
             mergeMessage(
               stored,
               event.message,
               current.current.selectedTaskId,
               outgoing,
             );
-            const key = event.message.idempotencyKey;
-            if (key && outbox.get(key)?.status === 'queued') {
-              outbox = new Map(outbox);
-              failedSends = new Map(failedSends);
-              outbox.delete(key);
-              failedSends.delete(key);
-            }
-            commit({ failedSends, outbox, outgoing, stored });
+            commit({ outgoing, stored });
           }
           return;
         }
@@ -1061,7 +1027,7 @@ export function useChat() {
       outbox.set(idempotencyKey, {
         ...existing,
         expiresAt: messageOutboxExpiresAt(retriedAt),
-        status: 'retrying',
+        status: 'queued',
       });
       const canDeliver = value.connected && !value.syncing;
       commit({

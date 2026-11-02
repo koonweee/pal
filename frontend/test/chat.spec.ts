@@ -1413,6 +1413,10 @@ test('keeps a disconnected send across reload and delivers it after reconnect', 
       originalKey: current.idempotencyKey as string,
     };
   });
+  backend.rows.push({
+    ...backend.message('Send this when you are back', 'user'),
+    idempotencyKey: originalKey,
+  });
 
   await page.reload();
   await expect(
