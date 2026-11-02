@@ -277,8 +277,8 @@ test('delegation arms retain only their declared Task capabilities', async () =>
   )) {
     for (const name of [
       'browser',
-      'login_inspect',
-      'secure_fill',
+      'inspect_private_fields',
+      'enter_private_fields',
       'mastra_workspace_computer_click',
       'skill',
     ])
@@ -338,7 +338,7 @@ test('result boundary validation works after generation and rejects forbidden to
   const variant = { delegated: true, boundary: 'services' };
   const worker = {
     role: 'worker',
-    tools: ['browser', 'login_inspect', 'secure_fill'],
+    tools: ['browser', 'inspect_private_fields', 'enter_private_fields'],
   };
   assert.equal(
     validBoundaries(variant, [
@@ -389,8 +389,8 @@ test('interaction-MCP arm exposes no general worker or worker file/shell tools',
     role: 'worker',
     tools: [
       'browser',
-      'login_inspect',
-      'secure_fill',
+      'inspect_private_fields',
+      'enter_private_fields',
       'mastra_workspace_computer_click',
       'search_tools',
       'execute_typescript',
@@ -431,7 +431,7 @@ test('interaction-MCP arm exposes no general worker or worker file/shell tools',
   assert.equal(
     validBoundaries(variant, [
       task,
-      { role: 'worker', tools: ['browser', 'secure_fill'] },
+      { role: 'worker', tools: ['browser', 'enter_private_fields'] },
     ]),
     false,
   );

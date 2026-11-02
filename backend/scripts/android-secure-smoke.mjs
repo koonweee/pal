@@ -176,7 +176,12 @@ try {
   await app.listen(0, '127.0.0.1');
   const privateUrl = await app.getUrl();
   const vaultFills = [];
-  const tools = { ...(await androidTools(android)), ...loginTools(login) };
+  const tools = {
+    ...(await androidTools(android, undefined, (taskId, workerId) =>
+      login.activateSurface(taskId, workerId, 'android'),
+    )),
+    ...loginTools(login),
+  };
   for (const [name, tool] of Object.entries(tools)) {
     const execute = tool.execute.bind(tool);
     tool.execute = async (args, context) => {
@@ -184,7 +189,7 @@ try {
       noSecrets(args);
       const result = await execute(args, context);
       if (!name.startsWith('android_')) noSecrets(result);
-      if (name === 'secure_fill' && result.status === 'filled')
+      if (name === 'enter_private_fields' && result.status === 'filled')
         vaultFills.push(...result.fields);
       return result;
     };
@@ -368,7 +373,7 @@ try {
   );
   await runFlow(
     'reuse',
-    'Account website: https://android-fixture.example.test. Development acceptance: delegate another login in dev.pal.securefixture. It currently shows Authenticated; use Start again to begin a new fixture sign-in. Reuse the saved fixture account through secure_fill for username and password. Request only the new verification code through private entry. Verify Authenticated again. Use Android only, preserve other apps and never expose or type secrets through ordinary tools. Yield when private entry is awaiting.',
+    'Account website: https://android-fixture.example.test. Development acceptance: delegate another login in dev.pal.securefixture. It currently shows Authenticated; use Start again to begin a new fixture sign-in. Reuse the saved fixture account through enter_private_fields for username and password. Request only the new verification code through private entry. Verify Authenticated again. Use Android only, preserve other apps and never expose or type secrets through ordinary tools. Yield when private entry is awaiting.',
   );
   assert.deepEqual(privateFills, [
     ['username'],

@@ -128,11 +128,12 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
   );
   const first = { taskId: 'one', workerId: 'one' },
     second = { taskId: 'two', workerId: 'two' };
+  const activateSurface = vi.fn();
   try {
     discoveryFailure = 'initialize';
     expect(await androidTools(service)).toEqual({});
     discoveryFailure = undefined;
-    const tools = await androidTools(service);
+    const tools = await androidTools(service, undefined, activateSurface);
     expect(connections).toBe(1);
     discoveryFailure = 'tools/list';
     const discoveryStarted = Date.now();
@@ -207,6 +208,7 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
         ]),
       },
     );
+    expect(activateSurface).toHaveBeenCalledWith('two', 'two');
     await service.release('two', 'two', true);
     expect(service.owns('two', 'two')).toBe(true);
     await expect(service.call(first, 'android_apps', {})).rejects.toThrow(

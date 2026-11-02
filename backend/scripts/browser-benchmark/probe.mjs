@@ -376,14 +376,19 @@ scope.run = async () => {
         const workerTools = await r.main.worker.listTools({ requestContext });
         let interactionTools = Object.fromEntries(
           Object.entries(workerTools).filter(([name]) =>
-            /^(browser|login_|secure_)/.test(name),
+            /^(browser|inspect_private_fields|enter_private_fields|confirm_authentication)/.test(
+              name,
+            ),
           ),
         );
         if (privateEntry)
           interactionTools = {
             ...Object.fromEntries(
               Object.entries(interactionTools).filter(
-                ([name]) => !/^(login_|secure_)/.test(name),
+                ([name]) =>
+                  !/^(inspect_private_fields|enter_private_fields|confirm_authentication)/.test(
+                    name,
+                  ),
               ),
             ),
             ...privateEntry.tools,
@@ -393,13 +398,20 @@ scope.run = async () => {
           interactionTools = {
             ...Object.fromEntries(
               Object.entries(interactionTools).filter(([name]) =>
-                /^(login_|secure_)/.test(name),
+                /^(inspect_private_fields|enter_private_fields|confirm_authentication)/.test(
+                  name,
+                ),
               ),
             ),
             ...cua.tools,
           };
           for (const [name, tool] of Object.entries(interactionTools)) {
-            if (!/^(login_|secure_)/.test(name)) continue;
+            if (
+              !/^(inspect_private_fields|enter_private_fields|confirm_authentication)/.test(
+                name,
+              )
+            )
+              continue;
             const execute = tool.execute.bind(tool);
             interactionTools[name] = Object.assign(
               Object.create(Object.getPrototypeOf(tool)),
@@ -407,15 +419,7 @@ scope.run = async () => {
               {
                 execute: async (args, context) => {
                   await cua.ensure(context);
-                  const initialOpen =
-                    name === 'login_inspect' &&
-                    args.action?.[0] === 'tab' &&
-                    args.action?.[1] === 'new' &&
-                    args.action?.[2] === url;
-                  return execute(
-                    initialOpen ? { ...args, action: undefined } : args,
-                    context,
-                  );
+                  return execute(args, context);
                 },
               },
             );
@@ -504,7 +508,10 @@ scope.run = async () => {
         let taskTools = variant.delegated
           ? Object.fromEntries(
               Object.entries(baseTools).filter(
-                ([name]) => !/^(browser|login_|secure_|web_search)/.test(name),
+                ([name]) =>
+                  !/^(browser|inspect_private_fields|enter_private_fields|confirm_authentication|web_search)/.test(
+                    name,
+                  ),
               ),
             )
           : baseTools;
@@ -648,7 +655,7 @@ scope.run = async () => {
                 : await loadAgentInstructions('worker')) +
               benchmarkGuidance +
               (variant.driver === 'cua'
-                ? '\nUse cua_* tools for interaction. Pal binds your owned fixture tab and session automatically; begin with cua_get_browser_state (browser tasks) or cua_get_desktop_state (computer tasks). For browser state, the semantic outline and refs are in the returned JSON. Reinspect after navigation or stale refs. Pal supplies foreground delivery for trusted actions on this dedicated test desktop. Keep using login_inspect and secure_fill for private credentials. Their optional action accepts the existing browser action format. Do not use ordinary Cua observation on populated secret fields. Return results to Task.'
+                ? '\nUse cua_* tools for interaction. Pal binds your owned fixture tab and session automatically; begin with cua_get_browser_state (browser tasks) or cua_get_desktop_state (computer tasks). For browser state, the semantic outline and refs are in the returned JSON. Reinspect after navigation or stale refs. Pal supplies foreground delivery for trusted actions on this dedicated test desktop. Use inspect_private_fields and enter_private_fields for private credentials. Do not use ordinary Cua observation on populated secret fields. Return results to Task.'
                 : ''),
             model: model(variant.model, variant.effort),
             memory,

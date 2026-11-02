@@ -273,16 +273,24 @@ export class MastraAgentRuntime
             '\nCurrent time (UTC): ' +
             new Date().toISOString(),
           tools: async () => ({
-            ...(await androidTools(this.android)),
+            ...(await androidTools(
+              this.android,
+              undefined,
+              (taskId, workerId) =>
+                this.login.activateSurface(taskId, workerId, 'android'),
+            )),
             ...loginTools(this.login),
           }),
           inputProcessors: [
-            new ComputerSessionProcessor(this.browser),
+            new ComputerSessionProcessor(this.browser, (taskId, workerId) =>
+              this.login.activateSurface(taskId, workerId, 'browser'),
+            ),
             new CodeModeProcessor(),
           ],
           resume: (taskId, assignment) =>
             this.login.resumeWorker(taskId, assignment),
           cleanup: async (taskId, workerId, completed, startedAt) => {
+            this.login.clearSurface(taskId, workerId);
             this.browser.releaseComputer(taskId, workerId);
             const retain = await this.login
               .retainWorkerSession(taskId, workerId, completed, startedAt)

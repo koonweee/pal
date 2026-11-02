@@ -16,9 +16,13 @@ import type { LoginService } from '../dist/login/login.service.js';
 
 it('prepares native computer calls using trusted worker identity and preserves media results', async () => {
   const prepareComputer = vi.fn(async () => {});
-  const processor = new ComputerSessionProcessor({
-    prepareComputer,
-  } as unknown as BrowserService);
+  const activateSurface = vi.fn();
+  const processor = new ComputerSessionProcessor(
+    {
+      prepareComputer,
+    } as unknown as BrowserService,
+    activateSurface,
+  );
   const result = { data: 'image', mediaType: 'image/png' };
   const execute = vi.fn(async () => result);
   const name = Object.values(WORKSPACE_TOOLS.COMPUTER)[0];
@@ -40,6 +44,7 @@ it('prepares native computer calls using trusted worker identity and preserves m
   };
   expect(await (tools[name] as Tool).execute!({}, context)).toBe(result);
   expect(prepareComputer).toHaveBeenCalledWith('task', 'worker');
+  expect(activateSurface).toHaveBeenCalledWith('task', 'worker');
   await expect(
     (tools[name] as Tool).execute!(
       {},
@@ -86,13 +91,19 @@ it('serializes desktop setup and rejects competing owners until release', async 
   await service.prepareComputer('b', 'two');
 });
 
-it('excludes browser commands from secure-entry schemas while retaining session actions', async () => {
+it('exposes active-surface private tools without target, account or action selectors', async () => {
   const tools = loginTools({ androidEnabled: true } as LoginService);
-  for (const name of ['login_inspect', 'secure_fill'] as const) {
+  for (const name of [
+    'inspect_private_fields',
+    'enter_private_fields',
+  ] as const) {
     const schema = await asSchema(tools[name].inputSchema).jsonSchema;
     expect(schema.properties).not.toHaveProperty('action');
+    expect(schema.properties).not.toHaveProperty('target');
+    expect(schema.properties).not.toHaveProperty('accountId');
     expect(schema.additionalProperties).toBe(false);
   }
-  const schema = await asSchema(tools.login_session.inputSchema).jsonSchema;
-  expect(schema.properties).toHaveProperty('action');
+  const schema = await asSchema(tools.confirm_authentication.inputSchema)
+    .jsonSchema;
+  expect(schema.properties).not.toHaveProperty('action');
 });

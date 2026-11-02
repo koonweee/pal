@@ -22,6 +22,7 @@ import {
 @Injectable()
 export class LoginService implements OnModuleDestroy {
   private readonly inspector: LoginDestinations;
+  private readonly surfaces = new Map<string, 'browser' | 'android'>();
   private notify?: (taskId: string, text: string) => Promise<void>;
   private timer?: ReturnType<typeof setInterval>;
   private notifying = false;
@@ -38,6 +39,50 @@ export class LoginService implements OnModuleDestroy {
   }
   get androidEnabled() {
     return this.android.enabled;
+  }
+  private surfaceOwner(taskId: string, workerId?: string) {
+    if (!workerId)
+      throw new ApplicationError(
+        'invalid_input',
+        'Private fields require an interaction worker',
+      );
+    return `${taskId}:${workerId}`;
+  }
+  activateSurface(
+    taskId: string,
+    workerId: string,
+    surface: 'browser' | 'android',
+  ) {
+    this.surfaces.set(this.surfaceOwner(taskId, workerId), surface);
+  }
+  clearSurface(taskId: string, workerId: string) {
+    this.surfaces.delete(this.surfaceOwner(taskId, workerId));
+  }
+  async inspectActive(
+    taskId: string,
+    workerId?: string,
+    accountOrigin?: string,
+    signal?: AbortSignal,
+  ) {
+    const surface = this.surfaces.get(this.surfaceOwner(taskId, workerId));
+    if (!surface)
+      throw new ApplicationError(
+        'conflict',
+        'Use an ordinary computer or Android tool to establish the active surface, then inspect private fields',
+      );
+    if (surface === 'browser' && accountOrigin)
+      throw new ApplicationError(
+        'invalid_input',
+        'accountOrigin applies only to Android private fields',
+      );
+    return this.inspect(
+      taskId,
+      workerId,
+      undefined,
+      signal,
+      surface,
+      accountOrigin,
+    );
   }
   bindNotifier(notify: (taskId: string, text: string) => Promise<void>) {
     this.notify = notify;
@@ -168,13 +213,13 @@ export class LoginService implements OnModuleDestroy {
             row.destination.kind === 'android' ? 'Android app' : 'browser';
           const next =
             row.status === 'updating'
-              ? `Automatic recovery ${row.recoveryAttempts}/2: secure input references are stale. Inspect the destination again, choose fresh fields and call secure_entry_request to replace the inline form. Never ask the user to refresh. If login already completed, verify it and complete the task.`
+              ? `Automatic recovery ${row.recoveryAttempts}/2: private field references are stale. Inspect private fields again, choose fresh fields and call enter_private_fields to replace the inline form. Never ask the user to refresh. If authentication already completed, verify and confirm it.`
               : row.status === 'failed'
                 ? 'Automatic recovery stopped. Yield; the inline card lets the user retry. Do not create more requests until the user retries.'
                 : row.status === 'saved'
                   ? 'The requested credential fields are stored. Filling could not be confirmed. Inspect current state and verify any advancement; fill fresh fields only when still needed.'
                   : row.status === 'selected'
-                    ? 'The user selected a saved account. Inspect again and use secure_fill without accountId to continue this selected flow.'
+                    ? 'The user selected a saved account. Inspect private fields again and call enter_private_fields to continue this selected flow.'
                     : row.status === 'filled'
                       ? row.kind === 'card'
                         ? 'The payment fields were filled directly in the browser. Filling does not submit a purchase.'
@@ -372,6 +417,7 @@ export class LoginService implements OnModuleDestroy {
     keepMeSignedIn?: boolean,
     action?: string[],
     signal?: AbortSignal,
+    requestOnMissing = false,
   ) {
     signal?.throwIfAborted();
     if (action && !action.length)
@@ -393,13 +439,25 @@ export class LoginService implements OnModuleDestroy {
         );
       return this.request(taskId, fields, workerId, undefined, true);
     }
-    if (target.roles.includes('code'))
+    if (target.roles.includes('code')) {
+      if (requestOnMissing) {
+        return this.request(taskId, fields, workerId, keepMeSignedIn, false);
+      }
       return {
         status: 'input_required' as const,
-        message:
-          'Request secure PWA verification-code entry with secure_entry_request.',
+        message: 'Private verification-code entry is required.',
       };
-    const matches = await this.vault.matching(target.url);
+    }
+    let matches: Awaited<ReturnType<BitwardenService['matching']>>;
+    try {
+      matches = this.vault.configured
+        ? await this.vault.matching(target.url)
+        : [];
+    } catch (error) {
+      if (requestOnMissing)
+        return this.request(taskId, fields, workerId, keepMeSignedIn, false);
+      throw error;
+    }
     const flow = await this.repository.selection(taskId, workerId);
     const site = await this.repository.site(target.origin);
     const activeFlow =
@@ -422,20 +480,28 @@ export class LoginService implements OnModuleDestroy {
             : undefined;
     if (!account && !accountId && matches.length > 1)
       return this.request(taskId, fields, workerId, keepMeSignedIn, true);
-    if (!account)
+    if (!account) {
+      if (requestOnMissing) {
+        return this.request(taskId, fields, workerId, keepMeSignedIn, false);
+      }
       throw new ApplicationError(
         'conflict',
         'Select a matching account, or request credentials',
       );
+    }
     if (
       target.roles.some(
         (field) => !account.login?.[field as 'username' | 'password'],
       )
-    )
+    ) {
+      if (requestOnMissing) {
+        return this.request(taskId, fields, workerId, keepMeSignedIn, false);
+      }
       throw new ApplicationError(
         'conflict',
         'Matching account is missing required login fields; request credentials',
       );
+    }
     let filled: Awaited<ReturnType<LoginBrowser['fill']>> & {
       accountId: string;
       keepMeSignedIn?: boolean;
@@ -493,6 +559,42 @@ export class LoginService implements OnModuleDestroy {
           'Fields were filled, but the browser action or resulting inspection failed. Inspect without action and do not refill.',
       };
     }
+  }
+  async enter(
+    taskId: string,
+    fields: SecureFields,
+    workerId?: string,
+    keepMeSignedIn?: boolean,
+    chooseAccount = false,
+    signal?: AbortSignal,
+  ) {
+    const kind = fieldKind(fields);
+    if (kind === 'card')
+      return this.request(
+        taskId,
+        fields,
+        workerId,
+        undefined,
+        chooseAccount || this.vault.configured,
+      );
+    if (kind === 'code' || chooseAccount)
+      return this.request(
+        taskId,
+        fields,
+        workerId,
+        keepMeSignedIn,
+        chooseAccount,
+      );
+    return this.fill(
+      taskId,
+      fields,
+      undefined,
+      workerId,
+      keepMeSignedIn,
+      undefined,
+      signal,
+      true,
+    );
   }
   private async credentialDetails(row: LoginRequest) {
     const fields = credentialRoles(row.fields);
@@ -881,31 +983,16 @@ export class LoginService implements OnModuleDestroy {
       code = '';
     }
   }
-  async session(
-    taskId: string,
-    action: 'complete' | 'preference',
-    workerId?: string,
-    keepMeSignedIn?: boolean,
-  ) {
-    if (action !== 'complete' && action !== 'preference')
-      throw new ApplicationError(
-        'invalid_input',
-        'Unknown login session action',
-      );
-    if (action === 'preference' && keepMeSignedIn === undefined)
-      throw new ApplicationError(
-        'invalid_input',
-        'Supply keepMeSignedIn to update the login preference',
-      );
+  async confirm(taskId: string, workerId?: string, keepMeSignedIn?: boolean) {
+    const selected = await this.repository.selection(taskId, workerId);
     if (keepMeSignedIn !== undefined) {
-      const flow = await this.repository.selection(taskId, workerId);
-      if (flow?.destination.kind === 'android')
+      if (selected?.destination.kind === 'android')
         throw new ApplicationError(
           'invalid_input',
           'Session preferences apply to browser logins',
         );
       const origin =
-        flow?.origin ??
+        selected?.origin ??
         new URL((await this.browser.selectedPage(taskId, workerId)).url())
           .origin;
       if (new URL(origin).protocol !== 'https:')
@@ -919,7 +1006,7 @@ export class LoginService implements OnModuleDestroy {
         origin,
         keepMeSignedIn,
       );
-      if (action === 'preference')
+      if (!selected)
         return { status: 'recorded' as const, origin, keepMeSignedIn };
     }
     const flow = await this.repository.complete(taskId, workerId);

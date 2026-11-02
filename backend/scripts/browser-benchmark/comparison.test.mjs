@@ -71,8 +71,8 @@ import {
 test('method inventories exclude bypasses and human dependencies queue after main', () => {
   assert(
     validComparisonInventory('computer', 'worker', [
-      'login_inspect',
-      'secure_fill',
+      'inspect_private_fields',
+      'enter_private_fields',
       'skill',
       'mastra_workspace_computer_screenshot',
     ]),

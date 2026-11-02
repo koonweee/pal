@@ -58,7 +58,7 @@ it('keeps discovery contextual and runs core/workspace tools with native media k
     const tools = {
       ...nativeTools,
       web_search: webSearchTool(),
-      secure_fill: loginTools({} as LoginService).secure_fill,
+      enter_private_fields: loginTools({} as LoginService).enter_private_fields,
       ...(await createWorkspaceTools(workspace)),
       core_check: createTool({
         id: 'core_check',
@@ -102,7 +102,7 @@ it('keeps discovery contextual and runs core/workspace tools with native media k
       'Search connected-service tools',
     );
     expect(initial.tools.web_search).toBe(tools.web_search);
-    expect(initial.tools.secure_fill).toBe(tools.secure_fill);
+    expect(initial.tools.enter_private_fields).toBe(tools.enter_private_fields);
     for (const name of ['skill', 'skill_read', 'skill_search']) {
       expect(initial.tools).toHaveProperty(name);
       expect(initial.tools[name]).toBe(
@@ -116,7 +116,7 @@ it('keeps discovery contextual and runs core/workspace tools with native media k
         { requestContext, observe: noopObserve },
       ),
     ).rejects.toThrow('Invalid asset path');
-    expect(initialInstructions).not.toContain('external_secure_fill');
+    expect(initialInstructions).not.toContain('external_enter_private_fields');
     expect(initialInstructions).not.toContain('external_web_search');
     expect(initial.tools).not.toHaveProperty('fixture_lookup');
     expect(initial.tools).not.toHaveProperty('load_tool');

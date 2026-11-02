@@ -146,10 +146,11 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
         'http://native.example.test',
       ),
     ).rejects.toMatchObject({ code: 'invalid_input' });
+    login.activateSurface(task.id, workerId, 'android');
     for (const [index, role] of ['username', 'password', 'code'].entries()) {
       stage = index;
-      const inspected = await tools.login_inspect.execute!(
-        { target: 'android', website: 'https://native.example.test/login' },
+      const inspected = await tools.inspect_private_fields.execute!(
+        { accountOrigin: 'https://native.example.test/login' },
         context,
       );
       outputs.push(inspected);
@@ -316,7 +317,7 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
     );
     const uncertainFields = { password: uncertain.inputs[0].ref };
     loseFillResponse = true;
-    const lost = await tools.secure_fill.execute!(
+    const lost = await tools.enter_private_fields.execute!(
       { fields: uncertainFields },
       context,
     );
@@ -326,7 +327,7 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       message: expect.stringContaining('could not be confirmed'),
     });
     expect(fills.length).toBe(5);
-    const replay = await tools.secure_fill.execute!(
+    const replay = await tools.enter_private_fields.execute!(
       { fields: uncertainFields },
       context,
     );

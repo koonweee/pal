@@ -2,7 +2,9 @@ export function validComparisonInventory(arm, role, names) {
   if (role === 'task') return names.every((name) => name === 'agent-worker');
   return names.every(
     (name) =>
-      /^(login_|secure_)/.test(name) ||
+      /^(inspect_private_fields|enter_private_fields|confirm_authentication)/.test(
+        name,
+      ) ||
       ['skill', 'skill_read', 'skill_search'].includes(name) ||
       (arm === 'browser' && /^browser(?:_|$)/.test(name)) ||
       (arm === 'android' && /^android_/.test(name)) ||

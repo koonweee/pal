@@ -292,7 +292,9 @@ export function score(scenario, state, answer, tools = []) {
       ),
     );
     checks.noAutomation = !tools.some((name) =>
-      /^(browser|login_|secure_)|execute_command|execute_typescript/.test(name),
+      /^(browser|inspect_private_fields|enter_private_fields|confirm_authentication)|execute_command|execute_typescript/.test(
+        name,
+      ),
     );
   }
   return {

@@ -6,8 +6,8 @@ import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
 const directTools = new Set<string>([
   'web_search',
   'android_screenshot',
-  'login_inspect',
-  'secure_fill',
+  'inspect_private_fields',
+  'enter_private_fields',
   'skill',
   'skill_read',
   'skill_search',

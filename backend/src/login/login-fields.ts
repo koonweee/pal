@@ -256,7 +256,7 @@ export function selectedFields(fields: unknown): [SecureRole, string][] {
   if (result.some(([, ref]) => !inputRef.test(ref)))
     throw new ApplicationError(
       'invalid_input',
-      'Use opaque input refs from the latest login_inspect result',
+      'Use opaque input refs from the latest inspect_private_fields result',
     );
   return result;
 }

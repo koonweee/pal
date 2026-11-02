@@ -132,7 +132,9 @@ try {
   assert(result.task.coreTools.includes('web_search'));
   assert(
     !result.task.coreTools.some((name) =>
-      /^(browser|login_|secure_)/.test(name),
+      /^(browser|inspect_private_fields|enter_private_fields|confirm_authentication)/.test(
+        name,
+      ),
     ),
   );
   assert(result.task.workspaceTools.includes('mastra_workspace_read_file'));
@@ -145,8 +147,8 @@ try {
     ),
   );
   assert(result.interaction.coreTools.includes('browser'));
-  assert(result.interaction.coreTools.includes('login_inspect'));
-  assert(result.interaction.coreTools.includes('secure_fill'));
+  assert(result.interaction.coreTools.includes('inspect_private_fields'));
+  assert(result.interaction.coreTools.includes('enter_private_fields'));
   assert(
     !result.interaction.coreTools.some((name) =>
       /^(web_search|read_preferences|inspect_message|agent-)/.test(name),

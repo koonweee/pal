@@ -27,7 +27,11 @@ export function taskToolAllowed(boundary, name) {
     (name === 'agent-general' || name === 'search_tools')
   )
     return false;
-  if (/^(browser|login_|secure_|skill)|mastra_workspace_computer_/.test(name))
+  if (
+    /^(browser|inspect_private_fields|enter_private_fields|confirm_authentication|skill)|mastra_workspace_computer_/.test(
+      name,
+    )
+  )
     return false;
   if (boundary === 'coordinator')
     return !/^(web_search|search_tools|execute_typescript|mastra_workspace_)/.test(
@@ -39,7 +43,9 @@ export function taskToolAllowed(boundary, name) {
 }
 export function interactionToolAllowed(name, mcpToolNames = []) {
   return (
-    /^(browser|login_|secure_|skill)|^mastra_workspace_computer_/.test(name) ||
+    /^(browser|inspect_private_fields|enter_private_fields|confirm_authentication|skill)|^mastra_workspace_computer_/.test(
+      name,
+    ) ||
     name === 'search_tools' ||
     name === 'execute_typescript' ||
     mcpToolNames.includes(name)
@@ -67,8 +73,8 @@ export function validBoundaries(variant, boundaries, mcpToolNames = []) {
     !workers.length ||
     workers.some(
       (event) =>
-        !event.tools.includes('login_inspect') ||
-        !event.tools.includes('secure_fill'),
+        !event.tools.includes('inspect_private_fields') ||
+        !event.tools.includes('enter_private_fields'),
     )
   )
     return false;
@@ -91,7 +97,7 @@ export function validBoundaries(variant, boundaries, mcpToolNames = []) {
     );
   }
   const interactionName = (name) =>
-    /^(browser|login_|secure_|mastra_workspace_|execute_typescript|skill)/.test(
+    /^(browser|inspect_private_fields|enter_private_fields|confirm_authentication|mastra_workspace_|execute_typescript|skill)/.test(
       name,
     );
   return (
@@ -107,7 +113,7 @@ export function validBoundaries(variant, boundaries, mcpToolNames = []) {
       .every(
         (e) =>
           !e.tools.some((name) =>
-            /^(browser|login_|secure_|skill)|mastra_workspace_computer_/.test(
+            /^(browser|inspect_private_fields|enter_private_fields|confirm_authentication|skill)|mastra_workspace_computer_/.test(
               name,
             ),
           ),

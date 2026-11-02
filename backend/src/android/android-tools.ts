@@ -12,6 +12,7 @@ import {
 export async function androidTools(
   android: AndroidService,
   actions = Object.keys(androidActions) as AndroidAction[],
+  activateSurface?: (taskId: string, workerId: string) => void,
 ): Promise<ToolsInput> {
   if (!android.enabled) return {};
   const upstream = await android.toolDefinitions();
@@ -35,6 +36,8 @@ export async function androidTools(
       let description = describe(definition.description ?? definition.name);
       if (action === 'android_inspect') {
         delete schema.properties?.format; // Upstream compact text is the host default.
+        description +=
+          ' This is ordinary navigation inspection; it does not inspect private fields or test private entry. Use inspect_private_fields on the active surface for credentials, codes, or payment fields.';
       }
       if (action === 'android_batch') {
         const steps = schema.properties!.steps as JSONSchema7;
@@ -67,12 +70,19 @@ export async function androidTools(
                   'Android batch step is unavailable in this workflow.',
                 );
             }
-            return android.call(
+            const output = await android.call(
               { taskId, workerId },
               action,
               args,
               context?.abortSignal,
             );
+            activateSurface?.(taskId, workerId);
+            if (action === 'android_inspect')
+              output.content.push({
+                type: 'text',
+                text: 'Private fields were not inspected. Use inspect_private_fields for credentials, codes, or payment fields.',
+              });
+            return output;
           },
           outputSchema: jsonSchema<Awaited<ReturnType<AndroidService['call']>>>(
             {

@@ -3,6 +3,7 @@ import { DatabaseService } from '/opt/pal/dist/database/database.service.js';
 import { LoginRepository } from '/opt/pal/dist/login/login.repository.js';
 import { LoginService } from '/opt/pal/dist/login/login.service.js';
 import { loginTools } from '/opt/pal/dist/login/login-tools.js';
+import { PARENT_TASK_ID, WORKER_ID } from '/opt/pal/dist/agent/task-workers.js';
 import { migrate } from '/opt/pal/node_modules/drizzle-orm/node-postgres/migrator.js';
 import { driverSecrets } from './driver-cases.mjs';
 
@@ -67,9 +68,19 @@ export async function privateFixture(runtime, task, fixture, scenario) {
   );
   const tools = loginTools(service);
   const pending = [];
-  for (const tool of Object.values(tools)) {
+  for (const [name, tool] of Object.entries(tools)) {
     const execute = tool.execute.bind(tool);
     tool.execute = async (args, context) => {
+      if (name === 'inspect_private_fields') {
+        const workerId = context?.requestContext?.get(WORKER_ID);
+        const parentTaskId = context?.requestContext?.get(PARENT_TASK_ID);
+        if (typeof workerId === 'string')
+          service.activateSurface(
+            typeof parentTaskId === 'string' ? parentTaskId : task.id,
+            workerId,
+            scenario.packageName ? 'android' : 'browser',
+          );
+      }
       const result = await execute(args, context);
       if (result?.status !== 'awaiting_user' || !result.requestId)
         return result;

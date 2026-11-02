@@ -219,7 +219,7 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
       .expect(200);
     expect(preview.headers['cache-control']).toBe('no-store');
     expect(preview.headers['content-type']).toContain('image/png');
-    const pending = await loginTools(login).secure_entry_request.execute!(
+    const pending = await loginTools(login).enter_private_fields.execute!(
       {
         fields: {
           username: inspection.inputs[0].ref,
@@ -346,12 +346,13 @@ it('connects inspection, direct PWA save, retryable task notification, and brows
     await page.goto('https://example.test/another-login');
     const otherInspection = await login.inspect(otherTask.id);
     expect(otherInspection.accounts).toHaveLength(1);
-    const otherRequest = await loginTools(login).secure_entry_request.execute!(
+    const otherRequest = await loginTools(login).enter_private_fields.execute!(
       {
         fields: {
           username: otherInspection.inputs[0].ref,
           password: otherInspection.inputs[1].ref,
         },
+        chooseAccount: true,
       },
       {
         requestContext: new RequestContext([
@@ -725,8 +726,8 @@ it('remembers verified accounts and session intent across callers and restarts w
     notifications.push(text);
   });
   try {
-    await expect(original.session(a.id, 'preference')).rejects.toMatchObject({
-      code: 'invalid_input',
+    await expect(original.confirm(a.id)).rejects.toMatchObject({
+      code: 'conflict',
     });
     const first = fields(await original.inspect(a.id));
     const ambiguous = await original.fill(a.id, first);
@@ -779,8 +780,8 @@ it('remembers verified accounts and session intent across callers and restarts w
     expect((await repository.site(origin))?.lastAccountId).toBeNull();
     // Success is an explicit agent report after website verification, independent of save/fill.
     outputs.push(
-      await loginTools(original).login_session.execute!(
-        { action: 'complete', keepMeSignedIn: null },
+      await loginTools(original).confirm_authentication.execute!(
+        { keepMeSignedIn: null },
         {
           requestContext: new RequestContext([
             [MASTRA_THREAD_ID_KEY, 'pal-task:' + a.id],
@@ -811,13 +812,13 @@ it('remembers verified accounts and session intent across callers and restarts w
       await restarted.fill(b.id, second, items[1].id, undefined, false),
     ).toMatchObject({ accountId: items[1].id, keepMeSignedIn: false });
     expect((await repository.site(origin))?.lastAccountId).toBe(items[0].id);
-    await restarted.session(b.id, 'preference', undefined, true);
-    expect((await repository.site(origin))?.lastAccountId).toBe(items[0].id);
-    await restarted.session(b.id, 'preference', undefined, false);
-    await original.session(a.id, 'preference', undefined, true);
+    await restarted.confirm(b.id, undefined, true);
+    expect((await repository.site(origin))?.lastAccountId).toBe(items[1].id);
+    await restarted.confirm(b.id, undefined, false);
+    await original.confirm(a.id, undefined, true);
     // Confirming an older intent must not overwrite a more recent preference choice.
-    outputs.push(await restarted.session(b.id, 'complete'));
-    await original.session(a.id, 'complete'); // A duplicate old report cannot replace the newer B choice.
+    outputs.push(await restarted.confirm(b.id));
+    await original.confirm(a.id); // A duplicate old report cannot replace the newer B choice.
     expect(await repository.site(origin)).toMatchObject({
       lastAccountId: items[1].id,
       keepMeSignedIn: true,
@@ -827,7 +828,7 @@ it('remembers verified accounts and session intent across callers and restarts w
       accountId: items[1].id,
     });
     // Explicit switching opens the picker even when an active/default account is known.
-    const entry = await loginTools(restarted).secure_entry_request.execute!(
+    const entry = await loginTools(restarted).enter_private_fields.execute!(
       { fields: third, chooseAccount: true, keepMeSignedIn: true },
       {
         requestContext: new RequestContext([
@@ -875,10 +876,10 @@ it('remembers verified accounts and session intent across callers and restarts w
     );
     // Redirecting back to the merchant still confirms the original credential origin.
     await page.goto('https://store.example.test/account');
-    outputs.push(await resumed.session(c.id, 'complete'));
-    await restarted.session(b.id, 'complete');
+    outputs.push(await resumed.confirm(c.id));
+    await restarted.confirm(b.id);
     expect((await repository.site(origin))?.lastAccountId).toBe(items[2].id);
-    await resumed.session(c.id, 'preference', undefined, true); // Explicit text also updates the remembered intent.
+    await resumed.confirm(c.id, undefined, true); // Explicit text also updates the remembered intent.
     expect((await repository.site(origin))?.keepMeSignedIn).toBe(true);
     await page.goto('https://accounts.example.test/login');
     const fourth = fields(await resumed.inspect(d.id));
@@ -923,7 +924,7 @@ it('remembers verified accounts and session intent across callers and restarts w
       title: 'Existing session',
       goal: 'Keep the session',
     });
-    await resumed.session(existing.id, 'preference', undefined, true);
+    await resumed.confirm(existing.id, undefined, true);
     expect(await repository.site('https://store.example.test')).toMatchObject({
       lastAccountId: null,
       keepMeSignedIn: true,
@@ -1093,12 +1094,10 @@ it('inspects the selected page and fills privately without browser navigation co
     }),
   );
   await page.goto('https://computer.example.test/login');
-  const task = await fixture.app
-    .get(TasksService)
-    .create({
-      title: 'Computer private fill',
-      goal: 'Fill without navigation',
-    });
+  const task = await fixture.app.get(TasksService).create({
+    title: 'Computer private fill',
+    goal: 'Fill without navigation',
+  });
   const workerId = randomUUID();
   const caller = {
     requestContext: new RequestContext([
@@ -1127,13 +1126,29 @@ it('inspects the selected page and fills privately without browser navigation co
     .mockImplementation(async () => [structuredClone(item)]);
   try {
     const tools = loginTools(fixture.app.get(LoginService));
-    const inspected = await tools.login_inspect.execute!({}, caller);
+    expect(
+      await tools.inspect_private_fields.execute!({}, caller),
+    ).toMatchObject({
+      status: 'error',
+      code: 'conflict',
+    });
+    fixture.app.get(LoginService).activateSurface(task.id, workerId, 'browser');
+    expect(
+      await tools.inspect_private_fields.execute!(
+        { accountOrigin: 'https://example.test' },
+        caller,
+      ),
+    ).toMatchObject({ status: 'error', code: 'invalid_input' });
+    const inspected = await tools.inspect_private_fields.execute!({}, caller);
     if (!('inputs' in inspected)) throw Error('Expected inspected fields');
     const fields = {
       username: inspected.inputs[0].ref,
       password: inspected.inputs[1].ref,
     };
-    const filled = await tools.secure_fill.execute!({ fields }, caller);
+    const filled = await tools.enter_private_fields.execute!(
+      { fields },
+      caller,
+    );
     expect(filled).toMatchObject({ status: 'filled', accountId: item.id });
     expect(await page.locator('input[type=password]').inputValue()).toBe(
       'SENTINEL_PASSWORD',
@@ -1143,10 +1158,12 @@ it('inspects the selected page and fills privately without browser navigation co
     expect(command).not.toHaveBeenCalled();
     // Navigation is a separate UI operation; fresh inspection follows it.
     await page.locator('button').click();
-    const next = await tools.login_inspect.execute!({}, caller);
+    const next = await tools.inspect_private_fields.execute!({}, caller);
     if (!('inputs' in next)) throw Error('Expected code inspection');
     expect(next.inputs[0].autocomplete).toBe('one-time-code');
-    expect(await tools.secure_fill.execute!({ fields }, caller)).toMatchObject({
+    expect(
+      await tools.enter_private_fields.execute!({ fields }, caller),
+    ).toMatchObject({
       status: 'error',
       code: 'conflict',
     });

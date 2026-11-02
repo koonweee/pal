@@ -8,7 +8,13 @@ import { PARENT_TASK_ID, WORKER_ID } from './task-workers.js';
 /** Bind native computer calls to one owned desktop without a model-facing setup tool. */
 export class ComputerSessionProcessor implements Processor {
   readonly id = 'pal-computer-session';
-  constructor(private readonly browser: BrowserService) {}
+  constructor(
+    private readonly browser: BrowserService,
+    private readonly activateSurface?: (
+      taskId: string,
+      workerId: string,
+    ) => void,
+  ) {}
 
   processInputStep({ tools }: ProcessInputStepArgs) {
     const wrapped = { ...tools } as ToolsInput;
@@ -26,6 +32,7 @@ export class ComputerSessionProcessor implements Processor {
         if (typeof taskId !== 'string' || typeof workerId !== 'string')
           throw new Error('Computer use requires an interaction worker');
         await this.browser.prepareComputer(taskId, workerId);
+        this.activateSurface?.(taskId, workerId);
         return execute(input, context);
       };
       wrapped[name] = guarded;

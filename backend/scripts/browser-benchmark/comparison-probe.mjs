@@ -365,7 +365,10 @@ scope.run = async () => {
             try {
               page = await r.browser.selectedPage(task.id, seedWorker);
             } catch (error) {
-              if (error.message !== 'Browser tab is unavailable' || Date.now() >= deadline)
+              if (
+                error.message !== 'Browser tab is unavailable' ||
+                Date.now() >= deadline
+              )
                 throw error;
               await new Promise((resolve) => setTimeout(resolve, 250));
             }
@@ -504,7 +507,7 @@ scope.run = async () => {
                   (await privateScreen())
                 )
                   throw Error(
-                    'Use masked login_inspect while private fields are populated',
+                    'Use masked inspect_private_fields while private fields are populated',
                   );
                 if (
                   name === 'browser' &&
@@ -519,19 +522,18 @@ scope.run = async () => {
                 if (
                   arm === 'computer' &&
                   args.action &&
-                  name !== 'login_session'
+                  name !== 'confirm_authentication'
                 )
                   throw Error('Computer navigation must use computer tools');
-                if (name === 'login_inspect' && arm === 'android')
+                if (name === 'inspect_private_fields' && arm === 'android')
                   args = {
                     ...args,
-                    target: 'android',
-                    website: scenario.url
+                    accountOrigin: scenario.url
                       ? new URL(scenario.url).origin
                       : 'https://android-fixture.example.test',
                   };
-                if (arm !== 'android' && args.target === 'android')
-                  throw Error('Phone outside assigned method');
+                if (arm !== 'android' && args.accountOrigin)
+                  throw Error('Android account origin outside assigned method');
                 const result = await execute(args, context);
                 if (name === 'android_inspect')
                   emit('android.observation', {
@@ -573,7 +575,10 @@ scope.run = async () => {
                   privacyValid = false;
                   throw Error('Observation privacy gate failed');
                 }
-                if (name === 'secure_fill' && result.status === 'filled') {
+                if (
+                  name === 'enter_private_fields' &&
+                  result.status === 'filled'
+                ) {
                   fillRoles.push(...result.fields);
                   emit('private.fill', {
                     roles: result.fields,
@@ -634,7 +639,7 @@ scope.run = async () => {
                             (await privateScreen())
                           )
                             throw Error(
-                              'Use masked login_inspect while private fields are populated',
+                              'Use masked inspect_private_fields while private fields are populated',
                             );
                           const result = await tool.execute(args, ...rest);
                           await capturePublicEvidence();

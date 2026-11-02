@@ -118,55 +118,46 @@ export function loginTools(service: LoginService) {
     };
   };
   return {
-    login_inspect: createTool({
-      id: 'login_inspect',
+    inspect_private_fields: createTool({
+      id: 'inspect_private_fields',
       description:
-        'Inspect editable inputs in your selected browser tab or target Android phone. Returns opaque input refs, field metadata, matching account IDs/labels and a screenshot (masked for browser, unmasked for Android). For Android, supply the account website for vault matching; installed apps require no registration. Assign username/password, ordered code refs, or cardholderName/number/expiry/expMonth/expYear/securityCode refs to secure_fill or secure_entry_request. Never read existing values. Reinspect after navigation or stale refs; after a loading page inspect again.',
+        'Inspect private editable fields on the active browser or Android surface. First use an ordinary computer or Android tool to establish that surface. Returns opaque field refs, metadata, matching account labels and a screenshot. For Android only, supply the HTTPS account origin used for vault matching. Use the refs with enter_private_fields. Every call performs a fresh inspection; ordinary navigation invalidates earlier refs.',
       inputSchema: jsonSchema<{
-        target?: 'browser' | 'android' | null;
-        website?: string | null;
+        accountOrigin?: string | null;
       }>({
         type: 'object',
         properties: service.androidEnabled
           ? {
-              website: {
+              accountOrigin: {
                 type: ['string', 'null'],
                 description:
-                  'HTTPS account website for Android vault matching, such as https://www.amazon.com. Required for Android; browser uses its actual page origin.',
-              },
-              target: {
-                type: ['string', 'null'],
-                enum: ['browser', 'android', null],
-                description:
-                  'Browser by default; Android inspects the configured phone.',
+                  'HTTPS account origin for Android vault matching, such as https://www.amazon.com. Omit for browser fields.',
               },
             }
           : {},
         additionalProperties: false,
       }),
-      execute: ({ target, website }, context) => {
+      execute: ({ accountOrigin }, context) => {
         const { taskId, workerId } = identity(context);
         return safe(() =>
-          service.inspect(
+          service.inspectActive(
             taskId,
             workerId,
-            undefined,
+            accountOrigin ?? undefined,
             context?.abortSignal,
-            target ?? 'browser',
-            website ?? undefined,
           ),
         );
       },
       outputSchema: jsonSchema<
-        | Awaited<ReturnType<LoginService['inspect']>>
+        | Awaited<ReturnType<LoginService['inspectActive']>>
         | { status: 'error'; code: string; message: string }
       >({ type: 'object', additionalProperties: true }),
       toModelOutput: modelOutput,
     }),
-    secure_entry_request: createTool({
-      id: 'secure_entry_request',
+    enter_private_fields: createTool({
+      id: 'enter_private_fields',
       description:
-        'Show a private inline entry card in Main and Task. Pass only opaque refs from the latest login_inspect; never pass labels or values. fields selects login, code, or payment entry and the card requests only those roles. Staged username and password/PIN requests merge into one vault account; codes stay transient. Never mix role kinds. chooseAccount shows saved login accounts or Bitwarden cards. Returns awaiting_user; the host sets needs-input and notifies the owning Task after submission. Stale-field saves/selections remain available for fresh filling.',
+        'Privately satisfy fields from the latest inspect_private_fields result. The host fills a current, remembered or sole saved login; opens an account picker when ambiguous or explicitly requested; and otherwise opens private entry. Codes always use private entry and payment fields use private entry or a saved-card picker. Pass only opaque refs, never labels or values. Filling never submits the page or proves authentication.',
       inputSchema: jsonSchema<{
         fields: FieldInput;
         chooseAccount?: boolean | null;
@@ -178,7 +169,7 @@ export function loginTools(service: LoginService) {
           chooseAccount: {
             type: ['boolean', 'null'],
             description:
-              'Show the saved-item picker for login or payment entry.',
+              'Set true only when the user explicitly asks to choose or switch accounts.',
           },
           keepMeSignedIn: keepSchema,
         },
@@ -188,83 +179,39 @@ export function loginTools(service: LoginService) {
       execute: ({ fields, chooseAccount, keepMeSignedIn }, context) => {
         const { taskId, workerId } = identity(context);
         return safe(() =>
-          service.request(
+          service.enter(
             taskId,
             normalizeFields(fields),
             workerId,
             keepMeSignedIn ?? undefined,
             chooseAccount ?? false,
-          ),
-        );
-      },
-    }),
-    secure_fill: createTool({
-      id: 'secure_fill',
-      description:
-        'Fill inspected username/password refs from a matching vault account without exposing values. Pass only opaque refs from the latest login_inspect; never pass labels or values. Password and reusable PIN roles require password inputs. Omit accountId for automatic reuse or an ambiguity picker. Code refs return input_required. Card refs open the private card picker; omit accountId and keepMeSignedIn for cards. Card filling never submits a purchase. Filling does not click submit; continue with computer or Android tools after filling. Android accepts login/code fields; omit keepMeSignedIn. Returns session-persistence intent; filling does not prove authentication.',
-      inputSchema: jsonSchema<{
-        fields: FieldInput;
-        accountId?: string | null;
-        keepMeSignedIn?: boolean | null;
-      }>({
-        type: 'object',
-        properties: {
-          fields: fieldsSchema,
-          accountId: {
-            type: ['string', 'null'],
-            description:
-              'Only for an explicit user choice of a matching saved account.',
-          },
-          keepMeSignedIn: keepSchema,
-        },
-        required: ['fields'],
-        additionalProperties: false,
-      }),
-      execute: ({ fields, accountId, keepMeSignedIn }, context) => {
-        const { taskId, workerId } = identity(context);
-        return safe(() =>
-          service.fill(
-            taskId,
-            normalizeFields(fields),
-            accountId ?? undefined,
-            workerId,
-            keepMeSignedIn ?? undefined,
-            undefined,
             context?.abortSignal,
           ),
         );
       },
       outputSchema: jsonSchema<
-        | Awaited<ReturnType<LoginService['fill']>>
+        | Awaited<ReturnType<LoginService['enter']>>
         | { status: 'error'; code: string; message: string }
       >({ type: 'object', additionalProperties: true }),
       toModelOutput: modelOutput,
     }),
-    login_session: createTool({
-      id: 'login_session',
+    confirm_authentication: createTool({
+      id: 'confirm_authentication',
       description:
-        'Record the selected flow account as successful with action complete, only after verifying website authentication and challenges. action preference records an explicit keepMeSignedIn instruction for this flow or the selected HTTPS page. This tool does not operate website persistence controls or guarantee session retention.',
+        'Confirm authentication only after the website or app has accepted the login and any challenges. The host records the selected account as successful. On an already authenticated browser page, an explicit keepMeSignedIn value records that preference even when no private login flow exists. This tool does not operate page controls or guarantee session retention.',
       inputSchema: jsonSchema<{
-        action: 'complete' | 'preference';
         keepMeSignedIn?: boolean | null;
       }>({
         type: 'object',
         properties: {
-          action: { type: 'string', enum: ['complete', 'preference'] },
           keepMeSignedIn: keepSchema,
         },
-        required: ['action'],
         additionalProperties: false,
       }),
-      execute: ({ action, keepMeSignedIn }, context) => {
+      execute: ({ keepMeSignedIn }, context) => {
         const { taskId, workerId } = identity(context);
         return safe(() =>
-          service.session(
-            taskId,
-            action,
-            workerId,
-            keepMeSignedIn ?? undefined,
-          ),
+          service.confirm(taskId, workerId, keepMeSignedIn ?? undefined),
         );
       },
     }),
