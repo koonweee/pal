@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Done
 
 ## Goal
 
@@ -66,3 +66,10 @@ docker compose -f backend/compose.yaml -f backend/compose.dev.yaml -f backend/co
 - The per-session bridge authentication and private-fill safety guarantees remain unchanged.
 - Development and production use the same installed helper protocol on the shared phone.
 - Source, deployment definitions, validation evidence, and plan status reflect the deployed state.
+
+## Rollout Evidence
+
+- Helper lifecycle tests, backend build/lint, Compose rendering, and the local Android image build pass.
+- Production runs `pal-android:16914c1@sha256:a9152f50e452b956bb8bbb5fb3121160ba6c9b6bb9902039ffbe927dab66b316` through Stack v2 revision `98ed981`; only `android-mcp` was replaced.
+- Production retained ADB authorization and completed authenticated read-only Chrome inspection with three editable inputs. Ordinary Mobile MCP recovered after the private helper handoff.
+- The installed helper APK hash remained `f511f4f5056943755b601d3e03bad0a49aa2e0f3b94e5ec415e61698ac019bb6` before and after inspection, confirming cross-environment reuse without reinstalling the APK.
