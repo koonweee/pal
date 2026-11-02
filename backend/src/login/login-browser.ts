@@ -28,6 +28,7 @@ interface BoundInput {
 }
 export class LoginBrowser {
   private readonly inputs = new Map<string, BoundInput>();
+  constructor(private readonly uncertain?: () => void) {}
   private async release(owner?: string) {
     const removed: BoundInput[] = [];
     for (const [ref, input] of this.inputs)
@@ -332,9 +333,17 @@ export class LoginBrowser {
           role === 'code' && target.selected.length > 1
             ? code![index]
             : preparedValue.value;
-        if (preparedValue.select)
-          await input.element.selectOption(value, { timeout: 3000 });
-        else await input.element.fill(value, { timeout: 3000 });
+        try {
+          if (preparedValue.select)
+            await input.element.selectOption(value, { timeout: 3000 });
+          else await input.element.fill(value, { timeout: 3000 });
+        } catch {
+          this.uncertain?.();
+          throw new ApplicationError(
+            'unavailable',
+            'Private filling could not be confirmed. Do not replay the fill; recover the desktop before continuing.',
+          );
+        }
       }
       return { status: 'filled' as const, fields: target.roles };
     } catch (error) {

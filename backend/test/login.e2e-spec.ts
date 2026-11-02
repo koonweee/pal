@@ -8,7 +8,9 @@ import { PARENT_TASK_ID, WORKER_ID } from '../dist/agent/task-workers.js';
 import { loginTools } from '../dist/login/login-tools.js';
 import type { SecureFields } from '../dist/login/login-fields.js';
 import { ChatService } from '../dist/chat/chat.service.js';
-import { chromium } from 'playwright-core';
+import { chromium, type ElementHandle } from 'playwright-core';
+import { LoginDestinations } from '../dist/login/login-destinations.js';
+import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
 import { SharedBrowserService as BrowserService } from '../dist/browser/shared-browser.service.js';
 import { LoginService } from '../dist/login/login.service.js';
 import { EventsService } from '../dist/events/events.service.js';
@@ -25,6 +27,67 @@ beforeAll(async () => {
 });
 afterAll(async () => fixture?.close());
 beforeEach(async () => fixture.reset());
+it('fences desktop admission after a dispatched private browser write loses its response', async () => {
+  const browser = await chromium.launch({
+    channel: 'chrome',
+    executablePath: process.env.TEST_CHROMIUM_PATH,
+    headless: true,
+  });
+  const page = await browser.newPage();
+  const coordinator = new InteractionCoordinator();
+  let restoreFill: (() => void) | undefined;
+  try {
+    await page.route('https://uncertain.example.test/**', (route) =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<input id="password" type="password" autocomplete="current-password">',
+      }),
+    );
+    await page.goto('https://uncertain.example.test/');
+    const destinations = new LoginDestinations(
+      { selectedPage: async () => page } as unknown as BrowserService,
+      fixture.app.get(AndroidService),
+      coordinator,
+    );
+    const inspected = await destinations.inspect('task', 'worker', 'browser');
+    const handle = await page.$('#password');
+    if (!handle) throw new Error('Missing fixture input');
+    const nativeFill = handle.fill.bind(handle);
+    const prototype = Object.getPrototypeOf(
+      handle,
+    ) as ElementHandle<HTMLInputElement>;
+    const lostResponse = vi
+      .spyOn(prototype, 'fill')
+      .mockImplementationOnce(async (value, options) => {
+        await nativeFill(value, options);
+        throw new Error('response lost');
+      });
+    restoreFill = () => lostResponse.mockRestore();
+    await expect(
+      destinations.fill(
+        'task',
+        'worker',
+        { password: inspected.inputs[0].ref },
+        { password: 'SYNTHETIC_PASSWORD' },
+      ),
+    ).rejects.toMatchObject({ code: 'unavailable' });
+    expect(await page.locator('#password').inputValue()).toBe(
+      'SYNTHETIC_PASSWORD',
+    );
+    expect(coordinator.snapshot()[0].unavailable).toBe(true);
+    await expect(
+      coordinator.forSession(
+        'desktop',
+        { taskId: 'next', workerId: 'next' },
+        async () => {},
+      ),
+    ).rejects.toThrow('uncertain');
+  } finally {
+    restoreFill?.();
+    await coordinator.shutdown();
+    await browser.close();
+  }
+});
 it('keeps request metadata secret-free and saves once across repeated API submissions', async () => {
   const task = await fixture.app
     .get(TasksService)

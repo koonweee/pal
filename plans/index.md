@@ -15,7 +15,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Exclusive interaction resources](exclusive-interaction-resources.md) | In Progress | Shared desktop/Android FIFO turns, one device per worker, lifecycle release, private-entry recovery, and agent-directed UI cleanup. |
+| [Exclusive interaction resources](exclusive-interaction-resources.md) | Done | Shared desktop/Android FIFO turns, lifecycle release, safe private entry and agent-directed cleanup; automated and native dev acceptance validated. |
 | [Production Run Instrumentation](production-run-instrumentation.md) | Done | Native run/tool telemetry, correlation, retention, and agent-written storage queries. |
 | [Compact worker results](compact-worker-results.md) | Done | Compact Task delegation results while retaining worker history. |
 | [Android keyboard policy](android-keyboard.md) | Done | Suppress the Android IME and provide an explicit PWA client-keyboard toggle. |
@@ -45,8 +45,8 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 | [Agent profile favicon](agent-profile-favicon.md) | Done | Browser favicon follows the saved agent image and accent-colored donut fallback. |
 | [Markdown list guidance](markdown-list-guidance.md) | Done | Shared Main/Task Markdown list syntax, validated and deployed to dev/production. |
 | [Task execution and interaction worker](interaction-worker-runtime.md) | Done | Sol-medium Task and Terra-medium interaction roles are deployed with verified production boundaries and retained state. |
-| [Interaction delegation benchmark](interaction-delegation-benchmark.md) | In Progress | Three-arm, coordinator and interaction-MCP comparisons complete; live semantic review pending. |
-| [Browser worker benchmark](browser-worker-benchmark.md) | In Progress | Direct Task versus compact interaction workers, realistic synthetic/live workflows, timing, correctness and token reporting. |
+| [Interaction delegation benchmark](interaction-delegation-benchmark.md) | Reference | Historical three-arm, coordinator and interaction-MCP comparisons; live semantic review incomplete. Legacy harness retired. |
+| [Browser worker benchmark](browser-worker-benchmark.md) | Reference | Historical direct Task versus compact-worker measurements; live semantic review incomplete. Legacy harness retired. |
 | [Staged login entry](staged-login-entry.md) | Done | Role-specific phone, PIN/password and code collection with merged vault accounts and hardened worker recovery. |
 | [Production dev release](production-dev-release.md) | Complete | Publish validated dev changes and immutable images, migrate production routed egress and verify preserved state. |
 | [Memory compaction budgets](memory-compaction-budgets.md) | Done | Native 12k history/observation thresholds, 3k raw retention and dev deployment verification. |

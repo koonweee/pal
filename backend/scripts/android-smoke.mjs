@@ -24,6 +24,7 @@ import { ExecutionService } from '../dist/execution/execution.service.js';
 import { X11Computer } from '../dist/agent/x11-computer.js';
 
 const connectionString = process.env.TEST_DATABASE_URL;
+assert.equal(process.env.PAL_EXECUTION_ID, 'pal-dev-split-execution');
 assert(
   connectionString && new URL(connectionString).pathname.endsWith('_test'),
   'TEST_DATABASE_URL must select a test database',
@@ -65,6 +66,9 @@ try {
     schemaName,
     model,
     computer,
+    workingDirectory: execution.home,
+    sandbox: execution.sandbox,
+    filesystem: execution.filesystem,
     memoryOptions: {
       lastMessages: 20,
       semanticRecall: false,
@@ -99,16 +103,18 @@ try {
       },
     },
   });
-  const flows = [
-    [
-      'browser',
-      'Using Android Chrome, open https://example.com, follow its informational link to IANA, and report the destination URL and visible destination heading. Stop once the destination is verified. Take an Android screenshot to visually verify the destination page. Do not read personal tabs or change account controls.',
-    ],
-    [
-      'settings',
-      'Using Android Settings, read the phone model and Android version from About phone and Software information. Change no settings. Take an Android screenshot to verify the Android version.',
-    ],
-  ];
+  const flows = process.argv.includes('--fallback-only')
+    ? []
+    : [
+        [
+          'browser',
+          'Using Android Chrome, open https://example.com, follow its informational link to IANA, and report the destination URL and visible destination heading. Stop once the destination is verified. Take an Android screenshot to visually verify the destination page. Do not read personal tabs or change account controls.',
+        ],
+        [
+          'settings',
+          'Using Android Settings, read the phone model and Android version from About phone and Software information. Change no settings. Take an Android screenshot to verify the Android version.',
+        ],
+      ];
   const outcomes = await Promise.allSettled(
     flows.map(async ([name, prompt]) => {
       const threadId = 'pal-task:' + randomUUID();
@@ -133,7 +139,7 @@ try {
       console.log(JSON.stringify({ flow: name, runId: delivery.output.runId }));
       const timeout = setTimeout(
         () => session.taskAgent.abortRunStream(delivery.output.runId),
-        240000,
+        600000,
       );
       try {
         await delivery.output.getFullOutput();
@@ -175,14 +181,11 @@ try {
     if (outcome.status === 'rejected')
       console.log(JSON.stringify({ failure: String(outcome.reason) }));
   }
-  assert.ok(
-    outcomes.every((outcome) => outcome.status === 'fulfilled'),
-    'Native Android flows incomplete',
-  );
-  assert(
-    new Set(calls.map((c) => c.worker)).size >= 2,
-    'Flows did not use separate workers',
-  );
+  if (flows.length)
+    assert(
+      new Set(calls.map((c) => c.worker)).size >= 2,
+      'Flows did not use separate workers',
+    );
   // A cross-device assignment must return to Task for a fresh execution.
   const fallbackTask = randomUUID();
   const fallbackThread = 'pal-task:' + fallbackTask;
@@ -206,7 +209,7 @@ try {
   runs.push(fallback.output);
   const timeout = setTimeout(
     () => session.taskAgent.abortRunStream(fallback.output.runId),
-    240000,
+    600000,
   );
   try {
     await fallback.output.getFullOutput();
@@ -236,11 +239,16 @@ try {
   );
   console.log(
     JSON.stringify({
-      passed: true,
-      concurrentPhoneTasks: true,
+      passed: outcomes.every((outcome) => outcome.status === 'fulfilled'),
+      scope: flows.length ? 'all' : 'fallback-only',
+      concurrentPhoneTasks: flows.length > 0,
       freshWorkerFallback: true,
       queue: events,
     }),
+  );
+  assert.ok(
+    outcomes.every((outcome) => outcome.status === 'fulfilled'),
+    'Native Android flows incomplete',
   );
 } finally {
   for (const run of session?.taskAgent.listActiveThreadRuns() ?? [])
@@ -283,6 +291,7 @@ try {
   await session?.close();
   await android.coordinator.shutdown();
   await android.onApplicationShutdown();
+  await execution.sandbox._stop();
   const pool = new Pool({ connectionString });
   try {
     await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);

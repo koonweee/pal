@@ -7,7 +7,7 @@ import { SharedBrowserService } from '../dist/browser/shared-browser.service.js'
 import { ExecutionService } from '../dist/execution/execution.service.js';
 import { X11Computer } from '../dist/agent/x11-computer.js';
 import { AndroidService } from '../dist/android/android.service.js';
-import { LoginBrowser } from '../dist/login/login-browser.js';
+import { LoginDestinations } from '../dist/login/login-destinations.js';
 
 // Run in the existing, idle development service. This is deterministic adapter
 // acceptance; native model behavior is evaluated separately through dev Tasks.
@@ -22,7 +22,7 @@ const computer = new X11Computer(execution, undefined, () =>
 const android = new AndroidService(config, coordinator);
 const includeAndroid =
   android.enabled && !process.argv.includes('--desktop-only');
-const login = new LoginBrowser();
+const login = new LoginDestinations(browser, android, coordinator);
 const origin = 'https://pal-queue-' + randomUUID() + '.example.test';
 const events = [];
 coordinator.events.subscribe((event) =>
@@ -186,7 +186,7 @@ try {
       }),
     );
     context.on('page', track);
-    await computer.press(['ctrl', 't']);
+    await computer.press(['CTRL', 'T']);
     await computer.type(origin + '/login');
     await computer.press('Return');
   });
@@ -210,7 +210,7 @@ try {
   const inspected = await coordinator.run(
     'desktop',
     privateOwner.executionId,
-    () => login.inspect(target, privateOwner.workerId),
+    () => login.inspect(privateOwner.taskId, privateOwner.workerId, 'browser'),
   );
   const fields = {
     username: inspected.inputs[0].ref,
@@ -232,7 +232,7 @@ try {
       privateOwner.workerId,
     );
     assert.equal(bound, target);
-    await login.fill(bound, privateOwner.workerId, fields, {
+    await login.fill(privateOwner.taskId, privateOwner.workerId, fields, {
       username: 'SYNTHETIC_USER',
       password: 'SYNTHETIC_PASSWORD',
     });

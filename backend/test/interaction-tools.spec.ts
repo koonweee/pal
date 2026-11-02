@@ -84,6 +84,18 @@ it('guards desktop commands in execution and fences both native and client timeo
     ],
     { input: undefined, timeout: 70_000 },
   );
+  await computer.press(['CTRL', 'T']);
+  expect(run).toHaveBeenCalledWith(
+    'flock',
+    expect.arrayContaining(['Control_L+t']),
+    expect.anything(),
+  );
+  await computer.press(['CTRL', 'SHIFT', 'T']);
+  expect(run).toHaveBeenCalledWith(
+    'flock',
+    expect.arrayContaining(['Control_L+Shift_L+t']),
+    expect.anything(),
+  );
   for (const exitCode of [124, 137]) {
     run.mockResolvedValueOnce({ ...result, success: false, exitCode });
     await expect(computer.press('Return')).rejects.toThrow(

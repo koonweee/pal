@@ -171,8 +171,13 @@ export class X11Computer implements SandboxComputer {
   }
 
   async press(key: string | string[]) {
+    const chord = Array.isArray(key) && key.length > 1;
     const keys = (Array.isArray(key) ? key : [key]).map(
-      (name) => aliases[name.toLowerCase()] ?? name,
+      (name) =>
+        aliases[name.toLowerCase()] ??
+        // Tool chords name physical keys. Uppercase must not imply Shift:
+        // CTRL+T opens a tab; CTRL+SHIFT+T explicitly restores a closed tab.
+        (chord && /^[a-z]$/i.test(name) ? name.toLowerCase() : name),
     );
     if (!keys.length || keys.some((name) => !/^[a-zA-Z0-9_]+$/.test(name)))
       throw new Error('Use X11 key names or an array of keys for a chord');

@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress. Implementation and automated validation are complete; physical-device development acceptance and final removal review are underway.
+Done. Implementation, automated checks, native development acceptance, removal review and task-artifact cleanup are validated. Production deployment remains separate.
 
 ## Goal
 
@@ -44,9 +44,10 @@ Implementation and acceptance are authorized in development. Production deployme
 Implementation progress:
 
 - Milestones 1–4 implemented: shared coordination, adapter/private-entry migration, lifecycle settlement, activity contracts/UI, guidance and architecture. The direct agent-browser dependency, legacy ownership modules, tab management and obsolete executable benchmarks are removed.
-- Automated validation covers FIFO, native worker lifecycle, cancellation/draining, one-device binding, bound browser targets, external private submissions, Android readiness recovery and activity. Backend service suite: 91 passing before the additional readiness regression; focused Android suite: 2 passing. E2E: 42 passing before the lifecycle method rename; the affected login suite passes all 8 tests after its test call was updated. Frontend unit suite: 40 passing; focused Playwright activity test passes. Build, lint, generated contracts, frontend type/ownership checks and unused-code checks pass.
-- Dev desktop adapter acceptance passes: ten queued turns followed by a direct request, retained private entry after an intervening task, preserved existing tabs and exact fixture cleanup. Real Task→Worker contention passes on repeat; an initial cleanup omission motivated explicit on-screen cleanup verification guidance. Physical Android acceptance and a repeat with the strengthened guidance remain.
-- Production is unchanged. Detailed development measurements and final acceptance results belong in the evaluation report.
+- Milestone 5 validated: 94 backend service tests, 43 E2E tests, 40 frontend unit tests and the focused Playwright activity journey pass. Build, type-aware lint/boundaries, generated contracts, frontend type/ownership checks and unused-code checks pass.
+- Dev adapter acceptance passes: ten queued desktop turns followed by a direct request, two queued phone turns, independent devices, real cancellation draining, retained private entry after an intervening task, and fixture cleanup. Native desktop/phone contention and fresh-worker device fallback pass. Physical Android private-entry acceptance passes new login and saved-account reuse; each credential wait releases access.
+- Evaluation fixes are retested: external-submission FIFO bypass, readiness fencing, mixed-case X11 shortcuts, crash-local desktop command settlement, and uncertain/hung private-browser operations. No additional scheduling/cleanup policy is proposed. See [development evaluation](exclusive-interaction-resources-evaluation.md) for measurements, failed attempts, fixes, limits and cleanup evidence.
+- Scratch schemas/databases, fixture APK/tabs, copied scripts and preview images are removed. Shared dev containers, current image tags and persistent data are preserved. Production is unchanged.
 
 ### 1. Shared queue and execution lifecycle
 

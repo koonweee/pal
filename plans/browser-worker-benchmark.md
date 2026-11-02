@@ -2,13 +2,13 @@
 
 ## Status
 
-In Progress: collection complete; live semantic review pending
+Reference. Collection is complete; live semantic review is incomplete. The legacy browser harness is retired. Current device acceptance is tracked in [exclusive interaction resources](exclusive-interaction-resources.md).
 
 ## Goal
 
 Compare direct Task interaction with a compact-context interaction worker across the requested model/effort matrix using repeatable synthetic and public live websites. Measure correctness, elapsed time, model/tool time, and tokens.
 
-## Current Behavior
+## Evaluated Design
 
 - Task uses Sol medium with local execution, web search and MCP discovery; the dedicated interaction worker uses Terra medium with browser, computer and secure-entry tools.
 - Existing login-latency and turn-latency scripts instrument the running dev agent.
@@ -56,7 +56,7 @@ Exit: six lanes pass isolation and contention checks; the complete matrix starts
 - Matrix and report aggregation include every requested setting and failures.
 - Dev smoke: control, delegated and public live scenario; availability probes for all settings.
 
-## Validation Commands
+## Historical Collection Commands
 
 ```bash
 node --test backend/scripts/browser-benchmark/benchmark.test.mjs

@@ -3,6 +3,9 @@ import type { Browser, Page } from 'playwright-core';
 import type { ExecutionService } from '../dist/execution/execution.service.js';
 import { SharedBrowserService } from '../dist/browser/shared-browser.service.js';
 import { extensionRequest } from '../dist/browser/browser-extension.js';
+import { LoginDestinations } from '../dist/login/login-destinations.js';
+import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
+import type { AndroidService } from '../dist/android/android.service.js';
 
 vi.mock('../dist/browser/browser-extension.js', () => ({
   extensionRequest: vi.fn(),
@@ -52,4 +55,34 @@ it('binds private inspection to the active tab, retains its target, and disconne
   await service.shutdown();
   expect(disconnect).toHaveBeenCalledOnce();
   expect(closeTab).not.toHaveBeenCalled();
+});
+
+it('bounds unresponsive private browser calls and fences handoff until device recovery', async () => {
+  vi.useFakeTimers();
+  const coordinator = new InteractionCoordinator();
+  try {
+    const destinations = new LoginDestinations(
+      {
+        selectedPage: () => new Promise(() => {}),
+      } as unknown as SharedBrowserService,
+      {} as AndroidService,
+      coordinator,
+    );
+    const failed = expect(
+      destinations.inspect('task', 'worker', 'browser'),
+    ).rejects.toMatchObject({ code: 'unavailable' });
+    await vi.advanceTimersByTimeAsync(30_000);
+    await failed;
+    expect(coordinator.snapshot()[0].unavailable).toBe(true);
+    await expect(
+      coordinator.forSession(
+        'desktop',
+        { taskId: 'next', workerId: 'next' },
+        async () => {},
+      ),
+    ).rejects.toThrow('uncertain');
+  } finally {
+    await coordinator.shutdown();
+    vi.useRealTimers();
+  }
 });

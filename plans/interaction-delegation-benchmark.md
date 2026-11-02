@@ -2,13 +2,13 @@
 
 ## Status
 
-In Progress: three-arm, coordinator and Task-execution/interaction-MCP collections and comparisons complete; live semantic review pending.
+Reference. Three-arm, coordinator and Task-execution/interaction-MCP collections are complete; live semantic review is incomplete. The legacy browser harness is retired. Current device acceptance is tracked in [exclusive interaction resources](exclusive-interaction-resources.md).
 
 ## Goal
 
 Compare three Task tool boundaries with a Luna-high interaction worker and a Sol-medium general worker. Both workers receive explicit assignments without inherited history. Measure correctness, end-to-end latency and API-equivalent cost before choosing the production boundary. A coordinator follow-up also compares Luna high for the general worker. A two-role follow-up assigns local execution to Task and UI/MCP work to interaction, removing the general worker.
 
-## Current Behavior
+## Evaluated Design
 
 - The selected production design is Task-owned MCP/local execution with a compact Luna-high UI worker and explicit assignments. Implementation/deployment status is tracked in [Task execution and interaction worker](interaction-worker-runtime.md). The experimental MCP-on-interaction arm remains separate evidence.
 - The three boundary arms use Sol medium for Task and general workers, and Luna high for the interaction worker. The coordinator follow-up uses Luna high for both workers. Browser, computer and login tools belong to the interaction worker.

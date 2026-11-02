@@ -14,14 +14,37 @@ import {
 
 /** The shared workflow owns policy; these adapters own destination mechanics. */
 export class LoginDestinations {
-  private readonly web = new LoginBrowser();
+  private readonly web: LoginBrowser;
   private readonly android: LoginAndroid;
   constructor(
     private readonly browser: SharedBrowserService,
     android: AndroidService,
     private readonly coordinator: InteractionCoordinator,
   ) {
+    this.web = new LoginBrowser(() => this.coordinator.unavailable('desktop'));
     this.android = new LoginAndroid(android);
+  }
+  private async withBrowser<T>(operation: () => Promise<T>): Promise<T> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        operation(),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => {
+            // Renderer/CDP timeout is not proof that dispatched work stopped.
+            this.coordinator.unavailable('desktop');
+            reject(
+              new ApplicationError(
+                'unavailable',
+                'Private browser operation timed out. Recover the desktop before continuing; do not replay a fill.',
+              ),
+            );
+          }, 30_000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timeout);
+    }
   }
   async inspect(
     taskId: string,
@@ -35,12 +58,14 @@ export class LoginDestinations {
       async () => {
         if (surface === 'android')
           return this.android.inspect(taskId, workerId, website);
-        const page = await this.browser.selectedPage(taskId, workerId, true);
-        return {
-          ...(await this.web.inspect(page, loginOwner(taskId, workerId))),
-          origin: new URL(page.url()).origin,
-          destination: { kind: 'browser' } as SecureDestination,
-        };
+        return this.withBrowser(async () => {
+          const page = await this.browser.selectedPage(taskId, workerId, true);
+          return {
+            ...(await this.web.inspect(page, loginOwner(taskId, workerId))),
+            origin: new URL(page.url()).origin,
+            destination: { kind: 'browser' } as SecureDestination,
+          };
+        });
       },
     );
   }
@@ -88,19 +113,21 @@ export class LoginDestinations {
     return this.withFields(taskId, workerId, fields, async () => {
       if (this.native(fields))
         return this.android.select(taskId, workerId, fields);
-      const page = await this.browser.selectedPage(taskId, workerId);
-      const { origin, url, roles, inspectionId } = await this.web.select(
-        page,
-        loginOwner(taskId, workerId),
-        fields,
-      );
-      return {
-        origin,
-        url,
-        roles,
-        inspectionId,
-        destination: { kind: 'browser' } as SecureDestination,
-      };
+      return this.withBrowser(async () => {
+        const page = await this.browser.selectedPage(taskId, workerId);
+        const { origin, url, roles, inspectionId } = await this.web.select(
+          page,
+          loginOwner(taskId, workerId),
+          fields,
+        );
+        return {
+          origin,
+          url,
+          roles,
+          inspectionId,
+          destination: { kind: 'browser' } as SecureDestination,
+        };
+      });
     });
   }
   async fill(
@@ -112,11 +139,13 @@ export class LoginDestinations {
     return this.withFields(taskId, workerId, fields, async () => {
       if (this.native(fields))
         return this.android.fill(taskId, workerId, fields, values);
-      return this.web.fill(
-        await this.browser.selectedPage(taskId, workerId),
-        loginOwner(taskId, workerId),
-        fields,
-        values,
+      return this.withBrowser(async () =>
+        this.web.fill(
+          await this.browser.selectedPage(taskId, workerId),
+          loginOwner(taskId, workerId),
+          fields,
+          values,
+        ),
       );
     });
   }

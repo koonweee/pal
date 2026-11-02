@@ -39,6 +39,7 @@ coordinator.events.subscribe((event) =>
 const outputs = [];
 const runs = [];
 const created = new Set();
+const fixtureMarker = randomUUID();
 const track = (page) => created.add(page);
 let native;
 let context;
@@ -88,7 +89,13 @@ try {
     const url =
       'data:text/html,' +
       encodeURIComponent(
-        '<title>Pal ' + label + '</title><h1>Queue fixture ' + label + '</h1>',
+        '<title>Pal ' +
+          label +
+          ' ' +
+          fixtureMarker +
+          '</title><h1>Queue fixture ' +
+          label +
+          '</h1>',
       );
     const delivery = await native.taskAgent.sendMessage(
       'Development acceptance. Delegate one complete computer workflow to an interaction worker. Open a temporary tab at ' +
@@ -146,13 +153,27 @@ try {
     for (const result of await run.toolResults) {
       const threadId = result.payload.result?.subAgentThreadId;
       if (!threadId) continue;
-      const history = await memory.listMessages({ threadId, page: 0, perPage: 100 });
-      workerEvidence.push({ threadId, tools: history.messages.flatMap((message) =>
-        (message.content?.parts ?? []).filter((part) => part.type === 'tool-invocation').map((part) => ({
-          name: part.toolInvocation.toolName,
-          state: part.toolInvocation.state,
-          error: part.toolInvocation.errorText ?? null,
-        }))) });
+      const history = await memory.listMessages({
+        threadId,
+        page: 0,
+        perPage: 100,
+      });
+      workerEvidence.push({
+        threadId,
+        tools: history.messages.flatMap((message) =>
+          (message.content?.parts ?? [])
+            .filter((part) => part.type === 'tool-invocation')
+            .map((part) => ({
+              name: part.toolInvocation.toolName,
+              state: part.toolInvocation.state,
+              error: part.toolInvocation.errorText ?? null,
+              ...(part.toolInvocation.toolName ===
+              'mastra_workspace_computer_press_key'
+                ? { args: part.toolInvocation.args }
+                : {}),
+            })),
+        ),
+      });
     }
   }
   console.log(
@@ -163,6 +184,11 @@ try {
         outputs,
         workerEvidence,
         leftoverTabs: leftover.length,
+        leftoverFixtureUrls: leftover
+          .map((page) => page.url())
+          .filter(
+            (url) => url === 'about:blank' || url.startsWith('data:text/html,'),
+          ),
         preexistingTabsPreserved: existing.length,
         queue: events.map(({ event, taskId, durationMs, at }) => ({
           event,
@@ -186,7 +212,12 @@ try {
     { taskId: 'native-fixture', workerId: 'cleanup' },
     async () => {
       for (const page of created)
-        if (!page.isClosed()) await page.close().catch(() => {});
+        if (
+          !page.isClosed() &&
+          page.url().startsWith('data:text/html,') &&
+          page.url().includes(fixtureMarker)
+        )
+          await page.close().catch(() => {});
     },
   );
   await coordinator.shutdown();
