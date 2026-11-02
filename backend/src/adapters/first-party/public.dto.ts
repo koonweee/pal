@@ -236,7 +236,6 @@ export class InteractionResourceResponseDto {
     'desktop' | 'android';
   @ApiProperty({ type: String, nullable: true }) ownerTaskId!: string | null;
   @ApiProperty({ type: [String] }) waitingTaskIds!: string[];
-  @ApiProperty() unavailable!: boolean;
 }
 
 export class AgentActivityResponseDto {

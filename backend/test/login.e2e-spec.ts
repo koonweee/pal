@@ -31,7 +31,7 @@ beforeAll(async () => {
 });
 afterAll(async () => fixture?.close());
 beforeEach(async () => fixture.reset());
-it('fences desktop admission after a dispatched private browser write loses its response', async () => {
+it('reports an unconfirmed private browser fill without disabling later turns', async () => {
   const browser = await chromium.launch({
     channel: 'chrome',
     executablePath: process.env.TEST_CHROMIUM_PATH,
@@ -78,17 +78,14 @@ it('fences desktop admission after a dispatched private browser write loses its 
     expect(await page.locator('#password').inputValue()).toBe(
       'SYNTHETIC_PASSWORD',
     );
-    expect(coordinator.snapshot()[0].unavailable).toBe(true);
-    await expect(
-      coordinator.forSession(
-        'desktop',
-        { taskId: 'next', workerId: 'next' },
-        async () => {},
-      ),
-    ).rejects.toThrow('uncertain');
+    await coordinator.forSession(
+      'desktop',
+      { taskId: 'next', workerId: 'next' },
+      async () => {},
+    );
   } finally {
     restoreFill?.();
-    await coordinator.shutdown();
+    coordinator.shutdown();
     await browser.close();
   }
 });
@@ -1224,7 +1221,7 @@ it('inspects the selected page and fills privately without browser navigation co
         });
       });
     } finally {
-      await coordinator.finish(activeExecution);
+      coordinator.finish(activeExecution);
     }
   } finally {
     selected.mockRestore();

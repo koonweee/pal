@@ -15,7 +15,6 @@ export interface InteractionSnapshot {
   resource: InteractionResource;
   owner: InteractionParticipant | null;
   waiting: InteractionParticipant[];
-  unavailable: boolean;
 }
 interface Execution extends InteractionParticipant {
   queuedAt?: number;
@@ -28,29 +27,26 @@ interface Execution extends InteractionParticipant {
     reject(error: Error): void;
   };
   pending: Promise<void>;
-  ending: boolean;
-  finished?: Promise<void>;
   listeners: Map<AbortSignal, () => void>;
 }
 interface Resource {
   owner?: Execution;
   waiting: Execution[];
-  unavailable: boolean;
 }
 
-/** Local device admission; device adapters own transport settlement and readiness. */
+/** FIFO permission to start device calls; dispatched work may outlive its turn. */
 @Injectable()
 export class InteractionCoordinator {
   private readonly executions = new Map<string, Execution>();
   private readonly operations = new AsyncLocalStorage<Execution>();
   private readonly resources: Record<InteractionResource, Resource> = {
-    desktop: { waiting: [], unavailable: false },
-    android: { waiting: [], unavailable: false },
+    desktop: { waiting: [] },
+    android: { waiting: [] },
   };
   private closing = false;
   readonly changes = new Subject<InteractionSnapshot[]>();
   readonly events = new Subject<{
-    event: 'queued' | 'acquired' | 'released' | 'unavailable';
+    event: 'queued' | 'acquired' | 'released';
     resource: InteractionResource;
     taskId?: string;
     workerId?: string;
@@ -77,7 +73,6 @@ export class InteractionCoordinator {
       parentRunId,
       granted,
       pending: Promise.resolve(),
-      ending: false,
       listeners: new Map(),
     });
     return executionId;
@@ -95,14 +90,12 @@ export class InteractionCoordinator {
       resource,
       owner: state.owner ? participant(state.owner) : null,
       waiting: state.waiting.map(participant),
-      unavailable: state.unavailable,
     }));
   }
 
   resourceFor(executionId: string) {
     const execution = this.executions.get(executionId);
-    if (!execution || execution.ending)
-      throw new Error('Interaction execution has ended');
+    if (!execution) throw new Error('Interaction execution has ended');
     return execution.resource;
   }
 
@@ -118,7 +111,7 @@ export class InteractionCoordinator {
   ): Promise<T> {
     signal?.throwIfAborted();
     const execution = this.executions.get(executionId);
-    if (!execution || execution.ending || this.closing)
+    if (!execution || this.closing)
       throw new Error('Interaction execution has ended');
     if (execution.resource && execution.resource !== resource)
       throw new Error(
@@ -131,13 +124,9 @@ export class InteractionCoordinator {
     const state = this.resources[resource];
     const firstCall = !execution.resource;
     execution.resource = resource;
-    if (state.unavailable)
-      throw new Error(
-        resource + ' is unavailable after an uncertain operation',
-      );
     if (signal && !execution.listeners.has(signal)) {
       const abort = () => {
-        void this.finish(executionId);
+        this.finish(executionId);
       };
       execution.listeners.set(signal, abort);
       signal.addEventListener('abort', abort, { once: true });
@@ -161,7 +150,7 @@ export class InteractionCoordinator {
     const pending = execution.pending.then(async () => {
       await execution.granted.promise;
       signal?.throwIfAborted();
-      if (execution.ending || state.owner !== execution)
+      if (state.owner !== execution)
         throw new Error('Interaction execution has ended');
       return this.operations.run(execution, operation);
     });
@@ -189,62 +178,43 @@ export class InteractionCoordinator {
     try {
       return await this.run(resource, executionId, operation, signal);
     } finally {
-      await this.finish(executionId);
+      this.finish(executionId);
     }
   }
 
-  finish(executionId: string): Promise<void> {
+  finish(executionId: string) {
     const execution = this.executions.get(executionId);
-    if (!execution) return Promise.resolve();
-    if (execution.finished) return execution.finished;
-    execution.ending = true;
+    if (!execution) return;
+    this.executions.delete(executionId);
     execution.granted.reject(new Error('Interaction execution has ended'));
     const state = execution.resource && this.resources[execution.resource];
     if (state)
       state.waiting = state.waiting.filter((entry) => entry !== execution);
     for (const [signal, listener] of execution.listeners)
       signal.removeEventListener('abort', listener);
-    execution.finished = execution.pending.then(() => {
-      if (state?.owner === execution) {
-        state.owner = undefined;
-        this.events.next({
-          event: 'released',
-          resource: execution.resource!,
-          taskId: execution.taskId,
-          workerId: execution.workerId,
-          executionId,
-          parentRunId: execution.parentRunId,
-          durationMs: Date.now() - (execution.acquiredAt ?? Date.now()),
-        });
-        this.advance(state);
-      }
-      this.executions.delete(executionId);
-      this.publish();
-    });
+    if (state?.owner === execution) {
+      state.owner = undefined;
+      this.events.next({
+        event: 'released',
+        resource: execution.resource!,
+        taskId: execution.taskId,
+        workerId: execution.workerId,
+        executionId,
+        parentRunId: execution.parentRunId,
+        durationMs: Date.now() - (execution.acquiredAt ?? Date.now()),
+      });
+      this.advance(state);
+    }
     this.publish();
-    return execution.finished;
   }
 
-  async finishParent(parentRunId: string) {
-    await Promise.all(
-      [...this.executions.values()]
-        .filter((entry) => entry.parentRunId === parentRunId)
-        .map((entry) => this.finish(entry.executionId)),
-    );
-  }
-
-  /** A client timeout does not establish that a device stopped mutating. */
-  unavailable(resource: InteractionResource) {
-    const state = this.resources[resource];
-    if (state.unavailable) return;
-    state.unavailable = true;
-    this.events.next({ event: 'unavailable', resource });
-    for (const entry of state.waiting) void this.finish(entry.executionId);
-    this.publish();
+  finishParent(parentRunId: string) {
+    for (const entry of this.executions.values())
+      if (entry.parentRunId === parentRunId) this.finish(entry.executionId);
   }
 
   private advance(state: Resource) {
-    if (state.owner || state.unavailable || this.closing) return;
+    if (state.owner || this.closing) return;
     const next = state.waiting.shift();
     if (next) {
       state.owner = next;
@@ -262,9 +232,9 @@ export class InteractionCoordinator {
     }
   }
 
-  async shutdown() {
+  shutdown() {
     this.closing = true;
-    await Promise.all([...this.executions.keys()].map((id) => this.finish(id)));
+    for (const id of this.executions.keys()) this.finish(id);
     this.changes.complete();
     this.events.complete();
   }

@@ -1,8 +1,5 @@
 import type { SandboxComputer } from '@mastra/core/workspace';
-import {
-  ExecutionUnavailableError,
-  type ExecutionService,
-} from '../execution/execution.service.js';
+import type { ExecutionService } from '../execution/execution.service.js';
 
 const aliases: Record<string, string> = {
   ctrl: 'Control_L',
@@ -39,70 +36,28 @@ export class X11Computer implements SandboxComputer {
   constructor(
     private readonly execution: Pick<ExecutionService, 'run'>,
     private readonly viewerUrl?: string,
-    private readonly uncertain?: () => void,
   ) {}
 
   private async run(
     command: string,
     args: string[],
     input?: string,
-    mutates = true,
   ): Promise<Buffer> {
-    // Drain dispatched subprocesses even when the worker is cancelled. The
-    // coordinator holds the turn until this bounded operation settles.
-    let result;
-    try {
-      // Keep settlement local to execution even if the backend dies. Inherited
-      // flock ownership survives the client; timeout bounds orphaned input.
-      result = await this.execution.run(
-        'flock',
-        [
-          '--exclusive',
-          '--wait',
-          '35',
-          '/home/pal/tmp/pal-desktop-input.lock',
-          'timeout',
-          '--kill-after=2s',
-          '30s',
-          command,
-          ...args,
-        ],
-        { input, timeout: 70_000 },
-      );
-    } catch (error) {
-      if (mutates && !(error instanceof ExecutionUnavailableError))
-        this.uncertain?.();
-      throw error;
-    }
-    if (
-      mutates &&
-      (result.timedOut || result.killed || [124, 137].includes(result.exitCode))
-    )
-      this.uncertain?.();
+    const result = await this.execution.run(command, args, { input });
     if (!result.success)
       throw new Error('Desktop operation failed or could not be confirmed');
     return Buffer.from(result.stdout);
   }
 
   private xdo(...args: string[]) {
-    return this.run(
-      'xdotool',
-      args,
-      undefined,
-      !['getdisplaygeometry', 'getmouselocation'].includes(args[0]),
-    );
+    return this.run('xdotool', args);
   }
 
   async screenshot() {
-    const encoded = await this.run(
-      'python3',
-      [
-        '-c',
-        "import os,io,base64; from PIL import ImageGrab; data=io.BytesIO(); ImageGrab.grab(xdisplay=os.environ['DISPLAY']).save(data, format='PNG'); print(base64.b64encode(data.getvalue()).decode())",
-      ],
-      undefined,
-      false,
-    );
+    const encoded = await this.run('python3', [
+      '-c',
+      "import os,io,base64; from PIL import ImageGrab; data=io.BytesIO(); ImageGrab.grab(xdisplay=os.environ['DISPLAY']).save(data, format='PNG'); print(base64.b64encode(data.getvalue()).decode())",
+    ]);
     return {
       data: Buffer.from(encoded.toString().trim(), 'base64'),
       mediaType: 'image/png' as const,

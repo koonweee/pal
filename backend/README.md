@@ -49,7 +49,7 @@ The development configuration is backend/.env.development. Vite serves http://lo
 ./scripts/dev-local down
 ~~~
 
-Use rebuild after backend, agent-guidance, or backend dependency changes. Use execution-rebuild after desktop, system-package, browser-extension, execution helper, or shared Mastra/agent-browser dependency changes. down preserves named volumes.
+Use rebuild after backend, agent-guidance, or backend dependency changes. Use execution-rebuild after desktop, system-package, browser-extension, execution helper, or shared execution dependency changes. down preserves named volumes.
 
 To expose the staged PWA over the script-managed Tailscale HTTPS route:
 
@@ -82,7 +82,7 @@ Reconnect resolves a changed Linux USB node and replaces only the Android contai
 
 The optional `compose.android.yaml` overlay builds the image from `android/`, maps the selected USB device, and adds private MCP configuration to agent-service. `PAL_ANDROID_USB_DEVICE` is a device node on the Docker Linux host. Linux deployments supply it directly. No host ports are published.
 
-Run `./scripts/dev-local android-smoke` for isolated model-driven acceptance. It checks dev activity, stops the idle backend for exclusive device access, runs a disposable container/database, then restores the backend on exit. The runner uses production worker wiring, delegates Chrome and Settings flows, and verifies native screenshots. It publishes no application chat messages. `./scripts/dev-local interaction-smoke` covers desktop contention, private-target handoff and native temporary-tab cleanup.
+Run `./scripts/dev-local android-smoke` for isolated model-driven acceptance. It checks dev activity, stops the idle backend for exclusive device access, runs a disposable container/database, then restores the backend on exit. The runner uses production worker wiring, delegates Chrome and Settings flows, and verifies native screenshots. It publishes no application chat messages. `./scripts/dev-local interaction-smoke` covers desktop contention, private-target handoff and native temporary-tab cleanup. Use `interaction-smoke --desktop-only` for the existing desktop subset when the phone is disconnected; phone acceptance remains separate.
 
 ### Native private entry
 
@@ -120,7 +120,7 @@ A handoff error returns HTTP 503 and keeps the user message. Reusing the same id
 
 Task Agent and its workers receive native Mastra workspace tools through the execution filesystem and Docker sandbox, including file operations, grep/AST editing, commands, and background-process management. With desktop support enabled, X11Computer supplies screenshot, mouse, keyboard, and display information through Mastra's native computer tools. Pillow captures PNGs; xdotool supplies input. Unicode typing uses a 50 ms key delay to allow X11 keymap updates to reach applications. Main's toolset contains lookup, delegation, `inspect_message`, and native read-only `read_file` for quick text/image/PDF inspection. Task agents share the workspace and desktop with each other and the user, guided to be mindful of concurrent activity. The controller's separate question, planning, task, and delegation UI tools are disabled.
 
-Task agents also receive `browser`, `browser_group`, and `browser_screenshot` when desktop support is enabled. One shared Chromium profile keeps logins available to all tasks and the human. Each task has a pinned agent-browser session and a visible named group. Task agents can run up to three native workers concurrently, one level deep. Workers have separate pinned sessions within the parent group, return private findings, and release their member tabs and daemons when they finish. The installed `pal-browser` launcher loads the extension for both desktop and runtime use. Group close and completion/archive cleanup remove current task-group members; idle groups close after 15 minutes without browser activity, including during active runs or stalled browser operations. Cleanup rechecks activity before closing the group. Group control attaches directly to the extension over bounded browser CDP requests, so backend reconnection can clean up an already-hung page without initializing that page or restarting Chromium. `npm run browser:smoke -- --idle-cleanup` runs isolated lifecycle/reconnect/ownership checks without the unrelated PWA activation and screenshot checks. A sweep runs every minute. Moving tabs out preserves them; ungrouped tabs and human-created groups are excluded. Guidance prefers service tools, direct APIs, browser, then computer use.
+Desktop and Android tools automatically wait for FIFO turns. Turn end rejects new calls from that execution and immediately admits the next owner; dispatched work may continue. Agents inspect current state, preserve unrelated work and clean up temporary UI. Private-entry requests retain validated targets across turns. Browser tabs and app state persist; no automatic tab sweeper runs.
 
 File tools are contained within /home/pal and resolve paths inside execution. Shell and code tools use execution's environment and can access its other paths. Workspace approvals allow execution. The desktop runs as pal with passwordless sudo; /home/pal/workspace is the default working directory.
 
@@ -186,22 +186,18 @@ The isolated runtime suites build disposable Compose projects and retain the exi
 ~~~bash
 npm run runtime:smoke
 npm run runtime:stack:smoke
-npm run browser:smoke
-npm run workers:smoke
 npm run desktop:smoke
 npm run files:smoke
 npm run mcp:smoke
 ~~~
 
-The stack suite includes PWA upload/download/SSE, browser groups/popups/worker cleanup, desktop input, private-network isolation, backend restart, and execution outage.
+The stack suite includes PWA upload/download/SSE, shared-browser private targets, desktop input, fixture cleanup, private-network isolation, backend restart and execution outage.
 
 Optional model checks require PAL_SMOKE_AUTH_PATH pointing to a private login file. The harness copies it into disposable service-private storage:
 
 ~~~bash
 PAL_SMOKE_AUTH_PATH=/private/path/auth.json npm run files:smoke -- --agent
 PAL_SMOKE_AUTH_PATH=/private/path/auth.json npm run mcp:smoke -- --agent
-PAL_SMOKE_AUTH_PATH=/private/path/auth.json npm run browser:smoke -- --agent
-PAL_SMOKE_AUTH_PATH=/private/path/auth.json npm run workers:smoke -- --agent
 PAL_SMOKE_AUTH_PATH=/private/path/auth.json npm run desktop:smoke -- --agent
 ~~~
 

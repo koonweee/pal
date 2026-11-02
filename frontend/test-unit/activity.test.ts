@@ -25,7 +25,6 @@ describe('activity selection', () => {
           resource: 'desktop',
           ownerTaskId: 'other',
           waitingTaskIds: [task.id],
-          unavailable: false,
         },
       ],
     };

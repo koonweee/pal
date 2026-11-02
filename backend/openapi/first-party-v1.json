@@ -395,9 +395,6 @@
             ],
             "type": "string"
           },
-          "unavailable": {
-            "type": "boolean"
-          },
           "waitingTaskIds": {
             "items": {
               "type": "string"
@@ -408,8 +405,7 @@
         "required": [
           "resource",
           "ownerTaskId",
-          "waitingTaskIds",
-          "unavailable"
+          "waitingTaskIds"
         ],
         "type": "object"
       },
@@ -1755,7 +1751,7 @@
     "contact": {},
     "description": "Private single-owner HTTP and SSE contract for canonical Pal clients.",
     "title": "Pal First-party API",
-    "version": "7"
+    "version": "8"
   },
   "openapi": "3.0.0",
   "paths": {

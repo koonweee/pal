@@ -26,18 +26,61 @@ it('allows fresh private inspection after a readiness failure without disabling 
     await expect(service.secure(owner, { action: 'inspect' })).rejects.toThrow(
       'unavailable',
     );
-    expect(coordinator.snapshot()[1].unavailable).toBe(false);
     expect(await service.secure(owner, { action: 'inspect' })).toEqual({
       status: 'ready',
     });
   } finally {
     fetch.mockRestore();
-    await coordinator.shutdown();
+    coordinator.shutdown();
     await service.onApplicationShutdown();
   }
 });
 
-it('binds device/worker, preserves upstream observations and schemas, serializes private operations and retains ownership through cancellation', async () => {
+it('keeps a replacement Android connection when an old turn fails late', async () => {
+  const coordinator = new InteractionCoordinator();
+  const service = new AndroidService(
+    new ConfigService({ PAL_ANDROID_MCP_URL: 'http://phone.test/mcp' }),
+    coordinator,
+  );
+  const gate = Promise.withResolvers<unknown>();
+  const oldClient = {
+    callTool: vi.fn(() => gate.promise),
+    close: vi.fn(async () => {}),
+  };
+  const replacement = {
+    callTool: vi.fn(async () => ({ content: [] })),
+    close: vi.fn(async () => {}),
+  };
+  Object.assign(service, { client: oldClient, nativeActive: false });
+  const abort = new AbortController();
+  const active = service.call(
+    { taskId: 'old', workerId: 'old' },
+    'android_tap',
+    {},
+    abort.signal,
+  );
+  const failure = expect(active).rejects.toThrow('Android connection failed');
+  try {
+    await vi.waitFor(() => expect(oldClient.callTool).toHaveBeenCalledOnce());
+    abort.abort();
+    Object.assign(service, { client: replacement });
+    const next = { taskId: 'new', workerId: 'new' };
+    await service.call(next, 'android_apps', {});
+    gate.reject(new Error('late failure'));
+    await failure;
+    await service.call(next, 'android_apps', {});
+    expect(replacement.callTool).toHaveBeenCalledTimes(2);
+    expect(replacement.close).not.toHaveBeenCalled();
+    expect(oldClient.close).toHaveBeenCalledOnce();
+  } finally {
+    gate.reject(new Error('cleanup'));
+    await failure;
+    coordinator.shutdown();
+    await service.onApplicationShutdown();
+  }
+});
+
+it('binds device/worker, preserves upstream observations and schemas, serializes private operations and hands off immediately on cancellation', async () => {
   const calls: { name: string; arguments: Record<string, unknown> }[] = [];
   const native: string[] = [];
   let hold: Promise<void> | undefined;
@@ -244,13 +287,13 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
     const pending = service.secure(first, { action: 'inspect' }, abort.signal);
     await vi.waitFor(() => expect(native).toHaveLength(2));
     abort.abort();
-    const release = coordinator.finish(firstExecution);
+    coordinator.finish(firstExecution);
     const next = service.call(second, 'android_apps', {});
-    expect(native.filter((action) => action === 'pause')).toHaveLength(1);
+    await next;
+    expect(coordinator.snapshot()[1].owner?.executionId).toBe(secondExecution);
+    expect(native.filter((action) => action === 'pause')).toHaveLength(2);
     gate.resolve();
     await pending;
-    await release;
-    await next;
     hold = undefined;
     expect(native.at(-1)).toBe('pause');
     await tools.android_apps!.execute!(
@@ -306,7 +349,6 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
     await expect(
       service.call(second, 'android_screenshot', {}),
     ).rejects.toThrow('Android connection failed');
-    expect(coordinator.snapshot()[1].unavailable).toBe(false);
     await service.call(second, 'android_screenshot', {});
     const dispatched = calls.length;
     loseResponse = true;
@@ -318,15 +360,13 @@ it('binds device/worker, preserves upstream observations and schemas, serializes
       ref: '@a1',
       device: 'usb-phone',
     });
-    await expect(service.call(second, 'android_apps', {})).rejects.toThrow(
-      'unavailable',
-    );
-    expect(connections).toBe(3);
-    await coordinator.finish(secondExecution);
+    await service.call(second, 'android_apps', {});
+    expect(connections).toBe(4);
+    coordinator.finish(secondExecution);
   } finally {
     pauseFail = false;
     await service.onApplicationShutdown();
-    await coordinator.shutdown();
+    coordinator.shutdown();
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }

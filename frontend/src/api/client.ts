@@ -354,8 +354,7 @@ export function decodePalEvent(
             (resource.ownerTaskId === null ||
               typeof resource.ownerTaskId === 'string') &&
             Array.isArray(resource.waitingTaskIds) &&
-            resource.waitingTaskIds.every((id) => typeof id === 'string') &&
-            typeof resource.unavailable === 'boolean',
+            resource.waitingTaskIds.every((id) => typeof id === 'string'),
         ))) &&
     value.state.runningTasks.every(
       (task) =>

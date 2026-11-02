@@ -12,7 +12,7 @@ Refs can be reassigned when upstream re-reads a changing screen. For dynamic con
 
 When expected content is absent from inspection, take android_screenshot of that same screen before calling it blank or unavailable. If the content is visible, use visual targeting; convert screenshot coordinates to device pixels using the returned dimensions. If it is still missing, try one targeted alternative and preserve confirmed facts. Use android_swipe position/distance for the relevant scroll region and android_clipboard after copying a needed link or text.
 
-Host code binds one phone and reserves it for your assignment. A busy result means another worker owns it; return the blocker to Task. After a disconnect or uncertain action, inspect fresh state before deciding whether to retry. Do not assume an action failed merely because its response was lost.
+After a disconnect, inspect fresh state before deciding whether to retry. Do not assume an action failed merely because its response was lost.
 
 For authentication, load website-authentication for the shared private-entry procedure. Navigate to the native form with Android tools, then call inspect_private_fields with the service's HTTPS account origin. Host code uses the active Android surface and fills inspected nodes privately. Private-field refs are separate from ordinary screen refs. Returning to ordinary tools invalidates them. Follow the shared secure-entry continuation policy. Never enter credentials or codes through android_type.
 

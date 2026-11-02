@@ -97,7 +97,6 @@ const palEvents = new Set([
   'pal.interaction.queued',
   'pal.interaction.acquired',
   'pal.interaction.released',
-  'pal.interaction.unavailable',
 ]);
 
 function object(value: unknown): Record<string, unknown> {

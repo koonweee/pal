@@ -28,7 +28,6 @@ interface BoundInput {
 }
 export class LoginBrowser {
   private readonly inputs = new Map<string, BoundInput>();
-  constructor(private readonly uncertain?: () => void) {}
   private async release(owner?: string) {
     const removed: BoundInput[] = [];
     for (const [ref, input] of this.inputs)
@@ -338,10 +337,9 @@ export class LoginBrowser {
             await input.element.selectOption(value, { timeout: 3000 });
           else await input.element.fill(value, { timeout: 3000 });
         } catch {
-          this.uncertain?.();
           throw new ApplicationError(
             'unavailable',
-            'Private filling could not be confirmed. Do not replay the fill; recover the desktop before continuing.',
+            'Private filling could not be confirmed. Inspect current state before deciding the next step; do not replay this fill.',
           );
         }
       }

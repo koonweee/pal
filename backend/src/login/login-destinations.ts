@@ -21,27 +21,20 @@ export class LoginDestinations {
     android: AndroidService,
     private readonly coordinator: InteractionCoordinator,
   ) {
-    this.web = new LoginBrowser(() => this.coordinator.unavailable('desktop'));
+    this.web = new LoginBrowser();
     this.android = new LoginAndroid(android);
   }
-  private async withBrowser<T>(
-    operation: () => Promise<T>,
-    interacts: boolean,
-  ): Promise<T> {
+  private async withBrowser<T>(operation: () => Promise<T>): Promise<T> {
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
       return await Promise.race([
         operation(),
         new Promise<never>((_, reject) => {
           timeout = setTimeout(() => {
-            // Renderer/CDP timeout is not proof that dispatched work stopped.
-            if (interacts) this.coordinator.unavailable('desktop');
             reject(
               new ApplicationError(
                 'unavailable',
-                interacts
-                  ? 'Private browser interaction timed out. Recover the desktop before continuing; do not replay a fill.'
-                  : 'Private browser observation timed out. Inspect again before continuing.',
+                'Private browser operation timed out. Inspect current state before continuing; do not replay an unconfirmed fill.',
               ),
             );
           }, 30_000);
@@ -70,7 +63,7 @@ export class LoginDestinations {
             origin: new URL(page.url()).origin,
             destination: { kind: 'browser' } as SecureDestination,
           };
-        }, true);
+        });
       },
     );
   }
@@ -132,7 +125,7 @@ export class LoginDestinations {
           inspectionId,
           destination: { kind: 'browser' } as SecureDestination,
         };
-      }, false);
+      });
     });
   }
   async fill(
@@ -144,15 +137,13 @@ export class LoginDestinations {
     return this.withFields(taskId, workerId, fields, async () => {
       if (this.native(fields))
         return this.android.fill(taskId, workerId, fields, values);
-      return this.withBrowser(
-        async () =>
-          this.web.fill(
-            await this.browser.selectedPage(taskId, workerId),
-            loginOwner(taskId, workerId),
-            fields,
-            values,
-          ),
-        true,
+      return this.withBrowser(async () =>
+        this.web.fill(
+          await this.browser.selectedPage(taskId, workerId),
+          loginOwner(taskId, workerId),
+          fields,
+          values,
+        ),
       );
     });
   }

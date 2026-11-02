@@ -241,6 +241,8 @@ case "$command_name" in
     smoke_database_created=true
     compose exec -T postgres createdb -U pal "$smoke_database"
     run_interaction_smoke() {
+      local smoke_script="$1"
+      shift
       if docker container inspect "$smoke_runner" >/dev/null 2>&1; then
         echo "Existing acceptance container requires inspection: $smoke_runner" >&2
         return 1
@@ -251,7 +253,7 @@ case "$command_name" in
         -v "$backend_dir/scripts:/opt/pal/scripts:ro" \
         -e PAL_INTERACTION_SMOKE_EXCLUSIVE=1 \
         -e "TEST_DATABASE_URL=postgresql://pal:pal@postgres:5432/$smoke_database" \
-        agent-service node "scripts/$1"
+        agent-service node "scripts/$smoke_script" "$@"
       smoke_runner_created=false
     }
     if [[ "$command_name" == android-secure-smoke ]]; then
@@ -268,7 +270,7 @@ case "$command_name" in
     elif [[ "$command_name" == android-smoke ]]; then
       run_interaction_smoke android-smoke.mjs
     else
-      run_interaction_smoke interaction-resources-smoke.mjs
+      run_interaction_smoke interaction-resources-smoke.mjs "${@:2}"
       run_interaction_smoke interaction-native-smoke.mjs
     fi
     ;;

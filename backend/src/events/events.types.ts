@@ -21,7 +21,6 @@ export interface AgentActivityState {
     resource: 'desktop' | 'android';
     ownerTaskId: string | null;
     waitingTaskIds: string[];
-    unavailable: boolean;
   }[];
 }
 export type PalEvent =

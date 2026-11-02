@@ -90,10 +90,10 @@ export function taskWorkerDelegation(
       const id = key(context.runId, context.toolCallId);
       const run = active.get(id);
       if (!run) return;
+      if (run.executionId) coordinator.finish(run.executionId);
       try {
         await cleanup(run.taskId, run.workerId, context.success, run.startedAt);
       } finally {
-        if (run.executionId) await coordinator.finish(run.executionId);
         active.delete(id);
       }
     },

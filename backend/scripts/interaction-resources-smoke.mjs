@@ -17,9 +17,7 @@ const config = new ConfigService({ ...process.env, PAL_DESKTOP_ENABLED: true });
 const coordinator = new InteractionCoordinator();
 const execution = new ExecutionService(config);
 const browser = new SharedBrowserService(config, execution);
-const computer = new X11Computer(execution, undefined, () =>
-  coordinator.unavailable('desktop'),
-);
+const computer = new X11Computer(execution);
 const android = new AndroidService(config, coordinator);
 const includeAndroid =
   android.enabled && !process.argv.includes('--desktop-only');
@@ -37,7 +35,7 @@ const turn = async (owner, operation) => {
   try {
     return await coordinator.run('desktop', owner.executionId, operation);
   } finally {
-    await coordinator.finish(owner.executionId);
+    coordinator.finish(owner.executionId);
   }
 };
 let context;
@@ -85,7 +83,7 @@ try {
             assert.ok(!result.isError);
           });
         } finally {
-          await coordinator.finish(phone.executionId);
+          coordinator.finish(phone.executionId);
         }
       }),
     );
@@ -104,28 +102,22 @@ try {
     [...burst, interactive].map((owner) => owner.taskId),
   );
 
-  // Cancel after dispatch: the next turn must wait for the real adapter call.
+  // Cancellation retires the execution; dispatched screenshot work may finish later.
   const cancelled = begin('cancelled-desktop');
   const follower = begin('after-cancellation');
   const abort = new AbortController();
   const started = Promise.withResolvers();
-  let settled = false;
   const active = coordinator.run(
     'desktop',
     cancelled.executionId,
     async () => {
       started.resolve();
-      try {
-        await computer.screenshot();
-      } finally {
-        settled = true;
-      }
+      await computer.screenshot();
     },
     abort.signal,
   );
   await started.promise;
   const following = turn(follower, async () => {
-    assert.ok(settled, 'Cancelled operation overlapped its follower');
     await computer.screenshot();
   });
   abort.abort();
@@ -135,11 +127,7 @@ try {
     ),
     /ended/,
   );
-  await Promise.all([
-    active,
-    coordinator.finish(cancelled.executionId),
-    following,
-  ]);
+  await Promise.all([active, following]);
 
   const privateOwner = begin('private-entry');
   await coordinator.run('desktop', privateOwner.executionId, async () => {
@@ -187,7 +175,7 @@ try {
     username: inspected.inputs[0].ref,
     password: inspected.inputs[1].ref,
   };
-  await coordinator.finish(privateOwner.executionId);
+  coordinator.finish(privateOwner.executionId);
 
   const other = begin('intervening-task');
   await turn(other, async () => {
@@ -230,7 +218,7 @@ try {
                 : 'not configured',
             },
         privateEntryAfterInterveningTask: true,
-        cancellationDrainedBeforeHandoff: true,
+        retiredExecutionRejected: true,
         waits: acquired.map(({ taskId, resource, durationMs }) => ({
           taskId,
           resource,
@@ -262,7 +250,7 @@ try {
       await context.unroute(origin + '/**');
     });
   }
-  await coordinator.shutdown();
+  coordinator.shutdown();
   await android.onApplicationShutdown();
   await browser.shutdown();
   await execution.sandbox._stop();

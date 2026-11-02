@@ -163,7 +163,7 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
           context,
         ),
       );
-      await coordinator.finish(executionId);
+      coordinator.finish(executionId);
       outputs.push(inspected);
       expect(inspected).toHaveProperty('app', packageName);
       if (!('inputs' in inspected)) throw new Error('Expected native fields');
@@ -326,11 +326,14 @@ it('uses shared private HTTP entry, staged vault reuse and transient codes with 
       message: expect.stringContaining('could not be confirmed'),
     });
     expect(fills.length).toBe(5);
-    const replay = await tools.enter_private_fields.execute!(
-      { fields: uncertainFields },
-      context,
+    const recovered = await login.inspect(
+      task.id,
+      'recovery',
+      undefined,
+      'android',
+      'https://native.example.test',
     );
-    expect(replay).toMatchObject({ status: 'error', code: 'unavailable' });
+    expect(recovered.inputs.length).toBeGreaterThan(0);
     expect(fills.length).toBe(5);
   } finally {
     vi.restoreAllMocks();

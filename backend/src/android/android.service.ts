@@ -29,12 +29,6 @@ export const androidActions = {
 } as const;
 export type AndroidAction = keyof typeof androidActions;
 export type AndroidOwner = { taskId: string; workerId: string };
-const observations = new Set<AndroidAction>([
-  'android_apps',
-  'android_foreground_app',
-  'android_inspect',
-  'android_screenshot',
-]);
 
 @Injectable()
 export class AndroidService implements OnApplicationShutdown {
@@ -146,10 +140,6 @@ export class AndroidService implements OnApplicationShutdown {
       return (await response.json()) as T;
     } catch {
       this.nativeGeneration++;
-      // Readiness/inspection failures may retry a fresh observation. Only an
-      // uncertain secret write can leave a mutation running beyond this call.
-      if ('action' in input && input.action === 'fill')
-        this.coordinator.unavailable('android');
       throw new Error(
         'Android private operation unavailable or uncertain. Inspect again; do not replay a fill.',
       );
@@ -228,19 +218,10 @@ export class AndroidService implements OnApplicationShutdown {
           );
           return result;
         } catch {
-          const readOnly =
-            observations.has(action) ||
-            (action === 'android_batch' &&
-              (args.steps as { name: AndroidAction }[]).every((step) =>
-                observations.has(step.name),
-              ));
-          if (!readOnly) this.coordinator.unavailable('android');
-          this.client = undefined;
+          if (this.client === client) this.client = undefined;
           await client.close().catch(() => {});
           throw new Error(
-            readOnly
-              ? 'Android connection failed. Reconnect and inspect the screen before continuing.'
-              : 'Android connection failed after an action. Do not replay it; recover the phone and restart the backend before continuing.',
+            'Android connection failed. Inspect current state before deciding the next step; do not assume the action failed.',
           );
         }
       },

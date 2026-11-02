@@ -616,7 +616,6 @@ export interface components {
       ownerTaskId: string | null;
       /** @enum {string} */
       resource: 'desktop' | 'android';
-      unavailable: boolean;
       waitingTaskIds: string[];
     };
     LoginAccountDto: {

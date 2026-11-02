@@ -59,42 +59,30 @@ it('binds private inspection to the active tab, retains its target, and disconne
   expect(closeTab).not.toHaveBeenCalled();
 });
 
-it.each(['inspect', 'select'] as const)(
-  'bounds private browser %s and fences only potentially late UI interaction',
-  async (operation) => {
-    vi.useFakeTimers();
-    const coordinator = new InteractionCoordinator();
-    try {
-      const destinations = new LoginDestinations(
-        {
-          selectedPage: () => new Promise(() => {}),
-        } as unknown as SharedBrowserService,
-        {} as AndroidService,
-        coordinator,
-      );
-      const failed = expect(
-        operation === 'inspect'
-          ? destinations.inspect('task', 'worker', 'browser')
-          : destinations.select('task', 'worker', {
-              password: 'i1-abcdefghijklmnop',
-            }),
-      ).rejects.toMatchObject({ code: 'unavailable' });
-      await vi.advanceTimersByTimeAsync(30_000);
-      await failed;
-      expect(coordinator.snapshot()[0].unavailable).toBe(
-        operation === 'inspect',
-      );
-      const next = coordinator.forSession(
-        'desktop',
-        { taskId: 'next', workerId: 'next' },
-        async () => {},
-      );
-      if (operation === 'inspect')
-        await expect(next).rejects.toThrow('uncertain');
-      else await next;
-    } finally {
-      await coordinator.shutdown();
-      vi.useRealTimers();
-    }
-  },
-);
+it('bounds private browser calls without disabling later turns', async () => {
+  vi.useFakeTimers();
+  const coordinator = new InteractionCoordinator();
+  try {
+    const destinations = new LoginDestinations(
+      {
+        selectedPage: () => new Promise(() => {}),
+      } as unknown as SharedBrowserService,
+      {} as AndroidService,
+      coordinator,
+    );
+    const failed = expect(
+      destinations.inspect('task', 'worker', 'browser'),
+    ).rejects.toMatchObject({ code: 'unavailable' });
+    await vi.advanceTimersByTimeAsync(30_000);
+    await failed;
+    const next = coordinator.forSession(
+      'desktop',
+      { taskId: 'next', workerId: 'next' },
+      async () => {},
+    );
+    await next;
+  } finally {
+    coordinator.shutdown();
+    vi.useRealTimers();
+  }
+});

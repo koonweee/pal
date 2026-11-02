@@ -20,10 +20,10 @@ it('queues external private submissions behind existing waiters even when their 
     order.push('submission');
   });
   expect(coordinator.snapshot()[0].waiting).toHaveLength(2);
-  await coordinator.finish(original);
+  coordinator.finish(original);
   await waiting;
   expect(order).toEqual(['next']);
-  await coordinator.finish(next);
+  coordinator.finish(next);
   await submission;
   expect(order).toEqual(['next', 'submission']);
   expect(coordinator.snapshot()[0].owner).toBeNull();
@@ -60,66 +60,80 @@ it('admits FIFO turns, serializes owner calls, and binds each execution to one d
   gate.resolve();
   await Promise.all([a, b]);
   expect(calls).toEqual(['first', 'phone', 'second-call']);
-  await coordinator.finish(first);
+  coordinator.finish(first);
   for (const { id, result } of queued) {
     await result;
-    await coordinator.finish(id);
+    coordinator.finish(id);
   }
   expect(calls.slice(3)).toEqual(
     Array.from({ length: 10 }, (_, index) => String(index)),
   );
-  await coordinator.shutdown();
+  coordinator.shutdown();
 });
 
-it('cancels waiters and drains dispatched calls before handoff, fencing ended executions', async () => {
-  const coordinator = new InteractionCoordinator();
-  const first = begin(coordinator, 'first');
-  const gate = Promise.withResolvers<void>();
-  const abort = new AbortController();
-  const active = coordinator.run(
-    'desktop',
-    first,
-    () => gate.promise,
-    abort.signal,
-  );
-  await Promise.resolve();
-  await Promise.resolve();
-  const cancelled = begin(coordinator, 'cancelled');
-  const pending = coordinator.run('desktop', cancelled, async () => {
-    throw new Error('must not dispatch');
-  });
-  const rejected = expect(pending).rejects.toThrow('ended');
-  await coordinator.finish(cancelled);
-  await rejected;
-  const next = begin(coordinator, 'next', 'other');
-  const action = vi.fn(async () => {});
-  const waiting = coordinator.run('desktop', next, action);
-  abort.abort();
-  const release = coordinator.finish(first);
-  expect(action).not.toHaveBeenCalled();
-  await expect(
-    coordinator.run('desktop', first, async () => {}),
-  ).rejects.toThrow('ended');
-  gate.resolve();
-  await Promise.all([active, release, waiting]);
-  expect(action).toHaveBeenCalledOnce();
-  await coordinator.finishParent('other');
-  expect(coordinator.snapshot()[0].owner).toBeNull();
-  await coordinator.shutdown();
-});
+it.each(['success', 'error'] as const)(
+  'hands off before dispatched work settles with late %s and rejects retired calls',
+  async (outcome) => {
+    const coordinator = new InteractionCoordinator();
+    const first = begin(coordinator, 'first');
+    const gate = Promise.withResolvers<void>();
+    const abort = new AbortController();
+    const active = coordinator.run(
+      'desktop',
+      first,
+      () => gate.promise,
+      abort.signal,
+    );
+    const result = active.then(
+      () => 'success',
+      () => 'error',
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    const cancelled = begin(coordinator, 'cancelled');
+    const pending = coordinator.run('desktop', cancelled, async () => {
+      throw new Error('must not dispatch');
+    });
+    const rejected = expect(pending).rejects.toThrow('ended');
+    coordinator.finish(cancelled);
+    await rejected;
+    const next = begin(coordinator, 'next', 'other');
+    const queuedOld = expect(
+      coordinator.run('desktop', first, async () => {
+        throw new Error('retired call must not dispatch');
+      }),
+    ).rejects.toThrow('ended');
+    const action = vi.fn(async () => {});
+    const waiting = coordinator.run('desktop', next, action);
+    abort.abort();
+    coordinator.finish(first);
+    await waiting;
+    expect(action).toHaveBeenCalledOnce();
+    expect(coordinator.snapshot()[0].owner?.executionId).toBe(next);
+    await expect(
+      coordinator.run('desktop', first, async () => {}),
+    ).rejects.toThrow('ended');
+    if (outcome === 'success') gate.resolve();
+    else gate.reject(new Error('late failure'));
+    expect(await result).toBe(outcome);
+    await queuedOld;
+    coordinator.finish(first);
+    expect(coordinator.snapshot()[0].owner?.executionId).toBe(next);
+    coordinator.finishParent('other');
+    expect(coordinator.snapshot()[0].owner).toBeNull();
+    coordinator.shutdown();
+  },
+);
 
-it('keeps uncertain resources unavailable and permits nested private operations without deadlock', async () => {
+it('permits nested private operations and fresh external turns without deadlock', async () => {
   const coordinator = new InteractionCoordinator();
   const identity = { taskId: 'task', workerId: 'session' };
   const first = coordinator.begin(identity);
   await coordinator.run('desktop', first, () =>
     coordinator.forSession('desktop', identity, async () => 'filled'),
   );
-  coordinator.unavailable('desktop');
-  await coordinator.finish(first);
-  await expect(
-    coordinator.forSession('desktop', identity, async () => {}),
-  ).rejects.toThrow('uncertain');
+  coordinator.finish(first);
+  await coordinator.forSession('desktop', identity, async () => {});
   await coordinator.forSession('android', identity, async () => {});
-  await coordinator.shutdown();
+  coordinator.shutdown();
 });

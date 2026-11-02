@@ -64,9 +64,9 @@ try {
       if (created && !created.isClosed()) await created.close();
     });
   } finally {
-    await coordinator.finish(id);
+    coordinator.finish(id);
   }
-  await coordinator.shutdown();
+  coordinator.shutdown();
   await browser.shutdown();
   await execution.sandbox._stop();
 }

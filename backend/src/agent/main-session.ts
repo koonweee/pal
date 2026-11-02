@@ -267,9 +267,9 @@ export async function createMainSession(options: {
           }),
           defaultOptions: ({ requestContext }) => {
             const executionId = requestContext.get(INTERACTION_EXECUTION_ID);
-            const finish = async () => {
+            const finish = () => {
               if (typeof executionId === 'string')
-                await options.task?.worker?.coordinator.finish(executionId);
+                options.task?.worker?.coordinator.finish(executionId);
             };
             return {
               maxSteps: 0,
@@ -308,9 +308,8 @@ export async function createMainSession(options: {
           defaultOptions: ({ requestContext }) => {
             const threadId = requestContext.get(MASTRA_THREAD_ID_KEY);
             let runId: string | undefined;
-            const clear = async (interrupted = false) => {
-              if (runId)
-                await options.task?.worker?.coordinator.finishParent(runId);
+            const clear = (interrupted = false) => {
+              if (runId) options.task?.worker?.coordinator.finishParent(runId);
               if (runId)
                 options.onTaskActivity?.(
                   runId,
@@ -352,7 +351,7 @@ export async function createMainSession(options: {
               onFinish: ({ finishReason }) => clear(finishReason === 'error'),
               onAbort: () => clear(true),
               onError: async () => {
-                await clear(true);
+                clear(true);
                 if (requestContext.get('palScheduledExecution')) {
                   const thread: unknown =
                     requestContext.get(MASTRA_THREAD_ID_KEY);

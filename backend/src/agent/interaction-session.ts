@@ -64,11 +64,7 @@ export async function interactionSession(
     sandbox: execution.sandbox,
     filesystem: execution.filesystem,
     computer: config.get<boolean>('PAL_DESKTOP_ENABLED')
-      ? new X11Computer(
-          execution,
-          config.get<string>('PAL_DESKTOP_VIEWER_URL'),
-          () => coordinator.unavailable('desktop'),
-        )
+      ? new X11Computer(execution, config.get<string>('PAL_DESKTOP_VIEWER_URL'))
       : undefined,
     worker,
   };

@@ -15,7 +15,7 @@ Implementation plans for Pal. Start new plans from [the template](template.md).
 
 | Plan                                                                                      | Status      | Scope                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Admission-only device turns](interaction-admission-simplification.md) | Planned | Immediate FIFO handoff, retired-execution rejection, agent-managed takeover; remove draining and device fencing. |
+| [Admission-only device turns](interaction-admission-simplification.md) | Done | Immediate FIFO handoff, retired-execution rejection, agent-managed takeover; remove draining and device fencing. |
 | [Interaction coordination cleanup](interaction-simplification.md) | Done | Required coordinator, execution-derived private device, proportionate fences and production-wired exclusive dev acceptance; automated and native checks pass. |
 | [Exclusive interaction resources](exclusive-interaction-resources.md) | Done | Shared desktop/Android FIFO turns, lifecycle release, safe private entry and agent-directed cleanup; automated and native dev acceptance validated. |
 | [Production Run Instrumentation](production-run-instrumentation.md) | Done | Native run/tool telemetry, correlation, retention, and agent-written storage queries. |

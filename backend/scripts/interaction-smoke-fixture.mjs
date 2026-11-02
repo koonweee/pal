@@ -100,7 +100,7 @@ export async function interactionSmokeFixture(makeVault) {
     async close() {
       login.onModuleDestroy();
       await session?.close();
-      await coordinator.shutdown();
+      coordinator.shutdown();
       await android.onApplicationShutdown();
       await browser.shutdown();
       await execution.sandbox._stop();

@@ -118,11 +118,7 @@ export class MastraAgentRuntime
 
   async onModuleInit() {
     this.interactions.events.subscribe(({ event, ...data }) =>
-      this.main?.telemetry.record(
-        'pal.interaction.' + event,
-        data,
-        event === 'unavailable',
-      ),
+      this.main?.telemetry.record('pal.interaction.' + event, data),
     );
     this.login.bindNotifier((taskId, text) =>
       this.sendTask(taskId, text, false),
@@ -860,7 +856,7 @@ export class MastraAgentRuntime
     await stopping;
     await Promise.all(this.taskRuns);
     await this.main?.close();
-    await this.interactions.shutdown();
+    this.interactions.shutdown();
     await this.browser.shutdown();
     await Promise.all(this.publications);
     this.activity.reset();

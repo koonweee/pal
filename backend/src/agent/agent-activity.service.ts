@@ -84,14 +84,11 @@ export class AgentActivityService implements OnModuleInit, OnModuleDestroy {
     }
     const resources = this.interactions
       .snapshot()
-      .filter(
-        (entry) => entry.owner || entry.waiting.length || entry.unavailable,
-      )
+      .filter((entry) => entry.owner || entry.waiting.length)
       .map((entry) => ({
         resource: entry.resource,
         ownerTaskId: entry.owner?.taskId ?? null,
         waitingTaskIds: entry.waiting.map((waiter) => waiter.taskId),
-        unavailable: entry.unavailable,
       }));
     return {
       revision: this.revision,

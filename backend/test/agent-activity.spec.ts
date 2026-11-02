@@ -40,13 +40,12 @@ it('derives owner and waiters from the queue and clears waiting after cancellati
       resource: 'desktop',
       ownerTaskId: 'a',
       waitingTaskIds: ['b'],
-      unavailable: false,
     },
   ]);
-  await coordinator.finish(second);
+  coordinator.finish(second);
   await rejected;
   expect(activity.current().resources?.[0].waitingTaskIds).toEqual([]);
-  await coordinator.finish(first);
+  coordinator.finish(first);
   expect(activity.current().resources).toBeUndefined();
   expect(activity.current().needsInputTasks).toEqual([]);
   activity.onModuleDestroy();
