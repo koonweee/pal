@@ -10,7 +10,7 @@ Keep nested worker tool results out of Task history and downstream delegation re
 
 ## Current Behavior
 
-Task uses native Mastra delegation and a tool-result processor to remove `subAgentToolResults`. Answer text, thread/resource references, pending calls and other completion metadata are preserved. Worker history remains available in its own thread.
+Task uses native Mastra delegation through a projected worker boundary. Completed worker tool results cross that boundary as compact call identity before Task receives them. Answer text, thread/resource references, pending calls and other completion metadata are preserved. Worker history remains available in its own thread.
 
 ## Milestones
 
@@ -32,7 +32,7 @@ Extend native worker integration coverage with a large synthetic image result an
 cd backend
 npm run build
 npm run lint
-TEST_DATABASE_URL=postgresql://pal:pal@127.0.0.1:15433/pal_suggested_replies_test npx vitest run test/task-workers.spec.ts test/compact-worker-result.spec.ts
+TEST_DATABASE_URL=postgresql://pal:pal@127.0.0.1:15433/pal_test npx vitest run test/task-workers.spec.ts test/worker-result-projection.spec.ts
 ```
 
 ## Overall Exit Criteria

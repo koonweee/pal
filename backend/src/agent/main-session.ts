@@ -1,4 +1,4 @@
-import { compactWorkerResultProcessor } from './compact-worker-result.processor.js';
+import { projectWorkerResults } from './worker-result-projection.js';
 import { createMemoryOptions } from './memory-options.js';
 import { loadAgentInstructions } from './agent-instructions.js';
 import { agentSkillPaths } from './agent-skills.js';
@@ -298,6 +298,7 @@ export async function createMainSession(options: {
           options.task.worker.resume,
         )
       : undefined;
+    const projectedWorker = worker ? projectWorkerResults(worker) : undefined;
     const taskAgent = options.task
       ? new Agent<string, ToolsInput, PublicResponse>({
           id: 'pal-task-agent',
@@ -363,13 +364,12 @@ export async function createMainSession(options: {
           },
           memory,
           tools: options.task.tools,
-          ...(worker ? { agents: { worker } } : {}),
+          ...(projectedWorker ? { agents: { worker: projectedWorker } } : {}),
           inputProcessors: options.task.inputProcessors,
           workspace: taskWorkspace,
           maxProcessorRetries: 1,
           outputProcessors: [
             telemetry.memoryProcessor,
-            compactWorkerResultProcessor,
             publishTextProcessor(options.task.publish, (event, context) =>
               telemetry.record(event, { ...context }),
             ),

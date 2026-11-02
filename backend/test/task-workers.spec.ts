@@ -266,7 +266,17 @@ it('runs native workers concurrently with per-task limits, private output, and f
       subAgentThreadId: expect.any(String),
       subAgentResourceId: MAIN_RESOURCE_ID + '-worker',
     });
-    expect(delegationResult).not.toHaveProperty('subAgentToolResults');
+    expect(delegationResult).toMatchObject({
+      subAgentToolResults: expect.arrayContaining([
+        expect.objectContaining({
+          toolName: 'hold',
+          toolCallId: expect.any(String),
+        }),
+      ]),
+    });
+    expect(JSON.stringify(delegationResult)).not.toContain(
+      'worker-image-sentinel',
+    );
     const inspection = new Pool({ connectionString: databaseUrl });
     try {
       const { rows } = await inspection.query(
@@ -280,7 +290,7 @@ it('runs native workers concurrently with per-task limits, private output, and f
         rows.filter((row) => row.thread_id !== 'pal-task:beta'),
       );
       expect(parent).toContain('private finding beta-1');
-      expect(parent).not.toContain('subAgentToolResults');
+      expect(parent).toContain('subAgentToolResults');
       expect(parent).not.toContain('worker-image-sentinel');
       expect(worker).toContain('worker-image-sentinel');
     } finally {
