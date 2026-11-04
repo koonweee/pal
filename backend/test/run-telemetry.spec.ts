@@ -173,8 +173,16 @@ it('persists selective native run and code-mode evidence readable without schema
         input: { password: sentinel },
         attributes: { nested: { secret: sentinel } },
         metadata: { nested: { secret: sentinel } },
-      });
+    });
     injected.error({ error: Error(sentinel), endSpan: true });
+    main.telemetry.record('pal.memory.sample', {
+      phase: 'idle',
+      idleForMs: 120_000,
+      activeTaskRuns: 0,
+      activeWorkerRuns: 0,
+      rssBytes: 101,
+      heapUsedBytes: 102,
+    });
     await main.telemetry.observability.flush();
     expect(publications).toEqual(['Unstructured fixture response']);
     const fixtureStorage = main.storage;
@@ -268,6 +276,21 @@ it('persists selective native run and code-mode evidence readable without schema
           (log) =>
             log.message === 'data-om-observation-end' &&
             typeof log.data?.tokensObserved === 'number',
+        ),
+      ).toBe(true);
+      expect(
+        logs.logs.some(
+          (log) =>
+            log.message === 'pal.memory.sample' &&
+            log.data?.phase === 'idle' &&
+            log.data?.idleForMs === 120_000 &&
+            log.data?.activeTaskRuns === 0 &&
+            log.data?.activeWorkerRuns === 0 &&
+            log.data?.rssBytes === 101 &&
+            log.data?.heapUsedBytes === 102 &&
+            log.data?.runId === undefined &&
+            log.data?.taskId === undefined &&
+            log.data?.workerId === undefined
         ),
       ).toBe(true);
       expect(JSON.stringify({ traces, trace, logs })).not.toContain(sentinel);

@@ -80,6 +80,7 @@ const countKeys = [
   'compressedTokens',
   'activeTaskRuns',
   'activeWorkerRuns',
+  'idleForMs',
   'rssBytes',
   'heapUsedBytes',
   'heapTotalBytes',
