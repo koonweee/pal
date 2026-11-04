@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { getHeapSpaceStatistics } from 'node:v8';
 import { Pool } from 'pg';
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
@@ -22,6 +23,9 @@ const scenario = value('scenario', 'combined');
 const cycles = Number(value('cycles', '12'));
 const gcMode = value('gc', 'end');
 const settleMs = Number(value('settle-ms', '0'));
+const workerActions = Number(value('worker-actions', '30'));
+const screenshotKib = Number(value('screenshot-kib', '320'));
+const screenshotFile = value('screenshot-file', '');
 if (!['sequential', 'overlap', 'combined'].includes(scenario))
   throw new Error('scenario must be sequential, overlap, or combined');
 if (!Number.isSafeInteger(cycles) || cycles < 1 || cycles > 50)
@@ -30,6 +34,18 @@ if (!['end', 'each'].includes(gcMode))
   throw new Error('gc must be end or each');
 if (!Number.isSafeInteger(settleMs) || settleMs < 0 || settleMs > 60_000)
   throw new Error('settle-ms must be an integer from 0 to 60000');
+if (
+  !Number.isSafeInteger(workerActions) ||
+  workerActions < 1 ||
+  workerActions > 100
+)
+  throw new Error('worker-actions must be an integer from 1 to 100');
+if (
+  !Number.isSafeInteger(screenshotKib) ||
+  screenshotKib < 1 ||
+  screenshotKib > 10_240
+)
+  throw new Error('screenshot-kib must be an integer from 1 to 10240');
 if (!global.gc) throw new Error('Run this harness with --expose-gc');
 
 const databaseUrl =
@@ -38,8 +54,24 @@ const databaseUrl =
 if (!new URL(databaseUrl).pathname.endsWith('_test'))
   throw new Error('Test database must end in _test');
 
-const workerActions = 30;
-const screenshotBytes = 320 * 1024;
+const screenshotFixture = screenshotFile
+  ? await readFile(screenshotFile)
+  : null;
+if (
+  screenshotFixture &&
+  (screenshotFixture.byteLength < 24 ||
+    !screenshotFixture
+      .subarray(0, 8)
+      .equals(Buffer.from('89504e470d0a1a0a', 'hex')))
+)
+  throw new Error('screenshot-file must be a PNG image');
+const screenshotBytes = screenshotFixture?.byteLength ?? screenshotKib * 1024;
+const screenshotDimensions = screenshotFixture
+  ? {
+      width: screenshotFixture.readUInt32BE(16),
+      height: screenshotFixture.readUInt32BE(20),
+    }
+  : null;
 const monitoringCalls = 27;
 const monitoringResultBytes = 32 * 1024;
 const idleMs = 250;
@@ -206,11 +238,23 @@ try {
             id: 'screenshot_action',
             description: 'Perform an action and return its screenshot',
             execute: async ({ runTag, index }) => ({
-              runTag,
-              index,
-              image:
-                `${runTag}:${index}:` +
-                randomBytes(screenshotBytes).toString('base64'),
+              __workspaceMedia: true,
+              text: `Completed ${runTag} action ${index}`,
+              mediaType: 'image/png',
+              data: Buffer.from(
+                screenshotFixture ?? randomBytes(screenshotBytes),
+              ).toString('base64'),
+            }),
+            toModelOutput: (output) => ({
+              type: 'content',
+              value: [
+                { type: 'text', text: output.text },
+                {
+                  type: 'media',
+                  data: output.data,
+                  mediaType: output.mediaType,
+                },
+              ],
             }),
           }),
         },
@@ -304,7 +348,9 @@ try {
         gcMode,
         conditions: {
           workerActions,
-          screenshotKiB: screenshotBytes / 1024,
+          screenshotKiB: Number((screenshotBytes / 1024).toFixed(2)),
+          screenshotDimensions,
+          screenshotSource: screenshotFixture ? 'png-fixture' : 'synthetic',
           monitoringCalls,
           monitoringResultKiB: monitoringResultBytes / 1024,
           idleMs,
