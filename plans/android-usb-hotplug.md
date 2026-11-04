@@ -7,7 +7,8 @@ In Progress
 ## Progress
 
 - Milestones 1 and 2 are implemented and pass focused tests, native Linux device-node validation, systemd verification, and the complete Stack v2 test and application-validation suites.
-- Milestone 3 remains: install the reviewed host filter, deploy only the production Android sidecar, and complete reconnect and isolation acceptance.
+- The reviewed host filter is installed on production and `android-mcp` alone was recreated against it. The sidecar is healthy, ADB reports `device`, it sees one phone node and no Zigbee node, and every unrelated Pal container and Home Assistant retained its identity.
+- Milestone 3 remains open for physical cable disconnect/reconnect and Android smoke and secure-smoke acceptance.
 
 ## Goal
 
