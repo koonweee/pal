@@ -60,6 +60,11 @@ function readMemoryCounters(): MemoryCounters {
 export class RuntimeMemoryTelemetry {
   private readonly active = new Map<string, RuntimeMemoryContext>();
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
+  private readonly idleTimers = new Map<
+    number,
+    ReturnType<typeof setTimeout>
+  >();
+  private readonly idleSampleDelaysMs = [120_000, 300_000] as const;
 
   constructor(
     private readonly record: (data: Record<string, unknown>) => void,
@@ -69,6 +74,7 @@ export class RuntimeMemoryTelemetry {
 
   start(context: RuntimeMemoryContext) {
     if (this.active.has(context.key)) return;
+    this.cancelIdleSamples();
     this.active.set(context.key, context);
     this.sample('start', context);
   }
@@ -84,12 +90,37 @@ export class RuntimeMemoryTelemetry {
     }, this.settleDelayMs);
     timer.unref?.();
     this.timers.add(timer);
+    if (this.active.size === 0) this.scheduleIdleSamples();
   }
 
   close() {
     for (const timer of this.timers) clearTimeout(timer);
     this.timers.clear();
+    this.cancelIdleSamples();
     this.active.clear();
+  }
+
+  private scheduleIdleSamples() {
+    this.cancelIdleSamples();
+    for (const delayMs of this.idleSampleDelaysMs) {
+      const timer = setTimeout(() => {
+        this.idleTimers.delete(delayMs);
+        this.record({
+          phase: 'idle',
+          idleForMs: delayMs,
+          activeTaskRuns: 0,
+          activeWorkerRuns: 0,
+          ...this.read(),
+        });
+      }, delayMs);
+      timer.unref?.();
+      this.idleTimers.set(delayMs, timer);
+    }
+  }
+
+  private cancelIdleSamples() {
+    for (const timer of this.idleTimers.values()) clearTimeout(timer);
+    this.idleTimers.clear();
   }
 
   private sample(

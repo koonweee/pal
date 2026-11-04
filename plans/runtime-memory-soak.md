@@ -16,7 +16,7 @@ Measure process and V8 heap state at Task and interaction-worker lifecycle bound
 
 ## Target Data Shape
 
-`pal.memory.sample` observability logs contain a lifecycle phase, role, run/thread/task identity when available, active Task/worker counts, process memory counters, and V8 old/large-object-space counters. Samples contain no prompts, tool arguments, results, screenshots, or credentials.
+`pal.memory.sample` observability logs contain a lifecycle phase, role, run/thread/task identity when available, active Task/worker counts, process memory counters, and V8 old/large-object-space counters. Runtime-global idle samples omit run identity and record the uninterrupted idle duration. Samples contain no prompts, tool arguments, results, screenshots, or credentials.
 
 ## Milestones
 

@@ -105,6 +105,64 @@ it('cancels delayed samples during shutdown', () => {
   telemetry.finish('task:run');
   telemetry.close();
 
-  vi.advanceTimersByTime(30_000);
+  vi.advanceTimersByTime(300_000);
   expect(samples.map((sample) => sample.phase)).toEqual(['start', 'finish']);
+});
+
+it('records two and five minute runtime-global idle samples', () => {
+  vi.useFakeTimers();
+  const samples: Record<string, unknown>[] = [];
+  const telemetry = new RuntimeMemoryTelemetry(
+    (sample) => samples.push(sample),
+    30_000,
+    () => counters,
+  );
+  telemetry.start({ key: 'task:run', role: 'task', runId: 'run' });
+  telemetry.finish('task:run');
+
+  vi.advanceTimersByTime(120_000);
+  expect(samples.at(-1)).toEqual({
+    phase: 'idle',
+    idleForMs: 120_000,
+    activeTaskRuns: 0,
+    activeWorkerRuns: 0,
+    ...counters,
+  });
+
+  vi.advanceTimersByTime(180_000);
+  expect(samples.at(-1)).toEqual({
+    phase: 'idle',
+    idleForMs: 300_000,
+    activeTaskRuns: 0,
+    activeWorkerRuns: 0,
+    ...counters,
+  });
+});
+
+it('cancels stale idle samples and restarts delays after new work finishes', () => {
+  vi.useFakeTimers();
+  const samples: Record<string, unknown>[] = [];
+  const telemetry = new RuntimeMemoryTelemetry(
+    (sample) => samples.push(sample),
+    30_000,
+    () => counters,
+  );
+  telemetry.start({ key: 'task:first', role: 'task', runId: 'first' });
+  telemetry.finish('task:first');
+  vi.advanceTimersByTime(60_000);
+
+  telemetry.start({ key: 'task:second', role: 'task', runId: 'second' });
+  vi.advanceTimersByTime(240_000);
+  expect(samples.filter((sample) => sample.phase === 'idle')).toEqual([]);
+
+  telemetry.finish('task:second');
+  vi.advanceTimersByTime(120_000);
+  expect(samples.filter((sample) => sample.phase === 'idle')).toEqual([
+    expect.objectContaining({ phase: 'idle', idleForMs: 120_000 }),
+  ]);
+  vi.advanceTimersByTime(180_000);
+  expect(samples.filter((sample) => sample.phase === 'idle')).toEqual([
+    expect.objectContaining({ phase: 'idle', idleForMs: 120_000 }),
+    expect.objectContaining({ phase: 'idle', idleForMs: 300_000 }),
+  ]);
 });
