@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Done
 
 ## Goal
 
@@ -61,3 +61,7 @@ npm run lint
 - Production telemetry records delayed idle memory without retaining run content or identities.
 - New work cancels stale idle timers and a later idle period starts fresh timers.
 - Only `agent-service` is replaced in production.
+
+## Outcome
+
+Production runs `e0c1a83`. A natural scheduled run persisted valid runtime-global samples after 120,000 and 300,000 idle milliseconds with zero active Task and worker runs and no run identity or content. RSS measured 442.6 MiB after two idle minutes and 308.2 MiB after five; heap used measured 170.3 MiB and 168.1 MiB respectively. Only `agent-service` changed container identity.
