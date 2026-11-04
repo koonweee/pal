@@ -87,6 +87,7 @@ node --expose-gc scripts/runtime-memory-soak.mjs --scenario=combined --cycles=12
 - Twelve 50-action workers using a real 1200×900, 65.71 KiB development-desktop PNG reached 452.18 MiB peak heap and 760.08 MiB peak RSS. Final forced-GC heap was 77.04 MiB from a 61.36 MiB baseline; large-object space returned to 14.14 MiB.
 - Twelve overlapping monitoring and 30-action runs using the real PNG returned to 75.40–77.40 MiB heap and 14.14 MiB large-object space after every forced collection. RSS rose from 251.81 MiB to 487.99 MiB despite stable live heap.
 - Six 50-action workers using a higher-detail 1200×900, 338.19 KiB PNG reached 873.60 MiB heap and 1,267.83 MiB RSS. Per-cycle forced-GC heap remained 71.82–73.47 MiB and final large-object space was 14.14 MiB. Screenshot byte size materially raises active-run peaks without producing post-run live growth in this harness.
+- Production runs backend source `5390d37` through Stack v2 revision `628416d`. Only agent-service was replaced; web release identity, execution, database, integrations, and persistent state were retained. A live Task persisted sanitized start, finish, and 30-second settled samples with every configured process/V8 counter present.
 
 ## Overall Exit Criteria
 
