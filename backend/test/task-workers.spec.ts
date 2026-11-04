@@ -366,6 +366,25 @@ it('runs native workers concurrently with per-task limits, private output, and f
     expect(parentTraces.spans.some((span) => span.outcome === 'aborted')).toBe(
       true,
     );
+    const memoryLogs = await telemetry.listLogs({
+      pagination: { page: 0, perPage: 100 },
+    });
+    const memorySamples = memoryLogs.logs.filter(
+      (log) => log.message === 'pal.memory.sample',
+    );
+    expect(memorySamples.length).toBeGreaterThan(0);
+    expect(
+      memorySamples.some(
+        (log) =>
+          log.data?.role === 'task' &&
+          typeof log.data?.heapUsedBytes === 'number' &&
+          typeof log.data?.oldSpaceUsedBytes === 'number',
+      ),
+    ).toBe(true);
+    expect(memorySamples.some((log) => log.data?.role === 'worker')).toBe(true);
+    expect(JSON.stringify(memorySamples)).not.toContain(
+      'worker-image-sentinel',
+    );
   } finally {
     for (const gate of Object.values(gates)) gate.resolve();
     for (const run of main?.taskAgent?.listActiveThreadRuns() ?? [])

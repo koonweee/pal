@@ -39,6 +39,7 @@ import {
   type PublicOutput,
   type PublicResponse,
 } from './public-output.js';
+import { RuntimeMemoryTelemetry } from './runtime-memory-telemetry.js';
 
 export const MAIN_RESOURCE_ID = 'pal-owner';
 export const MAIN_THREAD_ID = 'pal-main';
@@ -112,6 +113,9 @@ export async function createMainSession(options: {
       configurable: true,
     });
   const telemetry = new RunTelemetry(options.releaseId);
+  const runtimeMemory = new RuntimeMemoryTelemetry((data) =>
+    telemetry.record('pal.memory.sample', data),
+  );
   const storage = new PostgresStoreVNext({
     id: 'pal-main-storage',
     connectionString: options.connectionString,
@@ -296,6 +300,21 @@ export async function createMainSession(options: {
           options.task.worker.cleanup,
           options.task.worker.coordinator,
           options.task.worker.resume,
+          (activity) => {
+            const key = `worker:${activity.parentRunId}:${activity.toolCallId}`;
+            if (activity.working)
+              runtimeMemory.start({
+                key,
+                role: 'worker',
+                runId: activity.parentRunId,
+                parentRunId: activity.parentRunId,
+                taskId: activity.taskId,
+                workerId: activity.workerId,
+                toolCallId: activity.toolCallId,
+                executionId: activity.executionId,
+              });
+            else runtimeMemory.finish(key);
+          },
         )
       : undefined;
     const projectedWorker = worker ? projectWorkerResults(worker) : undefined;
@@ -311,6 +330,7 @@ export async function createMainSession(options: {
             let runId: string | undefined;
             const clear = (interrupted = false) => {
               if (runId) options.task?.worker?.coordinator.finishParent(runId);
+              if (runId) runtimeMemory.finish(`task:${runId}`);
               if (runId)
                 options.onTaskActivity?.(
                   runId,
@@ -342,6 +362,12 @@ export async function createMainSession(options: {
                   return;
                 if (!runId && chunk.runId) {
                   runId = chunk.runId;
+                  runtimeMemory.start({
+                    key: `task:${runId}`,
+                    role: 'task',
+                    runId,
+                    ...(typeof threadId === 'string' ? { threadId } : {}),
+                  });
                   options.onTaskActivity?.(
                     runId,
                     true,
@@ -426,6 +452,7 @@ export async function createMainSession(options: {
         unsubscribe();
         await memory.settled();
         await (await worker?.getMemory())?.settled();
+        runtimeMemory.close();
         await telemetry.stopRetention();
         await mastra.stopWorkers();
         // Mastra closes storage before exporter shutdown; drain the bus while pools are open.
@@ -434,6 +461,7 @@ export async function createMainSession(options: {
       },
     };
   } catch (error) {
+    runtimeMemory.close();
     await telemetry.stopRetention();
     await telemetry.observability.shutdown();
     try {

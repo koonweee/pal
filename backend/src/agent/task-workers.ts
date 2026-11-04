@@ -7,6 +7,15 @@ export const PARENT_TASK_ID = 'palParentTaskId';
 export const WORKER_ID = 'palWorkerId';
 export const INTERACTION_EXECUTION_ID = 'palInteractionExecutionId';
 
+export type WorkerActivity = {
+  working: boolean;
+  taskId: string;
+  workerId: string;
+  parentRunId: string;
+  toolCallId: string;
+  executionId?: string;
+};
+
 // Mastra owns execution, streams, memory, and cancellation. These hooks only
 // bound fan-out and attach trusted identities for shared browser routing.
 export function taskWorkerDelegation(
@@ -18,6 +27,7 @@ export function taskWorkerDelegation(
   ) => Promise<void>,
   coordinator: InteractionCoordinator,
   resume?: (taskId: string, assignment: string) => Promise<string | undefined>,
+  onActivity?: (activity: WorkerActivity) => void,
 ): DelegationConfig {
   const active = new Map<
     string,
@@ -80,6 +90,14 @@ export function taskWorkerDelegation(
         context.requestContext.set(WORKER_ID, workerId);
         context.requestContext.set(INTERACTION_EXECUTION_ID, run.executionId);
         context.requestContext.set('palParentRunId', context.runId);
+        onActivity?.({
+          working: true,
+          taskId: run.taskId,
+          workerId: run.workerId,
+          parentRunId: context.runId,
+          toolCallId: context.toolCallId,
+          executionId: run.executionId,
+        });
         return { modifiedMaxSteps: 0 };
       } catch (error) {
         active.delete(id);
@@ -95,6 +113,14 @@ export function taskWorkerDelegation(
         await cleanup(run.taskId, run.workerId, context.success, run.startedAt);
       } finally {
         active.delete(id);
+        onActivity?.({
+          working: false,
+          taskId: run.taskId,
+          workerId: run.workerId,
+          parentRunId: context.runId,
+          toolCallId: context.toolCallId,
+          executionId: run.executionId,
+        });
       }
     },
   };

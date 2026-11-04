@@ -78,6 +78,18 @@ const countKeys = [
   'messagesActivated',
   'generationCount',
   'compressedTokens',
+  'activeTaskRuns',
+  'activeWorkerRuns',
+  'rssBytes',
+  'heapUsedBytes',
+  'heapTotalBytes',
+  'heapLimitBytes',
+  'externalBytes',
+  'arrayBuffersBytes',
+  'oldSpaceUsedBytes',
+  'oldSpaceSizeBytes',
+  'largeObjectSpaceUsedBytes',
+  'largeObjectSpaceSizeBytes',
 ];
 const memoryEvents = new Set([
   'data-om-observation-start',
@@ -97,6 +109,7 @@ const palEvents = new Set([
   'pal.interaction.queued',
   'pal.interaction.acquired',
   'pal.interaction.released',
+  'pal.memory.sample',
 ]);
 
 function object(value: unknown): Record<string, unknown> {
@@ -306,6 +319,7 @@ class RunStorageExporter extends MastraStorageExporter {
       'recordId',
       'retrying',
       'failurePolicy',
+      'role',
     ]);
     await this.safely(() =>
       super.onLogEvent({
