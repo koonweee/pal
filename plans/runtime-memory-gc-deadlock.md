@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Done
 
 ## Goal
 
@@ -33,10 +33,10 @@ Exit criteria:
 
 Implementation tasks:
 
-- [ ] Build and verify one immutable Linux AMD64 agent-service image from the reviewed commit.
-- [ ] Validate and publish only the changed Build and agent-service deployment pin through Stack v2.
-- [ ] Pull and deploy only agent-service through Komodo with temporary --no-deps; restore normal Stack arguments.
-- [ ] Verify API/SSE, real inspector collection in the deployed image, retained dependencies, and cleanup.
+- [x] Build and verify one immutable Linux AMD64 agent-service image from the reviewed commit.
+- [x] Validate and publish only the changed Build and agent-service deployment pin through Stack v2.
+- [x] Pull and deploy only agent-service through Komodo with temporary --no-deps; restore normal Stack arguments.
+- [x] Verify API/SSE, real inspector collection in the deployed image, retained dependencies, and cleanup.
 
 Exit criteria:
 
@@ -73,3 +73,11 @@ Use the compatible pre-diagnostic e0c1a83 backend image documented in Stack v2 i
 
 - The real-process regression times out and kills its child against synchronous cleanup; deferred cleanup completes collection and a subsequent event-loop callback.
 - Backend build, lint, boundary checks, and focused formatting pass. All eight runtime-memory and database-backed telemetry tests pass against an isolated disposable database.
+
+## Production Evidence
+
+- Build update `6aecbb9ec7c3aa9585155e3a` published reviewed source `b481ad03527db82ec3b25ff6a71aec7715ae9f5a` as `ghcr.io/koonweee/pal:b481ad0@sha256:6dba023efd119c639d0640ac448f3181db9dbf7603d3da73313ba77ed1f7d195`; independent registry and host inspection verify Linux AMD64.
+- A disposable network-isolated container on SF ran the actual image collector through its high-idle path, completed `idle_gc`, and executed a subsequent timer. The container removed itself.
+- Stack v2 `4787f1b` deployed only agent-service in update `6aecbcbd2ef4de9d290d1714`, after targeted pull `6aecbc7b2ef4de9d290d170a`. The recovered backend started at `2026-11-05T17:29:12Z` and is healthy with no startup errors or OOM.
+- Private HTTPS, API health, and SSE pass; release `4037c65` and contract 8 remain unchanged. All 12 dependency/one-shot container identities, images, and start times are retained. Counts remain 2,639 public messages and 51 tasks.
+- Normal Stack arguments are restored and both Pal ResourceSyncs are clean. The disposable test database, regression container, and all nine temporary rollout files are absent. The unused deadlocking image was removed after an all-container reference check; the compatible e0c1a83 rollback image is retained (about 2.6 GB including shared layers). Existing builder cache and development resources are preserved.
