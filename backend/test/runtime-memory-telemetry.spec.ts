@@ -139,6 +139,50 @@ it('records two and five minute runtime-global idle samples', () => {
   });
 });
 
+it('forces garbage collection once after a high five-minute idle sample', async () => {
+  vi.useFakeTimers();
+  const samples: Record<string, unknown>[] = [];
+  const before = { ...counters, heapUsedBytes: 512 * 1024 * 1024 };
+  const after = { ...counters, heapUsedBytes: 128 * 1024 * 1024 };
+  let collected = false;
+  const forceGarbageCollection = vi.fn(async () => {
+    collected = true;
+  });
+  const telemetry = new RuntimeMemoryTelemetry(
+    (sample) => samples.push(sample),
+    30_000,
+    () => (collected ? after : before),
+    forceGarbageCollection,
+  );
+
+  telemetry.start({ key: 'task:first', role: 'task', runId: 'first' });
+  telemetry.finish('task:first');
+  await vi.advanceTimersByTimeAsync(300_000);
+
+  expect(samples.slice(-2)).toEqual([
+    {
+      phase: 'idle',
+      idleForMs: 300_000,
+      activeTaskRuns: 0,
+      activeWorkerRuns: 0,
+      ...before,
+    },
+    {
+      phase: 'idle_gc',
+      idleForMs: 300_000,
+      activeTaskRuns: 0,
+      activeWorkerRuns: 0,
+      ...after,
+    },
+  ]);
+
+  telemetry.start({ key: 'task:second', role: 'task', runId: 'second' });
+  telemetry.finish('task:second');
+  await vi.advanceTimersByTimeAsync(300_000);
+
+  expect(forceGarbageCollection).toHaveBeenCalledTimes(1);
+});
+
 it('cancels stale idle samples and restarts delays after new work finishes', () => {
   vi.useFakeTimers();
   const samples: Record<string, unknown>[] = [];

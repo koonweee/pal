@@ -1,4 +1,8 @@
+import { Session } from 'node:inspector';
 import { getHeapSpaceStatistics, getHeapStatistics } from 'node:v8';
+
+const FIVE_MINUTES_MS = 300_000;
+const FORCED_GC_HEAP_THRESHOLD_BYTES = 512 * 1024 * 1024;
 
 export type RuntimeMemoryRole = 'task' | 'worker';
 
@@ -57,6 +61,32 @@ function readMemoryCounters(): MemoryCounters {
   };
 }
 
+function collectGarbage(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const session = new Session();
+    let connected = false;
+    const finish = (error?: Error | null) => {
+      if (connected) session.disconnect();
+      if (error) reject(error);
+      else resolve();
+    };
+
+    try {
+      session.connect();
+      connected = true;
+      session.post('HeapProfiler.enable', (enableError) => {
+        if (enableError) {
+          finish(enableError);
+          return;
+        }
+        session.post('HeapProfiler.collectGarbage', finish);
+      });
+    } catch (error) {
+      finish(error instanceof Error ? error : new Error(String(error)));
+    }
+  });
+}
+
 export class RuntimeMemoryTelemetry {
   private readonly active = new Map<string, RuntimeMemoryContext>();
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
@@ -65,11 +95,14 @@ export class RuntimeMemoryTelemetry {
     ReturnType<typeof setTimeout>
   >();
   private readonly idleSampleDelaysMs = [120_000, 300_000] as const;
+  private forcedGcAttempted = false;
+  private closed = false;
 
   constructor(
     private readonly record: (data: Record<string, unknown>) => void,
     private readonly settleDelayMs = 30_000,
     private readonly read = readMemoryCounters,
+    private readonly forceGarbageCollection = collectGarbage,
   ) {}
 
   start(context: RuntimeMemoryContext) {
@@ -94,6 +127,7 @@ export class RuntimeMemoryTelemetry {
   }
 
   close() {
+    this.closed = true;
     for (const timer of this.timers) clearTimeout(timer);
     this.timers.clear();
     this.cancelIdleSamples();
@@ -105,13 +139,25 @@ export class RuntimeMemoryTelemetry {
     for (const delayMs of this.idleSampleDelaysMs) {
       const timer = setTimeout(() => {
         this.idleTimers.delete(delayMs);
+        const counters = this.read();
         this.record({
           phase: 'idle',
           idleForMs: delayMs,
           activeTaskRuns: 0,
           activeWorkerRuns: 0,
-          ...this.read(),
+          ...counters,
         });
+        if (
+          delayMs === FIVE_MINUTES_MS &&
+          !this.forcedGcAttempted &&
+          counters.heapUsedBytes >= FORCED_GC_HEAP_THRESHOLD_BYTES
+        ) {
+          this.forcedGcAttempted = true;
+          void this.forceGarbageCollection().then(
+            () => this.recordForcedGcSample('idle_gc'),
+            () => this.recordForcedGcSample('idle_gc_failed'),
+          );
+        }
       }, delayMs);
       timer.unref?.();
       this.idleTimers.set(delayMs, timer);
@@ -121,6 +167,18 @@ export class RuntimeMemoryTelemetry {
   private cancelIdleSamples() {
     for (const timer of this.idleTimers.values()) clearTimeout(timer);
     this.idleTimers.clear();
+  }
+
+  private recordForcedGcSample(phase: 'idle_gc' | 'idle_gc_failed') {
+    if (this.closed) return;
+    const active = [...this.active.values()];
+    this.record({
+      phase,
+      idleForMs: FIVE_MINUTES_MS,
+      activeTaskRuns: active.filter((run) => run.role === 'task').length,
+      activeWorkerRuns: active.filter((run) => run.role === 'worker').length,
+      ...this.read(),
+    });
   }
 
   private sample(
