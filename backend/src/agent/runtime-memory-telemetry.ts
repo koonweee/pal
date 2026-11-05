@@ -66,9 +66,12 @@ function collectGarbage(): Promise<void> {
     const session = new Session();
     let connected = false;
     const finish = (error?: Error | null) => {
-      if (connected) session.disconnect();
-      if (error) reject(error);
-      else resolve();
+      // Disconnect after inspector dispatch unwinds to avoid blocking Node.
+      setImmediate(() => {
+        if (connected) session.disconnect();
+        if (error) reject(error);
+        else resolve();
+      });
     };
 
     try {

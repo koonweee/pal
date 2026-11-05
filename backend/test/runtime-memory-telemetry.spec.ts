@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { afterEach, expect, it, vi } from 'vitest';
 import { RuntimeMemoryTelemetry } from '../dist/agent/runtime-memory-telemetry.js';
 
@@ -209,4 +210,37 @@ it('cancels stale idle samples and restarts delays after new work finishes', () 
     expect.objectContaining({ phase: 'idle', idleForMs: 120_000 }),
     expect.objectContaining({ phase: 'idle', idleForMs: 300_000 }),
   ]);
+});
+
+it('completes real inspector collection and keeps the event loop responsive', () => {
+  const moduleUrl = new URL(
+    '../dist/agent/runtime-memory-telemetry.js',
+    import.meta.url,
+  ).href;
+  const output = execFileSync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      `
+    import { setTimeout } from 'node:timers';
+    import { RuntimeMemoryTelemetry } from ${JSON.stringify(moduleUrl)};
+    globalThis.setTimeout = (callback, delay, ...args) =>
+      setTimeout(callback, Math.min(delay, 50), ...args);
+    const keepAlive = setInterval(() => {}, 1000);
+    const telemetry = new RuntimeMemoryTelemetry((sample) => {
+      if (sample.phase === 'idle_gc_failed') throw new Error('Collection failed');
+      if (sample.phase === 'idle_gc') {
+        telemetry.close();
+        clearInterval(keepAlive);
+        setTimeout(() => console.log('collection complete; event loop responsive'), 0);
+      }
+    }, 30_000, () => (${JSON.stringify({ ...counters, heapUsedBytes: 512 * 1024 * 1024 })}));
+    telemetry.start({ key: 'task:probe', role: 'task', runId: 'probe' });
+    telemetry.finish('task:probe');
+  `,
+    ],
+    { encoding: 'utf8', timeout: 5000, killSignal: 'SIGKILL' },
+  );
+  expect(output.trim()).toBe('collection complete; event loop responsive');
 });
