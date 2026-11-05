@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Done
 
 ## Goal
 
@@ -66,3 +66,7 @@ npm run lint
 - One five-minute idle period at or above 512 MiB produces an ordinary sample followed by one post-GC diagnostic sample.
 - Lower heaps and later idle periods do not force collection.
 - Only `agent-service` is replaced in production.
+
+## Outcome
+
+Production runs Pal `627b712` at `ghcr.io/koonweee/pal:627b712@sha256:17e8ae295bf1a684624a2abf704a076f2a20be0dd8bfcc3a5c6b1bfc979a47cf`. The running image contains the inspector collection path, five-minute gate, 512 MiB threshold, and success/failure phases. Only `agent-service` changed container identity; it is healthy with zero restarts and no OOM, normal Stack arguments are restored, and dependency identities are unchanged. The one-shot sample remains armed until production reaches its first qualifying idle period.
