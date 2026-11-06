@@ -87,6 +87,11 @@ it('loads authentication skills only on interaction and starts fresh after resta
       worker: {
         coordinator: new InteractionCoordinator(),
         model,
+        memoryOptions: {
+          lastMessages: false,
+          semanticRecall: false,
+          workingMemory: { enabled: false },
+        },
         instructions: await loadAgentInstructions('worker'),
         tools: {},
         inputProcessors: [new CodeModeProcessor()],

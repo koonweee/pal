@@ -16,7 +16,11 @@ import {
   createMainSession,
   MAIN_RESOURCE_ID,
 } from '../dist/agent/main-session.js';
-import { createMemoryOptions } from '../dist/agent/memory-options.js';
+import {
+  createMemoryOptions,
+  createWorkerMemoryOptions,
+} from '../dist/agent/memory-options.js';
+import { interactionHistoryProcessor } from '../dist/agent/interaction-history.processor.js';
 import { chatgptModel } from '../dist/agent/chatgpt-model.js';
 import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
 
@@ -236,14 +240,14 @@ const workerModel = new MockLanguageModelV3({
   },
 });
 let providerFixtureCalls = 0;
+const providerRunCalls = new Map();
 const providerFixtureStream = (body) => {
   providerFixtureCalls += 1;
   const serialized = JSON.stringify(body.input ?? []);
   const runTag = tag(serialized);
-  const completedActions = Array.isArray(body.input)
-    ? body.input.filter((item) => item?.type === 'function_call_output').length
-    : 0;
-  const responseId = `response-${runTag}-${completedActions + 1}`;
+  const call = (providerRunCalls.get(runTag) ?? 0) + 1;
+  providerRunCalls.set(runTag, call);
+  const responseId = `response-${runTag}-${call}`;
   const events = [
     {
       type: 'response.created',
@@ -254,8 +258,8 @@ const providerFixtureStream = (body) => {
       },
     },
   ];
-  if (completedActions < workerActions) {
-    const action = completedActions + 1;
+  if (call <= workerActions) {
+    const action = call;
     const callId = `${runTag}-action-${action}`;
     const item = {
       type: 'function_call',
@@ -443,6 +447,8 @@ try {
       worker: {
         coordinator: new InteractionCoordinator(),
         model: selectedWorkerModel,
+        memoryOptions: await createWorkerMemoryOptions(memoryModel),
+        inputProcessors: [interactionHistoryProcessor(['screenshot_action'])],
         instructions:
           workerModelMode === 'real'
             ? `Call screenshot_action exactly ${workerActions} times sequentially, then return a short completion. Do not stop early.`

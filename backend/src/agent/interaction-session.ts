@@ -10,6 +10,7 @@ import { loginTools } from '../login/login-tools.js';
 import { loadAgentInstructions } from './agent-instructions.js';
 import { chatgptModel } from './chatgpt-model.js';
 import { CodeModeProcessor } from './code-mode.processor.js';
+import { interactionHistoryProcessor } from './interaction-history.processor.js';
 import { InteractionToolsProcessor } from './interaction-tools.processor.js';
 import type { createMainSession } from './main-session.js';
 import { X11Computer } from './x11-computer.js';
@@ -46,6 +47,7 @@ export async function interactionSession(
     }),
     inputProcessors: [
       new InteractionToolsProcessor(coordinator),
+      interactionHistoryProcessor(),
       new CodeModeProcessor(),
     ],
     resume: (taskId, assignment) => login.resumeWorker(taskId, assignment),

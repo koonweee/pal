@@ -1,5 +1,8 @@
 import { projectWorkerResults } from './worker-result-projection.js';
-import { createMemoryOptions } from './memory-options.js';
+import {
+  createMemoryOptions,
+  createWorkerMemoryOptions,
+} from './memory-options.js';
 import { loadAgentInstructions } from './agent-instructions.js';
 import { agentSkillPaths } from './agent-skills.js';
 import { MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
@@ -71,6 +74,7 @@ export async function createMainSession(options: {
       inputProcessors?: ConstructorParameters<
         typeof Agent
       >[0]['inputProcessors'];
+      memoryOptions?: MemoryConfig;
       resume?: (
         taskId: string,
         assignment: string,
@@ -273,11 +277,9 @@ export async function createMainSession(options: {
           model: options.task.worker.model,
           memory: new Memory({
             storage,
-            options: {
-              lastMessages: false,
-              semanticRecall: false,
-              workingMemory: { enabled: false },
-            },
+            options:
+              options.task.worker.memoryOptions ??
+              (await createWorkerMemoryOptions(options.task.worker.model)),
           }),
           defaultOptions: ({ requestContext }) => {
             const executionId = requestContext.get(INTERACTION_EXECUTION_ID);

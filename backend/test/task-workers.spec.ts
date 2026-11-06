@@ -162,6 +162,11 @@ it('runs native workers concurrently with per-task limits, private output, and f
         worker: {
           coordinator,
           model: workerModel,
+          memoryOptions: {
+            lastMessages: false,
+            semanticRecall: false,
+            workingMemory: { enabled: false },
+          },
           resume: async (_, assignment) =>
             assignment.includes('branch:alpha-5')
               ? started.find((run) => run.taskId === 'alpha')?.workerId
