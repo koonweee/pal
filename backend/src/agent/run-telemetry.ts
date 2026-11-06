@@ -91,6 +91,12 @@ const countKeys = [
   'oldSpaceSizeBytes',
   'largeObjectSpaceUsedBytes',
   'largeObjectSpaceSizeBytes',
+  'profileEntries',
+  'topSampledBytes',
+  'profileRank',
+  'sampledBytes',
+  'lineNumber',
+  'columnNumber',
 ];
 const memoryEvents = new Set([
   'data-om-observation-start',
@@ -321,6 +327,9 @@ class RunStorageExporter extends MastraStorageExporter {
       'retrying',
       'failurePolicy',
       'role',
+      'functionName',
+      'source',
+      'allocationStack',
     ]);
     await this.safely(() =>
       super.onLogEvent({

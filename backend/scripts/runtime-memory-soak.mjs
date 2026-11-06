@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { getHeapSpaceStatistics } from 'node:v8';
+import { deflateSync } from 'node:zlib';
 import { Pool } from 'pg';
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
 import { createOpenAI } from '@ai-sdk/openai';
@@ -33,6 +34,9 @@ const settleMs = Number(value('settle-ms', '0'));
 const workerActions = Number(value('worker-actions', '30'));
 const screenshotKib = Number(value('screenshot-kib', '320'));
 const screenshotFile = value('screenshot-file', '');
+const runTimeoutMs = Number(
+  value('run-timeout-ms', workerModelMode === 'real' ? '600000' : '30000'),
+);
 if (!['sequential', 'overlap', 'combined'].includes(scenario))
   throw new Error('scenario must be sequential, overlap, or combined');
 if (!Number.isSafeInteger(cycles) || cycles < 1 || cycles > 50)
@@ -67,6 +71,12 @@ if (
   screenshotKib > 10_240
 )
   throw new Error('screenshot-kib must be an integer from 1 to 10240');
+if (
+  !Number.isSafeInteger(runTimeoutMs) ||
+  runTimeoutMs < 1_000 ||
+  runTimeoutMs > 900_000
+)
+  throw new Error('run-timeout-ms must be an integer from 1000 to 900000');
 if (!global.gc) throw new Error('Run this harness with --expose-gc');
 
 const databaseUrl =
@@ -75,9 +85,46 @@ const databaseUrl =
 if (!new URL(databaseUrl).pathname.endsWith('_test'))
   throw new Error('Test database must end in _test');
 
+const crc32 = (buffer) => {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1)
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+};
+const pngChunk = (type, data) => {
+  const name = Buffer.from(type, 'ascii');
+  const chunk = Buffer.alloc(12 + data.byteLength);
+  chunk.writeUInt32BE(data.byteLength, 0);
+  name.copy(chunk, 4);
+  data.copy(chunk, 8);
+  chunk.writeUInt32BE(crc32(Buffer.concat([name, data])), 8 + data.byteLength);
+  return chunk;
+};
+const syntheticPng = () => {
+  const width = 640;
+  const height = 512;
+  const pixels = Buffer.alloc((width + 1) * height);
+  for (let row = 0; row < height; row += 1)
+    randomBytes(width).copy(pixels, row * (width + 1) + 1);
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header.set([8, 0, 0, 0, 0], 8);
+  return Buffer.concat([
+    Buffer.from('89504e470d0a1a0a', 'hex'),
+    pngChunk('IHDR', header),
+    pngChunk('IDAT', deflateSync(pixels, { level: 0 })),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+};
 const screenshotFixture = screenshotFile
   ? await readFile(screenshotFile)
-  : null;
+  : workerModelMode === 'real'
+    ? syntheticPng()
+    : null;
 if (
   screenshotFixture &&
   (screenshotFixture.byteLength < 24 ||
@@ -87,8 +134,6 @@ if (
 )
   throw new Error('screenshot-file must be a PNG image');
 const screenshotBytes = screenshotFixture?.byteLength ?? screenshotKib * 1024;
-if (workerModelMode === 'real' && !screenshotFixture)
-  throw new Error('worker-model=real requires screenshot-file');
 const screenshotDimensions = screenshotFixture
   ? {
       width: screenshotFixture.readUInt32BE(16),
@@ -445,7 +490,7 @@ try {
     if (accepted.action !== 'wake')
       throw new Error(`Expected wake, received ${accepted.action}`);
     if (consumption === 'accepted-only') {
-      const deadline = Date.now() + 30_000;
+      const deadline = Date.now() + runTimeoutMs;
       while (
         main.taskAgent
           .listActiveThreadRuns()
@@ -544,11 +589,16 @@ try {
           workerActions,
           screenshotKiB: Number((screenshotBytes / 1024).toFixed(2)),
           screenshotDimensions,
-          screenshotSource: screenshotFixture ? 'png-fixture' : 'synthetic',
+          screenshotSource: screenshotFile
+            ? 'png-fixture'
+            : workerModelMode === 'real'
+              ? 'synthetic-png'
+              : 'synthetic-bytes',
           monitoringCalls,
           monitoringResultKiB: monitoringResultBytes / 1024,
           idleMs,
           settleMs,
+          runTimeoutMs,
         },
         initial,
         samples,

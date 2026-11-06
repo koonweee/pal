@@ -1,4 +1,6 @@
 import { Session } from 'node:inspector';
+import { Session as PromiseSession } from 'node:inspector/promises';
+import type { Runtime } from 'node:inspector';
 import { getHeapSpaceStatistics, getHeapStatistics } from 'node:v8';
 
 const FIVE_MINUTES_MS = 300_000;
@@ -30,6 +32,120 @@ type MemoryCounters = {
   largeObjectSpaceUsedBytes: number;
   largeObjectSpaceSizeBytes: number;
 };
+
+type HeapAllocationProfileEntry = {
+  sampledBytes: number;
+  functionName: string;
+  source: string;
+  lineNumber: number;
+  columnNumber: number;
+  allocationStack: string;
+};
+
+export type HeapAllocationProfiler = {
+  sample(): Promise<HeapAllocationProfileEntry[]>;
+  close(): void;
+};
+
+function allocationLocation(frame: Runtime.CallFrame) {
+  const functionName =
+    frame.functionName.replace(/[^\w$<>. -]/g, '?').slice(0, 80) ||
+    '(anonymous)';
+  const path = (() => {
+    try {
+      return new URL(frame.url).pathname;
+    } catch {
+      return frame.url;
+    }
+  })();
+  const source =
+    path
+      .split('/')
+      .filter(Boolean)
+      .slice(-4)
+      .join('/')
+      .replace(/[^\w@.+/=-]/g, '?')
+      .slice(-160) || '(native)';
+  return {
+    functionName,
+    source,
+    lineNumber: frame.lineNumber + 1,
+    columnNumber: frame.columnNumber + 1,
+    label: `${functionName}@${source}:${frame.lineNumber + 1}`,
+  };
+}
+
+export async function createHeapAllocationProfiler(
+  samplingInterval = 512 * 1024,
+): Promise<HeapAllocationProfiler> {
+  const session = new PromiseSession();
+  let connected = false;
+  let stopped = false;
+  const disconnect = () => {
+    if (!connected) return;
+    connected = false;
+    session.disconnect();
+  };
+  try {
+    session.connect();
+    connected = true;
+    await session.post('HeapProfiler.enable');
+    await session.post('HeapProfiler.startSampling', { samplingInterval });
+  } catch (error) {
+    await new Promise<void>((resolve) =>
+      setImmediate(() => {
+        disconnect();
+        resolve();
+      }),
+    );
+    throw error;
+  }
+
+  return {
+    async sample() {
+      const { profile } = await session.post('HeapProfiler.stopSampling');
+      stopped = true;
+      await new Promise<void>((resolve) =>
+        setImmediate(() => {
+          disconnect();
+          resolve();
+        }),
+      );
+      const entries: HeapAllocationProfileEntry[] = [];
+      const visit = (node: typeof profile.head, stack: Runtime.CallFrame[]) => {
+        const nextStack = [...stack, node.callFrame];
+        if (node.selfSize > 0) {
+          const location = allocationLocation(node.callFrame);
+          entries.push({
+            sampledBytes: node.selfSize,
+            functionName: location.functionName,
+            source: location.source,
+            lineNumber: location.lineNumber,
+            columnNumber: location.columnNumber,
+            allocationStack: nextStack
+              .slice(-6)
+              .map((frame) => allocationLocation(frame).label)
+              .join(' <- ')
+              .slice(-1_000),
+          });
+        }
+        for (const child of node.children) visit(child, nextStack);
+      };
+      visit(profile.head, []);
+      return entries
+        .sort((left, right) => right.sampledBytes - left.sampledBytes)
+        .slice(0, 12);
+    },
+    close() {
+      if (stopped) return;
+      stopped = true;
+      void session
+        .post('HeapProfiler.stopSampling')
+        .catch(() => undefined)
+        .finally(() => setImmediate(disconnect));
+    },
+  };
+}
 
 function readMemoryCounters(): MemoryCounters {
   const usage = process.memoryUsage();
@@ -106,6 +222,7 @@ export class RuntimeMemoryTelemetry {
     private readonly settleDelayMs = 30_000,
     private readonly read = readMemoryCounters,
     private readonly forceGarbageCollection = collectGarbage,
+    private readonly heapAllocationProfiler?: HeapAllocationProfiler,
   ) {}
 
   start(context: RuntimeMemoryContext) {
@@ -135,6 +252,7 @@ export class RuntimeMemoryTelemetry {
     this.timers.clear();
     this.cancelIdleSamples();
     this.active.clear();
+    this.heapAllocationProfiler?.close();
   }
 
   private scheduleIdleSamples() {
@@ -157,7 +275,10 @@ export class RuntimeMemoryTelemetry {
         ) {
           this.forcedGcAttempted = true;
           void this.forceGarbageCollection().then(
-            () => this.recordForcedGcSample('idle_gc'),
+            () => {
+              this.recordForcedGcSample('idle_gc');
+              void this.recordHeapAllocationProfile();
+            },
             () => this.recordForcedGcSample('idle_gc_failed'),
           );
         }
@@ -182,6 +303,31 @@ export class RuntimeMemoryTelemetry {
       activeWorkerRuns: active.filter((run) => run.role === 'worker').length,
       ...this.read(),
     });
+  }
+
+  private async recordHeapAllocationProfile() {
+    if (!this.heapAllocationProfiler || this.closed) return;
+    try {
+      const entries = await this.heapAllocationProfiler.sample();
+      if (this.closed) return;
+      this.record({
+        phase: 'idle_gc_profile',
+        profileEntries: entries.length,
+        topSampledBytes: entries.reduce(
+          (total, entry) => total + entry.sampledBytes,
+          0,
+        ),
+      });
+      entries.forEach((entry, index) =>
+        this.record({
+          phase: 'idle_gc_profile_entry',
+          profileRank: index + 1,
+          ...entry,
+        }),
+      );
+    } catch {
+      if (!this.closed) this.record({ phase: 'idle_gc_profile_failed' });
+    }
   }
 
   private sample(

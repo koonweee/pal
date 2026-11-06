@@ -184,6 +184,59 @@ it('forces garbage collection once after a high five-minute idle sample', async 
   expect(forceGarbageCollection).toHaveBeenCalledTimes(1);
 });
 
+it('records top allocation sites after successful high-idle collection', async () => {
+  vi.useFakeTimers();
+  const samples: Record<string, unknown>[] = [];
+  const high = { ...counters, heapUsedBytes: 512 * 1024 * 1024 };
+  const profiler = {
+    sample: vi.fn(async () => [
+      {
+        sampledBytes: 4096,
+        functionName: 'retainOutput',
+        source: 'dist/agent/worker.js',
+        lineNumber: 42,
+        columnNumber: 7,
+        allocationStack:
+          'run@dist/agent/task.js:21 <- retainOutput@dist/agent/worker.js:42',
+      },
+    ]),
+    close: vi.fn(),
+  };
+  const telemetry = new RuntimeMemoryTelemetry(
+    (sample) => samples.push(sample),
+    30_000,
+    () => high,
+    async () => {},
+    profiler,
+  );
+
+  telemetry.start({ key: 'task:run', role: 'task', runId: 'run' });
+  telemetry.finish('task:run');
+  await vi.advanceTimersByTimeAsync(300_000);
+
+  expect(samples.slice(-3)).toEqual([
+    expect.objectContaining({ phase: 'idle_gc' }),
+    {
+      phase: 'idle_gc_profile',
+      profileEntries: 1,
+      topSampledBytes: 4096,
+    },
+    {
+      phase: 'idle_gc_profile_entry',
+      profileRank: 1,
+      sampledBytes: 4096,
+      functionName: 'retainOutput',
+      source: 'dist/agent/worker.js',
+      lineNumber: 42,
+      columnNumber: 7,
+      allocationStack:
+        'run@dist/agent/task.js:21 <- retainOutput@dist/agent/worker.js:42',
+    },
+  ]);
+  telemetry.close();
+  expect(profiler.close).toHaveBeenCalledOnce();
+});
+
 it('cancels stale idle samples and restarts delays after new work finishes', () => {
   vi.useFakeTimers();
   const samples: Record<string, unknown>[] = [];
@@ -212,7 +265,7 @@ it('cancels stale idle samples and restarts delays after new work finishes', () 
   ]);
 });
 
-it('completes real inspector collection and keeps the event loop responsive', () => {
+it('completes real inspector collection and allocation sampling without exposing values', () => {
   const moduleUrl = new URL(
     '../dist/agent/runtime-memory-telemetry.js',
     import.meta.url,
@@ -224,23 +277,35 @@ it('completes real inspector collection and keeps the event loop responsive', ()
       '-e',
       `
     import { setTimeout } from 'node:timers';
-    import { RuntimeMemoryTelemetry } from ${JSON.stringify(moduleUrl)};
+    import { createHeapAllocationProfiler, RuntimeMemoryTelemetry } from ${JSON.stringify(moduleUrl)};
     globalThis.setTimeout = (callback, delay, ...args) =>
       setTimeout(callback, Math.min(delay, 50), ...args);
     const keepAlive = setInterval(() => {}, 1000);
+    const profiler = await createHeapAllocationProfiler(32 * 1024);
+    globalThis.retainedProbe = Array.from(
+      { length: 20_000 },
+      (_, index) => ('retained-value-' + index).padEnd(4096, 'x'),
+    );
+    let profileEntries = 0;
+    let completed = false;
     const telemetry = new RuntimeMemoryTelemetry((sample) => {
       if (sample.phase === 'idle_gc_failed') throw new Error('Collection failed');
-      if (sample.phase === 'idle_gc') {
+      if (sample.phase === 'idle_gc_profile') profileEntries = sample.profileEntries;
+      if (sample.phase === 'idle_gc_profile_entry' && !completed) {
+        completed = true;
+        if (!profileEntries) throw new Error('Allocation profile is empty');
+        if (sample.allocationStack.includes('retained-value-'))
+          throw new Error('Allocation profile exposed a retained value');
         telemetry.close();
         clearInterval(keepAlive);
-        setTimeout(() => console.log('collection complete; event loop responsive'), 0);
+        setTimeout(() => console.log('collection and profile complete'), 0);
       }
-    }, 30_000, () => (${JSON.stringify({ ...counters, heapUsedBytes: 512 * 1024 * 1024 })}));
+    }, 30_000, () => (${JSON.stringify({ ...counters, heapUsedBytes: 512 * 1024 * 1024 })}), undefined, profiler);
     telemetry.start({ key: 'task:probe', role: 'task', runId: 'probe' });
     telemetry.finish('task:probe');
   `,
     ],
     { encoding: 'utf8', timeout: 5000, killSignal: 'SIGKILL' },
   );
-  expect(output.trim()).toBe('collection complete; event loop responsive');
+  expect(output.trim()).toBe('collection and profile complete');
 });

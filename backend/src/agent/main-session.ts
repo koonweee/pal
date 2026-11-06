@@ -39,7 +39,10 @@ import {
   type PublicOutput,
   type PublicResponse,
 } from './public-output.js';
-import { RuntimeMemoryTelemetry } from './runtime-memory-telemetry.js';
+import {
+  createHeapAllocationProfiler,
+  RuntimeMemoryTelemetry,
+} from './runtime-memory-telemetry.js';
 
 export const MAIN_RESOURCE_ID = 'pal-owner';
 export const MAIN_THREAD_ID = 'pal-main';
@@ -113,8 +116,15 @@ export async function createMainSession(options: {
       configurable: true,
     });
   const telemetry = new RunTelemetry(options.releaseId);
-  const runtimeMemory = new RuntimeMemoryTelemetry((data) =>
-    telemetry.record('pal.memory.sample', data),
+  const heapAllocationProfiler = await createHeapAllocationProfiler().catch(
+    () => undefined,
+  );
+  const runtimeMemory = new RuntimeMemoryTelemetry(
+    (data) => telemetry.record('pal.memory.sample', data),
+    30_000,
+    undefined,
+    undefined,
+    heapAllocationProfiler,
   );
   const storage = new PostgresStoreVNext({
     id: 'pal-main-storage',
