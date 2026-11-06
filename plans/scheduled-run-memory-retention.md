@@ -74,6 +74,11 @@ Exit criteria:
 
 - Production has enough headroom to capture the next large request sequence, and each provider call can be correlated with request composition and current process memory.
 
+Validation evidence:
+
+- Source `3cf6615` is deployed to `agent-service` with 4096 MiB Node old-space and a 6 GiB container limit. The replacement is healthy with zero restarts or OOM state, and every retained dependency container kept its identity.
+- No model boundary occurred during the first two production minutes, so the first live `pal.model.request` storage sample remains a follow-up observation. The focused persistence test verifies the event's numeric field allowlist and strips sentinel content.
+
 ### 4. Define and validate the fix
 
 Implementation tasks:
