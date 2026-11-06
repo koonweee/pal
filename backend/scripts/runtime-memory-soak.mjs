@@ -1,8 +1,10 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { getHeapSpaceStatistics } from 'node:v8';
 import { Pool } from 'pg';
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
+import { createOpenAI } from '@ai-sdk/openai';
 import { createTool } from '@mastra/core/tools';
 import {
   MASTRA_RESOURCE_ID_KEY,
@@ -13,6 +15,8 @@ import {
   createMainSession,
   MAIN_RESOURCE_ID,
 } from '../dist/agent/main-session.js';
+import { createMemoryOptions } from '../dist/agent/memory-options.js';
+import { chatgptModel } from '../dist/agent/chatgpt-model.js';
 import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
 
 const value = (name, fallback) => {
@@ -22,6 +26,9 @@ const value = (name, fallback) => {
 const scenario = value('scenario', 'combined');
 const cycles = Number(value('cycles', '12'));
 const gcMode = value('gc', 'end');
+const consumption = value('consumption', 'full-output');
+const memoryMode = value('memory', 'simple');
+const workerModelMode = value('worker-model', 'mock');
 const settleMs = Number(value('settle-ms', '0'));
 const workerActions = Number(value('worker-actions', '30'));
 const screenshotKib = Number(value('screenshot-kib', '320'));
@@ -32,6 +39,20 @@ if (!Number.isSafeInteger(cycles) || cycles < 1 || cycles > 50)
   throw new Error('cycles must be an integer from 1 to 50');
 if (!['end', 'each'].includes(gcMode))
   throw new Error('gc must be end or each');
+if (!['full-output', 'full-stream', 'accepted-only'].includes(consumption))
+  throw new Error(
+    'consumption must be full-output, full-stream, or accepted-only',
+  );
+if (!['simple', 'observational'].includes(memoryMode))
+  throw new Error('memory must be simple or observational');
+if (
+  !['mock', 'provider-fixture', 'provider-http', 'real'].includes(
+    workerModelMode,
+  )
+)
+  throw new Error(
+    'worker-model must be mock, provider-fixture, provider-http, or real',
+  );
 if (!Number.isSafeInteger(settleMs) || settleMs < 0 || settleMs > 60_000)
   throw new Error('settle-ms must be an integer from 0 to 60000');
 if (
@@ -66,6 +87,8 @@ if (
 )
   throw new Error('screenshot-file must be a PNG image');
 const screenshotBytes = screenshotFixture?.byteLength ?? screenshotKib * 1024;
+if (workerModelMode === 'real' && !screenshotFixture)
+  throw new Error('worker-model=real requires screenshot-file');
 const screenshotDimensions = screenshotFixture
   ? {
       width: screenshotFixture.readUInt32BE(16),
@@ -167,6 +190,146 @@ const workerModel = new MockLanguageModelV3({
     };
   },
 });
+let providerFixtureCalls = 0;
+const providerFixtureStream = (body) => {
+  providerFixtureCalls += 1;
+  const serialized = JSON.stringify(body.input ?? []);
+  const runTag = tag(serialized);
+  const completedActions = Array.isArray(body.input)
+    ? body.input.filter((item) => item?.type === 'function_call_output').length
+    : 0;
+  const responseId = `response-${runTag}-${completedActions + 1}`;
+  const events = [
+    {
+      type: 'response.created',
+      response: {
+        id: responseId,
+        created_at: Math.floor(Date.now() / 1000),
+        model: 'gpt-6.1-terra',
+      },
+    },
+  ];
+  if (completedActions < workerActions) {
+    const action = completedActions + 1;
+    const callId = `${runTag}-action-${action}`;
+    const item = {
+      type: 'function_call',
+      id: `item-${callId}`,
+      call_id: callId,
+      name: 'screenshot_action',
+      arguments: JSON.stringify({ runTag, index: action }),
+    };
+    events.push(
+      { type: 'response.output_item.added', output_index: 0, item },
+      {
+        type: 'response.output_item.done',
+        output_index: 0,
+        item: { ...item, status: 'completed' },
+      },
+    );
+  } else {
+    const itemId = `message-${runTag}`;
+    events.push(
+      {
+        type: 'response.output_item.added',
+        output_index: 0,
+        item: { type: 'message', id: itemId, phase: 'final_answer' },
+      },
+      {
+        type: 'response.output_text.delta',
+        item_id: itemId,
+        delta: `verified findings for ${runTag}`,
+      },
+      {
+        type: 'response.output_item.done',
+        output_index: 0,
+        item: { type: 'message', id: itemId, phase: 'final_answer' },
+      },
+    );
+  }
+  events.push({
+    type: 'response.completed',
+    response: {
+      usage: {
+        input_tokens: 1,
+        output_tokens: 1,
+        total_tokens: 2,
+      },
+    },
+  });
+  const stream = events
+    .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+    .join('');
+  return stream;
+};
+let providerHttpServer;
+let providerHttpBaseUrl;
+if (workerModelMode === 'provider-http') {
+  providerHttpServer = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    response.writeHead(200, { 'content-type': 'text/event-stream' });
+    response.end(providerFixtureStream(body));
+  });
+  await new Promise((resolve, reject) => {
+    providerHttpServer.once('error', reject);
+    providerHttpServer.listen(0, '127.0.0.1', resolve);
+  });
+  const address = providerHttpServer.address();
+  if (!address || typeof address === 'string')
+    throw new Error('Provider fixture server did not bind a TCP port');
+  providerHttpBaseUrl = `http://127.0.0.1:${address.port}/v1`;
+}
+const providerFixture = createOpenAI({
+  apiKey: 'fixture',
+  ...(providerHttpBaseUrl ? { baseURL: providerHttpBaseUrl } : {}),
+  ...(workerModelMode === 'provider-fixture'
+    ? {
+        fetch: async (url, init) => {
+          const request = new Request(url, init);
+          const forwarded = new Request(request.url, {
+            method: request.method,
+            headers: request.headers,
+            body: request.body,
+            signal: request.signal,
+            ...(request.body ? { duplex: 'half' } : {}),
+          });
+          const body = JSON.parse(await forwarded.text());
+          const stream = providerFixtureStream(body);
+          return new Response(stream, {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        },
+      }
+    : {}),
+});
+const selectedWorkerModel =
+  workerModelMode === 'real'
+    ? chatgptModel(
+        'gpt-6.1-terra',
+        process.env.PAL_AGENT_AUTH_PATH ?? '',
+        'medium',
+      )
+    : workerModelMode === 'provider-fixture' ||
+        workerModelMode === 'provider-http'
+      ? providerFixture.responses('gpt-6.1-terra')
+      : workerModel;
+let memoryCalls = 0;
+const memoryModel = new MockLanguageModelV3({
+  modelId: 'memory-soak-observer',
+  doStream: async () => ({
+    stream: simulateReadableStream({
+      chunks: [
+        ...text(
+          `<observations>Completed recurring fixture cycle ${++memoryCalls}.</observations><current-task>Continue recurring fixture checks.</current-task>`,
+        ),
+        finish(),
+      ],
+    }),
+  }),
+});
 
 const memory = () => {
   const usage = process.memoryUsage();
@@ -206,11 +369,14 @@ try {
     connectionString: databaseUrl,
     schemaName: schema,
     model: taskModel,
-    memoryOptions: {
-      lastMessages: 20,
-      semanticRecall: false,
-      workingMemory: { enabled: false },
-    },
+    memoryOptions:
+      memoryMode === 'observational'
+        ? await createMemoryOptions(memoryModel)
+        : {
+            lastMessages: 20,
+            semanticRecall: false,
+            workingMemory: { enabled: false },
+          },
     publish: async () => {},
     onEvent: () => {},
     task: {
@@ -231,8 +397,11 @@ try {
       publish: async () => {},
       worker: {
         coordinator: new InteractionCoordinator(),
-        model: workerModel,
-        instructions: 'Use one visual action at a time and return findings.',
+        model: selectedWorkerModel,
+        instructions:
+          workerModelMode === 'real'
+            ? `Call screenshot_action exactly ${workerActions} times sequentially, then return a short completion. Do not stop early.`
+            : 'Use one visual action at a time and return findings.',
         tools: {
           screenshot_action: createTool({
             id: 'screenshot_action',
@@ -275,9 +444,28 @@ try {
     }).accepted;
     if (accepted.action !== 'wake')
       throw new Error(`Expected wake, received ${accepted.action}`);
+    if (consumption === 'accepted-only') {
+      const deadline = Date.now() + 30_000;
+      while (
+        main.taskAgent
+          .listActiveThreadRuns()
+          .some((run) => run.runId === accepted.runId)
+      ) {
+        if (Date.now() >= deadline)
+          throw new Error(`Timed out waiting for ${accepted.runId}`);
+        await wait(10);
+      }
+      return;
+    }
     outputs.add(accepted.output);
     try {
-      await accepted.output.getFullOutput();
+      if (consumption === 'full-stream') {
+        for await (const _part of accepted.output.fullStream) {
+          // Production consumes the stream to completion without retaining parts.
+        }
+      } else {
+        await accepted.output.getFullOutput();
+      }
     } finally {
       outputs.delete(accepted.output);
     }
@@ -299,6 +487,7 @@ try {
     await Promise.all(work);
     taskModel.doStreamCalls.length = 0;
     workerModel.doStreamCalls.length = 0;
+    memoryModel.doStreamCalls.length = 0;
     clearInterval(sampler);
     const completed = memory();
     await wait(idleMs);
@@ -346,6 +535,11 @@ try {
         scenario,
         cycles,
         gcMode,
+        consumption,
+        memoryMode,
+        memoryCalls,
+        workerModelMode,
+        providerFixtureCalls,
         conditions: {
           workerActions,
           screenshotKiB: Number((screenshotBytes / 1024).toFixed(2)),
@@ -366,11 +560,19 @@ try {
     ),
   );
 } finally {
+  for (const run of main?.taskAgent?.listActiveThreadRuns() ?? [])
+    main.taskAgent.abortRunStream(run.runId);
   for (const output of outputs) main?.taskAgent?.abortRunStream(output.runId);
   await Promise.allSettled(
     [...outputs].map((output) => output.getFullOutput()),
   );
   await main?.close();
+  if (providerHttpServer) {
+    providerHttpServer.closeIdleConnections();
+    await new Promise((resolve, reject) => {
+      providerHttpServer.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
   const cleanup = new Pool({ connectionString: databaseUrl });
   try {
     await cleanup.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
