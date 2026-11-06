@@ -8,7 +8,7 @@ import type { InteractionCoordinator } from '../interaction/interaction-coordina
 import type { LoginService } from '../login/login.service.js';
 import { loginTools } from '../login/login-tools.js';
 import { loadAgentInstructions } from './agent-instructions.js';
-import { chatgptModel } from './chatgpt-model.js';
+import { chatgptModel, type ModelRequestMeasurement } from './chatgpt-model.js';
 import { CodeModeProcessor } from './code-mode.processor.js';
 import { interactionHistoryProcessor } from './interaction-history.processor.js';
 import { InteractionToolsProcessor } from './interaction-tools.processor.js';
@@ -25,6 +25,7 @@ export async function interactionSession(
   android: AndroidService,
   login: LoginService,
   coordinator: InteractionCoordinator,
+  onModelRequest?: (measurement: ModelRequestMeasurement) => void,
 ) {
   const instructions = await loadAgentInstructions('worker');
   const logger = new Logger('InteractionSession');
@@ -34,6 +35,7 @@ export async function interactionSession(
       'gpt-6.1-terra',
       config.getOrThrow<string>('PAL_AGENT_AUTH_PATH'),
       'medium',
+      { role: 'worker', onRequest: onModelRequest },
     ),
     instructions: () =>
       instructions +

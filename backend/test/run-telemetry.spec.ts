@@ -173,7 +173,7 @@ it('persists selective native run and code-mode evidence readable without schema
         input: { password: sentinel },
         attributes: { nested: { secret: sentinel } },
         metadata: { nested: { secret: sentinel } },
-    });
+      });
     injected.error({ error: Error(sentinel), endSpan: true });
     main.telemetry.record('pal.memory.sample', {
       phase: 'idle',
@@ -182,6 +182,14 @@ it('persists selective native run and code-mode evidence readable without schema
       activeWorkerRuns: 0,
       rssBytes: 101,
       heapUsedBytes: 102,
+    });
+    main.telemetry.record('pal.model.request', {
+      role: 'task',
+      messageCount: 12,
+      imagePartCount: 3,
+      estimatedRequestBytes: 456,
+      promptBytes: 400,
+      secret: sentinel,
     });
     await main.telemetry.observability.flush();
     expect(publications).toEqual(['Unstructured fixture response']);
@@ -269,6 +277,18 @@ it('persists selective native run and code-mode evidence readable without schema
         ),
       ).toBe(true);
       expect(
+        logs.logs.some(
+          (log) =>
+            log.message === 'pal.model.request' &&
+            log.data?.role === 'task' &&
+            log.data?.messageCount === 12 &&
+            log.data?.imagePartCount === 3 &&
+            log.data?.estimatedRequestBytes === 456 &&
+            log.data?.promptBytes === 400 &&
+            log.data?.secret === undefined,
+        ),
+      ).toBe(true);
+      expect(
         logs.logs.some((log) => log.message === 'pal.output.fallback'),
       ).toBe(true);
       expect(
@@ -290,7 +310,7 @@ it('persists selective native run and code-mode evidence readable without schema
             log.data?.heapUsedBytes === 102 &&
             log.data?.runId === undefined &&
             log.data?.taskId === undefined &&
-            log.data?.workerId === undefined
+            log.data?.workerId === undefined,
         ),
       ).toBe(true);
       expect(JSON.stringify({ traces, trace, logs })).not.toContain(sentinel);

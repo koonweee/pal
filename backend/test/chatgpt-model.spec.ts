@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { jsonSchema } from 'ai';
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
+import { measureModelRequest } from '../dist/agent/chatgpt-model.js';
 
 it('preserves parallel completed-call arguments when argument deltas are absent', async () => {
   const received: string[] = [];
@@ -78,4 +79,87 @@ it('preserves parallel completed-call arguments when argument deltas are absent'
   expect(received.sort()).toEqual(['first', 'second']);
   expect(result.text).toBe('Checking both.');
   expect(result.steps[0].toolCalls).toHaveLength(2);
+});
+
+it('measures model request composition without retaining request content', () => {
+  const sentinel = 'model-request-secret';
+  const measurement = measureModelRequest({
+    prompt: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: `Hello ${sentinel}` },
+          {
+            type: 'file',
+            data: new Uint8Array([1, 2, 3]),
+            mediaType: 'image/png',
+          },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-1',
+            toolName: 'inspect',
+            input: { query: sentinel },
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-1',
+            toolName: 'inspect',
+            output: {
+              type: 'content',
+              value: [
+                {
+                  type: 'image-data',
+                  data: 'AQID',
+                  mediaType: 'image/png',
+                },
+                { type: 'text', text: `Result ${sentinel}` },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+    headers: { 'session-id': 'pal-task:fixture' },
+    tools: [
+      {
+        type: 'function',
+        name: 'inspect',
+        description: sentinel,
+        inputSchema: {
+          type: 'object',
+          properties: { query: { type: 'string' } },
+        },
+      },
+    ],
+    providerOptions: {
+      openai: { instructions: `Instructions ${sentinel}`, store: false },
+    },
+  });
+
+  expect(measurement).toMatchObject({
+    role: 'task',
+    messageCount: 2,
+    contentPartCount: 6,
+    textPartCount: 2,
+    reasoningPartCount: 0,
+    imagePartCount: 2,
+    filePartCount: 1,
+    toolCallPartCount: 1,
+    toolResultPartCount: 1,
+    toolDefinitionCount: 1,
+  });
+  expect(measurement.estimatedRequestBytes).toBeGreaterThan(
+    measurement.promptBytes,
+  );
+  expect(measurement.instructionsBytes).toBeGreaterThan(0);
+  expect(measurement.imageBytes).toBeGreaterThan(0);
+  expect(measurement.toolCallBytes).toBeGreaterThan(0);
+  expect(measurement.toolResultBytes).toBeGreaterThan(0);
+  expect(measurement.toolDefinitionBytes).toBeGreaterThan(0);
+  expect(JSON.stringify(measurement)).not.toContain(sentinel);
 });

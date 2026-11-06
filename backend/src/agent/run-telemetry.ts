@@ -97,6 +97,23 @@ const countKeys = [
   'sampledBytes',
   'lineNumber',
   'columnNumber',
+  'messageCount',
+  'contentPartCount',
+  'textPartCount',
+  'reasoningPartCount',
+  'imagePartCount',
+  'filePartCount',
+  'toolCallPartCount',
+  'toolResultPartCount',
+  'toolDefinitionCount',
+  'estimatedRequestBytes',
+  'promptBytes',
+  'instructionsBytes',
+  'textBytes',
+  'imageBytes',
+  'toolCallBytes',
+  'toolResultBytes',
+  'toolDefinitionBytes',
 ];
 const memoryEvents = new Set([
   'data-om-observation-start',
@@ -117,6 +134,7 @@ const palEvents = new Set([
   'pal.interaction.acquired',
   'pal.interaction.released',
   'pal.memory.sample',
+  'pal.model.request',
 ]);
 
 function object(value: unknown): Record<string, unknown> {

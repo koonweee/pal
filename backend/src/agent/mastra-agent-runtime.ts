@@ -41,7 +41,7 @@ import { messageVisibleInChat } from '../chat/chat.types.js';
 import { AgentHandoffError, type AgentRuntime } from './agent-runtime.js';
 import { AgentActivityService } from './agent-activity.service.js';
 import { TaskToolDiscoveryProcessor } from './task-tool-discovery.processor.js';
-import { chatgptModel } from './chatgpt-model.js';
+import { chatgptModel, type ModelRequestMeasurement } from './chatgpt-model.js';
 import { SharedBrowserService as BrowserService } from '../browser/shared-browser.service.js';
 import { InteractionCoordinator } from '../interaction/interaction-coordinator.js';
 import { PreferencesService } from '../preferences/preferences.service.js';
@@ -89,6 +89,20 @@ export class MastraAgentRuntime
   private generationFailed = false;
   private readonly publications = new Set<Promise<void>>();
   private readonly taskRuns = new Set<Promise<void>>();
+
+  private readonly recordModelRequest = (
+    measurement: ModelRequestMeasurement,
+  ) => {
+    const memory = process.memoryUsage();
+    this.main?.telemetry.record('pal.model.request', {
+      ...measurement,
+      rssBytes: memory.rss,
+      heapUsedBytes: memory.heapUsed,
+      heapTotalBytes: memory.heapTotal,
+      externalBytes: memory.external,
+      arrayBuffersBytes: memory.arrayBuffers,
+    });
+  };
 
   constructor(
     @Inject(ConfigService) private readonly config: ConfigService,
@@ -139,6 +153,7 @@ export class MastraAgentRuntime
       this.android,
       this.login,
       this.interactions,
+      this.recordModelRequest,
     );
     this.main = await createMainSession({
       releaseId: this.config.get<string>('PAL_RELEASE_ID'),
@@ -165,6 +180,7 @@ export class MastraAgentRuntime
         this.config.getOrThrow<string>('PAL_AGENT_MODEL'),
         this.config.getOrThrow<string>('PAL_AGENT_AUTH_PATH'),
         this.config.getOrThrow<string>('PAL_AGENT_THINKING_EFFORT'),
+        { onRequest: this.recordModelRequest },
       ),
       // Keep Main's tool set focused on routing to preserve fast acknowledgments.
       tools: {
