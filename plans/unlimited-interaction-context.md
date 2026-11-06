@@ -95,3 +95,11 @@ cd ..
 - A three-cycle OpenAI Responses provider fixture produced the same result: final forced GC measured 473 MiB RSS, 82 MiB heap used, and 16 MiB large-object space.
 - The protected development stack was rebuilt and is healthy. The execution container, Android sidecar, and persistent volumes were preserved.
 - Exclusive interaction acceptance could not start because `adb devices` reported no connected phone; the runner restored the healthy dev backend. This does not block the automated context and retention coverage.
+
+## Production Rollout
+
+- Pal source `fe50e8e1e79008bf66f70f4986566b066321ada3` produced Linux AMD64 image `ghcr.io/koonweee/pal:fe50e8e@sha256:417fbb863cd425dff409b22da4ccd2c84a8ce87efbd3ec802891410593afa3c0` in Build update `6aed6e5cc7c3aa9585156a2c`.
+- Stack v2 `eb07b5f` changed only the agent-service image. Targeted pull `6aed70fa2ef4de9d290d2f22` and deploy `6aed71452ef4de9d290d2f2e` succeeded with temporary `--no-deps`; normal Stack arguments are restored.
+- Agent-service is healthy with zero restarts and no OOM, fatal, uncaught, ENOMEM, or startup-error markers. Web, execution, PostgreSQL, Google MCP, Android, and egress retained their exact container identities. All 52 tasks and 2,692 pre-nudge public messages were retained.
+- The running image contains the two-step visual `ToolCallFilter` and worker Observational Memory with historical recall and attachment observation disabled. A live resumed interaction showed completed computer-tool and observation cycles while the backend used 548 MiB of its 4 GiB limit.
+- Seven older in-progress tasks are active scheduled monitors. One unscheduled Gap return run lost its terminal span during the preceding crash; idempotent message `#2695` resumed it as run `d8401a08-fbef-482d-8c3a-54708e7189c1`, which produced new completed tool and memory spans after deployment.
