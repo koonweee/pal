@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+Complete
 
 ## Goal
 
@@ -66,3 +66,10 @@ npm run lint
 - Interaction workers retain unlimited turns and complete non-image tool evidence.
 - Raw screenshot bytes leave active Mastra history after one tool/model boundary.
 - Production task resumption remains below the configured memory limits without a new crash.
+
+## Evidence
+
+- Backend build, lint, and four focused processor tests passed. A 12-cycle, 360-screenshot disk-backed soak held post-GC heap at 80.9–82.7 MiB and large-object space at 16.48 MiB.
+- Production runs kept worker model requests to one image and at most 0.8 MiB estimated request size while preserving unlimited turns.
+- Four concurrent task runs and three resident workers remained below 1.7 GiB of the 6 GiB container limit. After a 20-minute visual run completed, heap fell from 1.12 GiB to 241 MiB and RSS to 688 MiB while two workers remained resident.
+- The deployed container stayed healthy with no restart, OOM, or fatal runtime signal.
