@@ -3,6 +3,7 @@ import { noopObserve, createTool, type Tool } from '@mastra/core/tools';
 import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import type { ProcessInputStepArgs } from '@mastra/core/processors';
 import { InteractionToolsProcessor } from '../dist/agent/interaction-tools.processor.js';
+import { InteractionVisualArtifactsProcessor } from '../dist/agent/interaction-visual-artifacts.processor.js';
 import { interactionHistoryProcessor } from '../dist/agent/interaction-history.processor.js';
 import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
 import { X11Computer } from '../dist/agent/x11-computer.js';
@@ -11,6 +12,101 @@ import {
   PARENT_TASK_ID,
   WORKER_ID,
 } from '../dist/agent/task-workers.js';
+
+it('externalizes completed screenshots and transiently hydrates only the newest image', async () => {
+  const ids = [
+    '00000000-0000-4000-8000-000000000001',
+    '00000000-0000-4000-8000-000000000002',
+  ];
+  const stored = new Map<string, Buffer>();
+  const files = {
+    upload: vi.fn(async ({ stream }: { stream: AsyncIterable<Buffer> }) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+      const id = ids[stored.size];
+      stored.set(id, Buffer.concat(chunks));
+      return { id };
+    }),
+    content: vi.fn(async (id: string) => ({
+      file: { contentType: 'image/png' },
+      handle: {
+        readFile: async () => stored.get(id)!,
+        close: async () => {},
+      },
+    })),
+  };
+  const screenshot = WORKSPACE_TOOLS.COMPUTER.SCREENSHOT;
+  const images = [Buffer.from('old image'), Buffer.from('new image')].map(
+    (bytes) => bytes.toString('base64'),
+  );
+  const parts = images.map((data, index) => ({
+    type: 'tool-invocation',
+    toolInvocation: {
+      state: 'result',
+      toolCallId: `visual-${index}`,
+      toolName: screenshot,
+      args: {},
+      result: {
+        __workspaceMedia: true,
+        text: `screenshot ${index}`,
+        mediaType: 'image/png',
+        data,
+      },
+    },
+    providerMetadata: {
+      mastra: {
+        modelOutput: {
+          type: 'content',
+          value: [{ type: 'media', mediaType: 'image/png', data }],
+        },
+      },
+    },
+  }));
+  const message = {
+    role: 'assistant',
+    content: { format: 2, parts },
+  };
+  const messageList = {
+    get: { all: { db: () => [message] } },
+    updateToolInvocation: (next: (typeof parts)[number]) => {
+      const index = parts.findIndex(
+        (part) =>
+          part.toolInvocation.toolCallId === next.toolInvocation.toolCallId,
+      );
+      parts[index] = next;
+      return true;
+    },
+  };
+  const steps = [{ toolResults: structuredClone(parts) }];
+  const processor = new InteractionVisualArtifactsProcessor(files as never);
+
+  await processor.processInputStep({ messageList, steps } as never);
+
+  expect(files.upload).toHaveBeenCalledTimes(2);
+  expect(JSON.stringify(message)).not.toContain(images[0]);
+  expect(JSON.stringify(message)).not.toContain(images[1]);
+  expect(JSON.stringify(steps)).not.toContain(images[0]);
+  expect(JSON.stringify(steps)).not.toContain(images[1]);
+  const prompt = parts.map((part) => ({
+    role: 'tool' as const,
+    content: [
+      {
+        type: 'tool-result' as const,
+        toolCallId: part.toolInvocation.toolCallId,
+        toolName: screenshot,
+        output: part.providerMetadata.mastra.modelOutput,
+      },
+    ],
+  }));
+  const source = structuredClone(prompt);
+  const hydrated = await processor.processLLMRequest({ prompt } as never);
+
+  expect(prompt).toEqual(source);
+  expect(JSON.stringify(hydrated?.prompt)).toContain(images[1]);
+  expect(JSON.stringify(hydrated?.prompt)).not.toContain(images[0]);
+  expect(files.content).toHaveBeenCalledTimes(1);
+  expect(files.content).toHaveBeenCalledWith(ids[1]);
+});
 
 it('keeps recent visual steps while transiently filtering older images', async () => {
   const processor = interactionHistoryProcessor();

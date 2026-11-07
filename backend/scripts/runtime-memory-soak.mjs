@@ -1,6 +1,8 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { getHeapSpaceStatistics } from 'node:v8';
 import { deflateSync } from 'node:zlib';
 import { Pool } from 'pg';
@@ -21,6 +23,7 @@ import {
   createWorkerMemoryOptions,
 } from '../dist/agent/memory-options.js';
 import { interactionHistoryProcessor } from '../dist/agent/interaction-history.processor.js';
+import { InteractionVisualArtifactsProcessor } from '../dist/agent/interaction-visual-artifacts.processor.js';
 import { chatgptModel } from '../dist/agent/chatgpt-model.js';
 import { InteractionCoordinator } from '../dist/interaction/interaction-coordinator.js';
 
@@ -38,6 +41,7 @@ const settleMs = Number(value('settle-ms', '0'));
 const workerActions = Number(value('worker-actions', '30'));
 const screenshotKib = Number(value('screenshot-kib', '320'));
 const screenshotFile = value('screenshot-file', '');
+const visualArtifacts = value('visual-artifacts', 'false');
 const runTimeoutMs = Number(
   value('run-timeout-ms', workerModelMode === 'real' ? '600000' : '30000'),
 );
@@ -47,6 +51,8 @@ if (!Number.isSafeInteger(cycles) || cycles < 1 || cycles > 50)
   throw new Error('cycles must be an integer from 1 to 50');
 if (!['end', 'each'].includes(gcMode))
   throw new Error('gc must be end or each');
+if (!['true', 'false'].includes(visualArtifacts))
+  throw new Error('visual-artifacts must be true or false');
 if (!['full-output', 'full-stream', 'accepted-only'].includes(consumption))
   throw new Error(
     'consumption must be full-output, full-stream, or accepted-only',
@@ -148,6 +154,25 @@ const monitoringCalls = 27;
 const monitoringResultBytes = 32 * 1024;
 const idleMs = 250;
 const schema = 'pal_memory_soak_' + randomUUID().replaceAll('-', '');
+const artifactDirectory = await mkdtemp(
+  join(tmpdir(), 'pal-memory-soak-artifacts-'),
+);
+const artifactFilesById = new Map();
+const artifactFiles = {
+  upload: async ({ stream }) => {
+    const chunks = [];
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+    const id = randomUUID();
+    const path = join(artifactDirectory, id);
+    await writeFile(path, Buffer.concat(chunks));
+    artifactFilesById.set(id, path);
+    return { id };
+  },
+  content: async (id) => ({
+    file: { contentType: 'image/png' },
+    handle: await open(artifactFilesById.get(id), 'r'),
+  }),
+};
 
 const finish = (toolCalls = false) => ({
   type: 'finish',
@@ -448,7 +473,16 @@ try {
         coordinator: new InteractionCoordinator(),
         model: selectedWorkerModel,
         memoryOptions: await createWorkerMemoryOptions(memoryModel),
-        inputProcessors: [interactionHistoryProcessor(['screenshot_action'])],
+        inputProcessors: [
+          ...(visualArtifacts === 'true'
+            ? [
+                new InteractionVisualArtifactsProcessor(artifactFiles, [
+                  'screenshot_action',
+                ]),
+              ]
+            : []),
+          interactionHistoryProcessor(['screenshot_action']),
+        ],
         instructions:
           workerModelMode === 'real'
             ? `Call screenshot_action exactly ${workerActions} times sequentially, then return a short completion. Do not stop early.`
@@ -592,6 +626,8 @@ try {
         workerModelMode,
         providerFixtureCalls,
         conditions: {
+          visualArtifacts: visualArtifacts === 'true',
+          artifactCount: artifactFilesById.size,
           workerActions,
           screenshotKiB: Number((screenshotBytes / 1024).toFixed(2)),
           screenshotDimensions,
@@ -635,4 +671,5 @@ try {
   } finally {
     await cleanup.end();
   }
+  await rm(artifactDirectory, { recursive: true, force: true });
 }

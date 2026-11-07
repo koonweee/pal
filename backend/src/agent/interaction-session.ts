@@ -4,6 +4,7 @@ import type { AndroidService } from '../android/android.service.js';
 import { androidTools } from '../android/android-tools.js';
 import type { SharedBrowserService } from '../browser/shared-browser.service.js';
 import type { ExecutionService } from '../execution/execution.service.js';
+import type { FilesService } from '../files/files.service.js';
 import type { InteractionCoordinator } from '../interaction/interaction-coordinator.js';
 import type { LoginService } from '../login/login.service.js';
 import { loginTools } from '../login/login-tools.js';
@@ -12,6 +13,7 @@ import { chatgptModel, type ModelRequestMeasurement } from './chatgpt-model.js';
 import { CodeModeProcessor } from './code-mode.processor.js';
 import { interactionHistoryProcessor } from './interaction-history.processor.js';
 import { InteractionToolsProcessor } from './interaction-tools.processor.js';
+import { InteractionVisualArtifactsProcessor } from './interaction-visual-artifacts.processor.js';
 import type { createMainSession } from './main-session.js';
 import { X11Computer } from './x11-computer.js';
 
@@ -24,11 +26,13 @@ export async function interactionSession(
   browser: SharedBrowserService,
   android: AndroidService,
   login: LoginService,
+  files: FilesService,
   coordinator: InteractionCoordinator,
   onModelRequest?: (measurement: ModelRequestMeasurement) => void,
 ) {
   const instructions = await loadAgentInstructions('worker');
   const logger = new Logger('InteractionSession');
+  const visualArtifacts = new InteractionVisualArtifactsProcessor(files);
   const worker: NonNullable<NonNullable<SessionOptions['task']>['worker']> = {
     coordinator,
     model: chatgptModel(
@@ -49,6 +53,7 @@ export async function interactionSession(
     }),
     inputProcessors: [
       new InteractionToolsProcessor(coordinator),
+      visualArtifacts,
       interactionHistoryProcessor(),
       new CodeModeProcessor(),
     ],

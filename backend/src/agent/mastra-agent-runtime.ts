@@ -152,6 +152,7 @@ export class MastraAgentRuntime
       this.browser,
       this.android,
       this.login,
+      this.files,
       this.interactions,
       this.recordModelRequest,
     );
