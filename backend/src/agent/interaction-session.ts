@@ -2,7 +2,10 @@ import { Logger } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { AndroidService } from '../android/android.service.js';
 import { androidTools } from '../android/android-tools.js';
-import type { SharedBrowserService } from '../browser/shared-browser.service.js';
+import type {
+  SharedBrowserService,
+  WorkerBrowserCleanup,
+} from '../browser/shared-browser.service.js';
 import type { ExecutionService } from '../execution/execution.service.js';
 import type { FilesService } from '../files/files.service.js';
 import type { InteractionCoordinator } from '../interaction/interaction-coordinator.js';
@@ -29,6 +32,9 @@ export async function interactionSession(
   files: FilesService,
   coordinator: InteractionCoordinator,
   onModelRequest?: (measurement: ModelRequestMeasurement) => void,
+  onBrowserCleanup?: (
+    measurement: WorkerBrowserCleanup & { failed?: boolean },
+  ) => void,
 ) {
   const instructions = await loadAgentInstructions('worker');
   const logger = new Logger('InteractionSession');
@@ -52,7 +58,7 @@ export async function interactionSession(
       ...loginTools(login),
     }),
     inputProcessors: [
-      new InteractionToolsProcessor(coordinator),
+      new InteractionToolsProcessor(coordinator, browser),
       visualArtifacts,
       interactionHistoryProcessor(),
       new CodeModeProcessor(),
@@ -65,7 +71,22 @@ export async function interactionSession(
           logger.warn(error);
           return false;
         });
-      if (!retained) browser.releaseTarget(taskId, workerId);
+      try {
+        onBrowserCleanup?.(
+          await browser.finishWorker(taskId, workerId, retained),
+        );
+      } catch {
+        logger.warn('Interaction browser cleanup failed');
+        onBrowserCleanup?.({
+          tracked: false,
+          retained,
+          baselinePageCount: 0,
+          currentPageCount: 0,
+          createdPageCount: 0,
+          closedPageCount: 0,
+          failed: true,
+        });
+      }
     },
   };
   return {

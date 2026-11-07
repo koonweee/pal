@@ -3,6 +3,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Processor, ProcessInputStepArgs } from '@mastra/core/processors';
 import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import type { InteractionCoordinator } from '../interaction/interaction-coordinator.js';
+import type { SharedBrowserService } from '../browser/shared-browser.service.js';
 import {
   INTERACTION_EXECUTION_ID,
   PARENT_TASK_ID,
@@ -19,7 +20,10 @@ const privateTools = new Set([
 /** All device tools share admission; schemas and media results remain native. */
 export class InteractionToolsProcessor implements Processor {
   readonly id = 'pal-interaction-tools';
-  constructor(private readonly coordinator: InteractionCoordinator) {}
+  constructor(
+    private readonly coordinator: InteractionCoordinator,
+    private readonly browser: SharedBrowserService,
+  ) {}
 
   processInputStep({ tools }: ProcessInputStepArgs) {
     const wrapped = { ...tools } as ToolsInput;
@@ -60,7 +64,10 @@ export class InteractionToolsProcessor implements Processor {
         return this.coordinator.run(
           resource,
           executionId,
-          () => execute(input, context),
+          async () => {
+            if (isComputer) await this.browser.beginWorker(taskId, workerId);
+            return execute(input, context);
+          },
           context?.abortSignal,
         );
       };

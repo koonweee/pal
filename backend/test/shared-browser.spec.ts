@@ -59,6 +59,43 @@ it('binds private inspection to the active tab, retains its target, and disconne
   expect(closeTab).not.toHaveBeenCalled();
 });
 
+it('closes only pages created by a completed worker and retains continuations', async () => {
+  const service = new SharedBrowserService(
+    new ConfigService({ PAL_DESKTOP_ENABLED: true }),
+    {} as ExecutionService,
+  );
+  const internal = service as unknown as {
+    endpoint(): Promise<string>;
+  };
+  vi.spyOn(internal, 'endpoint').mockResolvedValue('ws://fixture');
+  vi.mocked(extensionRequest)
+    .mockResolvedValueOnce({ targetIds: ['existing'] })
+    .mockResolvedValueOnce({ targetIds: ['existing', 'created', 'popup'] })
+    .mockResolvedValueOnce({ targetIds: ['existing', 'created', 'popup'] })
+    .mockResolvedValueOnce({ closedCount: 2 });
+
+  expect(await service.beginWorker('task', 'worker')).toBe(true);
+  expect(await service.finishWorker('task', 'worker', true)).toMatchObject({
+    tracked: true,
+    retained: true,
+    currentPageCount: 3,
+    createdPageCount: 2,
+    closedPageCount: 0,
+  });
+  await expect(service.finishWorker('task', 'worker', false)).resolves.toEqual({
+    tracked: true,
+    retained: false,
+    baselinePageCount: 1,
+    currentPageCount: 3,
+    createdPageCount: 2,
+    closedPageCount: 2,
+  });
+  expect(extensionRequest).toHaveBeenLastCalledWith('ws://fixture', {
+    action: 'close',
+    targetIds: ['created', 'popup'],
+  });
+});
+
 it('bounds private browser calls without disabling later turns', async () => {
   vi.useFakeTimers();
   const coordinator = new InteractionCoordinator();

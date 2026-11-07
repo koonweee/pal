@@ -5,12 +5,22 @@ import { chromium, type Browser, type Page } from 'playwright-core';
 import { ExecutionService } from '../execution/execution.service.js';
 import { extensionRequest } from './browser-extension.js';
 
+export interface WorkerBrowserCleanup {
+  tracked: boolean;
+  retained: boolean;
+  baselinePageCount: number;
+  currentPageCount: number;
+  createdPageCount: number;
+  closedPageCount: number;
+}
+
 /** Shared Chromium connection and private-entry targets; admission is separate. */
 @Injectable()
 export class SharedBrowserService {
   private browser?: Browser;
   private connecting?: Promise<Browser>;
   private readonly targets = new Map<string, Page>();
+  private readonly workerPages = new Map<string, Set<string> | null>();
   private closing = false;
 
   constructor(
@@ -72,8 +82,79 @@ export class SharedBrowserService {
     return this.connecting;
   }
 
-  releaseTarget(taskId: string, workerId: string) {
-    this.targets.delete(taskId + ':' + workerId);
+  async beginWorker(taskId: string, workerId: string) {
+    const key = taskId + ':' + workerId;
+    if (this.workerPages.has(key)) return this.workerPages.get(key) !== null;
+    try {
+      const inventory = await extensionRequest<{ targetIds: string[] }>(
+        await this.endpoint(),
+        { action: 'inventory' },
+      );
+      this.workerPages.set(key, new Set(inventory.targetIds));
+      return true;
+    } catch {
+      // Cleanup inventory must never block the device action it protects.
+      this.workerPages.set(key, null);
+      return false;
+    }
+  }
+
+  async finishWorker(
+    taskId: string,
+    workerId: string,
+    retained: boolean,
+  ): Promise<WorkerBrowserCleanup> {
+    const key = taskId + ':' + workerId;
+    const baseline = this.workerPages.get(key);
+    if (retained && baseline) {
+      const inventory = await extensionRequest<{ targetIds: string[] }>(
+        await this.endpoint(),
+        { action: 'inventory' },
+      );
+      const created = inventory.targetIds.filter((id) => !baseline.has(id));
+      return {
+        tracked: true,
+        retained: true,
+        baselinePageCount: baseline.size,
+        currentPageCount: inventory.targetIds.length,
+        createdPageCount: created.length,
+        closedPageCount: 0,
+      };
+    }
+    if (retained) this.workerPages.delete(key);
+    else {
+      this.workerPages.delete(key);
+      this.targets.delete(key);
+    }
+    if (!baseline) {
+      return {
+        tracked: false,
+        retained,
+        baselinePageCount: 0,
+        currentPageCount: 0,
+        createdPageCount: 0,
+        closedPageCount: 0,
+      };
+    }
+    const inventory = await extensionRequest<{ targetIds: string[] }>(
+      await this.endpoint(),
+      { action: 'inventory' },
+    );
+    const created = inventory.targetIds.filter((id) => !baseline.has(id));
+    const result = created.length
+      ? await extensionRequest<{ closedCount: number }>(await this.endpoint(), {
+          action: 'close',
+          targetIds: created,
+        })
+      : { closedCount: 0 };
+    return {
+      tracked: true,
+      retained: false,
+      baselinePageCount: baseline.size,
+      currentPageCount: inventory.targetIds.length,
+      createdPageCount: created.length,
+      closedPageCount: result.closedCount,
+    };
   }
 
   async selectedPage(
@@ -122,5 +203,6 @@ export class SharedBrowserService {
     // A CDP close disconnects this client; Chromium and its tabs remain open.
     await this.browser?.close();
     this.targets.clear();
+    this.workerPages.clear();
   }
 }

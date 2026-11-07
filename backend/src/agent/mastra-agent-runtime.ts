@@ -61,6 +61,7 @@ import {
   type GeneratedFile,
   type PublicOutput,
 } from './public-output.js';
+import { ExecutionResourceTelemetry } from '../execution/execution-resource-telemetry.js';
 import { publicOutputOptions } from './public-output.js';
 import {
   mainTaskTools,
@@ -89,6 +90,7 @@ export class MastraAgentRuntime
   private generationFailed = false;
   private readonly publications = new Set<Promise<void>>();
   private readonly taskRuns = new Set<Promise<void>>();
+  private executionTelemetry?: ExecutionResourceTelemetry;
 
   private readonly recordModelRequest = (
     measurement: ModelRequestMeasurement,
@@ -155,6 +157,8 @@ export class MastraAgentRuntime
       this.files,
       this.interactions,
       this.recordModelRequest,
+      (measurement) =>
+        this.main?.telemetry.record('pal.browser.cleanup', { ...measurement }),
     );
     this.main = await createMainSession({
       releaseId: this.config.get<string>('PAL_RELEASE_ID'),
@@ -359,6 +363,12 @@ export class MastraAgentRuntime
     });
     this.schedules.bind(this.main.mastra);
     await this.main.mastra.startWorkers();
+    this.executionTelemetry = new ExecutionResourceTelemetry(
+      this.execution,
+      (data, failed) =>
+        this.main?.telemetry.record('pal.execution.sample', data, failed),
+    );
+    this.executionTelemetry.start();
   }
 
   private async agentNameInstruction() {
@@ -865,6 +875,7 @@ export class MastraAgentRuntime
   async beforeApplicationShutdown() {
     if (this.closing) return;
     this.closing = true;
+    this.executionTelemetry?.close();
     const stopping = this.main?.mastra.stopWorkers();
     const agent = this.main?.taskAgent;
     for (const run of agent?.listActiveThreadRuns() ?? [])

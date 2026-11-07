@@ -163,7 +163,10 @@ it('keeps recent visual steps while transiently filtering older images', async (
 
 it('coordinates native device/private tools without changing media and rejects device switching and late calls', async () => {
   const coordinator = new InteractionCoordinator();
-  const processor = new InteractionToolsProcessor(coordinator);
+  const beginWorker = vi.fn(async () => true);
+  const processor = new InteractionToolsProcessor(coordinator, {
+    beginWorker,
+  } as never);
   const media = { data: 'image', mediaType: 'image/png' };
   const screenshot = Object.values(WORKSPACE_TOOLS.COMPUTER)[0];
   const tools = Object.fromEntries(
@@ -197,6 +200,7 @@ it('coordinates native device/private tools without changing media and rejects d
     'ordinary device',
   );
   expect(await call(screenshot)).toBe(media);
+  expect(beginWorker).toHaveBeenCalledWith('task', 'worker');
   expect(coordinator.resourceFor(executionId)).toBe('desktop');
   expect(await call('inspect_private_fields')).toBe(media);
   await expect(call('android_inspect')).rejects.toThrow('fresh worker');
